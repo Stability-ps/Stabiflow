@@ -15,7 +15,8 @@ import { platformKeyForContentPlatform, validateAssetForPlatform } from "@/lib/c
 import { parseLocalDateTimeInZone, toLocalDateTimeInputValue } from "@/lib/contentTimezone";
 import { scheduleContentPost, publishContentPostNow } from "@/lib/contentFunctions";
 
-type MediaAsset = { id: string; title: string; storage_path: string; mime_type: string; width_px: number; height_px: number; file_size_bytes: number };
+type PlatformVariant = { id: string; platform: string; storage_path: string; width_px: number; height_px: number; mime_type: string; file_size_bytes: number };
+type MediaAsset = { id: string; title: string; storage_path: string; mime_type: string; width_px: number; height_px: number; file_size_bytes: number; content_platform_variants?: PlatformVariant[] };
 
 export function ComposePostDialog({ open, onOpenChange, workspaceTimezone }: { open: boolean; onOpenChange: (open: boolean) => void; workspaceTimezone: string }) {
   const { currentWorkspaceId } = useAuth();
@@ -33,12 +34,29 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone }: { o
   const selectedAsset = (assets as MediaAsset[] | undefined)?.find((a) => a.id === selectedAssetId) ?? null;
   const [platform, destinationId] = destinationKey ? destinationKey.split(":") : [null, null];
 
+  // Mirrors the server's preference exactly (content-schedule-post/index.ts):
+  // the original is preferred whenever it already passes on its own; only
+  // fall back to an existing generated variant - and only if THAT variant
+  // itself validates - when the original doesn't. Checking only the
+  // original here would block submission for a post the server would
+  // actually accept via its variant fallback, and vice versa this stays
+  // UX-only: the server re-validates independently regardless.
   const validation = useMemo(() => {
     if (!selectedAsset || !platform) return null;
-    return validateAssetForPlatform(
+    const platformKey = platformKeyForContentPlatform(platform);
+    const originalValidation = validateAssetForPlatform(
       { mimeType: selectedAsset.mime_type, width: selectedAsset.width_px, height: selectedAsset.height_px, fileSizeBytes: selectedAsset.file_size_bytes },
-      platformKeyForContentPlatform(platform),
+      platformKey,
     );
+    if (originalValidation.valid) return originalValidation;
+
+    const variant = selectedAsset.content_platform_variants?.find((v) => v.platform === platform);
+    if (!variant) return originalValidation;
+    const variantValidation = validateAssetForPlatform(
+      { mimeType: variant.mime_type, width: variant.width_px, height: variant.height_px, fileSizeBytes: variant.file_size_bytes },
+      platformKey,
+    );
+    return variantValidation.valid ? variantValidation : originalValidation;
   }, [selectedAsset, platform]);
 
   const reset = () => {

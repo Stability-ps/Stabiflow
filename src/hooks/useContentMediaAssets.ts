@@ -11,7 +11,7 @@ export function useContentMediaAssets(workspaceId: string | null, status: "activ
     queryFn: async () => {
       const { data, error } = await supabase
         .from("content_media_assets")
-        .select("*, content_platform_variants(id, platform, storage_path, width_px, height_px)")
+        .select("*, content_platform_variants(id, platform, storage_path, width_px, height_px, mime_type, file_size_bytes)")
         .eq("workspace_id", workspaceId as string)
         .eq("status", status)
         .order("created_at", { ascending: false });
