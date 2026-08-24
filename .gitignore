@@ -20,6 +20,11 @@ dist-ssr
 .secrets-local/
 supabase/.temp/
 
+# Local Deno lockfile from `deno check`/`deno test` runs against
+# supabase/functions - not part of the deployed runtime (Supabase resolves
+# imports fresh on deploy), same as Acapolite's precedent.
+deno.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
