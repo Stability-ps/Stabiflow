@@ -145,6 +145,61 @@ relative to each other - a manager can do what any of them can, plus more.
 The numeric gaps are deliberate spacing for inserting a role later without
 renumbering everything.
 
+## Role escalation: found and closed before Phase 4 UI work
+
+A pre-Phase-4 architecture review flagged that `has_workspace_role()` (a
+rank/hierarchy helper) was being used in `workspace_members`'s
+admin-management RLS policies as if it also proved *authority to grant a
+specific role* - it doesn't. Reasoning through the exact predicate found
+two real, exploitable gaps, closed in
+`20260825060000_prevent_role_escalation.sql`:
+
+1. **Self-promotion.** The original `workspace_members_update_admin`
+   policy only checked `has_workspace_role(workspace_id, 'admin')` in
+   `USING`/`WITH CHECK` - which is true for the *caller's own* row. An
+   admin could `UPDATE workspace_members SET role = 'owner' WHERE user_id
+   = auth.uid()` and it would pass. Same gap let an admin promote a peer
+   admin to owner.
+2. **Invitation over-grant.** The invitation INSERT/UPDATE policies had
+   the identical gap: any admin could create an invitation offering the
+   `owner` role to an arbitrary email, with no check that the caller
+   actually outranked what they were handing out.
+
+The fix introduces two purpose-built predicates instead of reusing
+`has_workspace_role` for this:
+
+- `can_manage_member_with_role(workspace_id, current_role)` - used in
+  `USING` clauses (which see the row's OLD state on UPDATE/DELETE).
+  Requires the caller to be admin+ **and** to strictly outrank the row's
+  *current* role. This is what stops both self-promotion and
+  admin-vs-admin promotion: an admin (rank 90) never strictly outranks
+  another admin (rank 90).
+- `can_grant_workspace_role(workspace_id, new_role)` - used in
+  `WITH CHECK` clauses (which see the NEW row state). Requires the caller
+  to be admin+, to be at least as senior as the role being *granted*, and
+  additionally requires the caller to already be 'owner' if the role
+  being granted is 'owner'. Applied to both direct membership updates and
+  invitation creation, so the same rule governs both paths into a role.
+
+A related time-of-check/time-of-use gap in `accept_workspace_invitation()`
+was closed the same way: an invitation offering 'owner', once created,
+could previously still be honored even if the inviter's own ownership was
+revoked before the invitation was accepted. The function now re-checks
+that the inviter *currently* holds 'owner' at accept-time, not just at
+invitation-creation time, and revokes the invitation if not.
+
+`supabase/tests/role-escalation.test.ts` (17 tests, run against the live
+project) proves both fixes and their boundaries - including that the
+fix is not over-broad (the actual owner can still manage subordinates,
+and an admin can still adjust lower-ranked members).
+
+This is the concrete case for the standing rule stated at the top of this
+document and reiterated for Phase 4: `has_workspace_role()` proves rank,
+not authority over a specific target. Any future RLS policy that grants,
+revokes, or otherwise acts on another member's role needs one of the two
+predicates above (or a similarly explicit strictly-outranks check), never
+a bare `has_workspace_role()` call.
+
 ## What's still open (Phase 4+)
 
 - Fine-grained `workspace_role_permissions` seeding is a reasonable V1
