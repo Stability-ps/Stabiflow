@@ -32,7 +32,18 @@ export type WorkspacePermission =
   | "content.delete"
   | "media.view"
   | "media.upload"
-  | "media.delete";
+  | "media.delete"
+  // Campaigns module (Phase 6) - fine-grained, mirroring
+  // 20260827060100_ad_campaigns_permissions.sql. campaign.publish and
+  // campaign.pause are kept separate from campaign.edit: editing a draft
+  // is low-risk, publishing/pausing moves real budget/spend state.
+  | "campaign.view"
+  | "campaign.create"
+  | "campaign.edit"
+  | "campaign.publish"
+  | "campaign.pause"
+  | "campaign.delete"
+  | "campaign.metrics.view";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -40,26 +51,30 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
+    "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
     "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
+    "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
+    "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
+    "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
   ],
-  sales: ["manage_leads", "view_analytics", "content.view", "media.view"],
-  support: ["manage_inbox", "manage_leads", "content.view", "media.view"],
-  viewer: ["view_analytics", "content.view", "media.view"],
+  sales: ["manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
+  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
+  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {

@@ -12,8 +12,596 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.15"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
+      ad_campaign_metrics: {
+        Row: {
+          ad_id: string | null
+          ad_set_id: string | null
+          campaign_id: string
+          clicks: number
+          cost_per_result_minor_units: number | null
+          cpc_minor_units: number | null
+          cpm_minor_units: number | null
+          created_at: string
+          ctr: number | null
+          currency: string
+          date_start: string
+          date_stop: string
+          frequency: number | null
+          id: string
+          impressions: number
+          raw_provider_response: Json | null
+          reach: number
+          results: number | null
+          spend_minor_units: number
+          synced_at: string
+          workspace_id: string
+        }
+        Insert: {
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id: string
+          clicks?: number
+          cost_per_result_minor_units?: number | null
+          cpc_minor_units?: number | null
+          cpm_minor_units?: number | null
+          created_at?: string
+          ctr?: number | null
+          currency: string
+          date_start: string
+          date_stop: string
+          frequency?: number | null
+          id?: string
+          impressions?: number
+          raw_provider_response?: Json | null
+          reach?: number
+          results?: number | null
+          spend_minor_units?: number
+          synced_at?: string
+          workspace_id: string
+        }
+        Update: {
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string
+          clicks?: number
+          cost_per_result_minor_units?: number | null
+          cpc_minor_units?: number | null
+          cpm_minor_units?: number | null
+          created_at?: string
+          ctr?: number | null
+          currency?: string
+          date_start?: string
+          date_stop?: string
+          frequency?: number | null
+          id?: string
+          impressions?: number
+          raw_provider_response?: Json | null
+          reach?: number
+          results?: number | null
+          spend_minor_units?: number
+          synced_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_campaign_metrics_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaign_metrics_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaign_metrics_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaign_metrics_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_campaigns: {
+        Row: {
+          ad_account_id: string
+          audience: Json
+          budget_type: Database["public"]["Enums"]["ad_budget_type"]
+          buying_type: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          daily_budget_minor_units: number | null
+          destination_type: Database["public"]["Enums"]["ad_destination_type"]
+          draft_creative_id: string | null
+          end_at: string | null
+          external_campaign_id: string | null
+          facebook_page_id: string | null
+          id: string
+          instagram_account_id: string | null
+          integration_id: string
+          last_publish_error: Json | null
+          last_readiness_check: Json | null
+          lifetime_budget_minor_units: number | null
+          name: string
+          objective: Database["public"]["Enums"]["ad_campaign_objective"]
+          placements: Json
+          provider_configured_status: string | null
+          provider_effective_status: string | null
+          provider_state: Json
+          source_content_media_asset_id: string | null
+          source_content_series_id: string | null
+          start_at: string
+          status: Database["public"]["Enums"]["ad_lifecycle_status"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          ad_account_id: string
+          audience?: Json
+          budget_type?: Database["public"]["Enums"]["ad_budget_type"]
+          buying_type?: string
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          daily_budget_minor_units?: number | null
+          destination_type?: Database["public"]["Enums"]["ad_destination_type"]
+          draft_creative_id?: string | null
+          end_at?: string | null
+          external_campaign_id?: string | null
+          facebook_page_id?: string | null
+          id?: string
+          instagram_account_id?: string | null
+          integration_id: string
+          last_publish_error?: Json | null
+          last_readiness_check?: Json | null
+          lifetime_budget_minor_units?: number | null
+          name: string
+          objective: Database["public"]["Enums"]["ad_campaign_objective"]
+          placements?: Json
+          provider_configured_status?: string | null
+          provider_effective_status?: string | null
+          provider_state?: Json
+          source_content_media_asset_id?: string | null
+          source_content_series_id?: string | null
+          start_at: string
+          status?: Database["public"]["Enums"]["ad_lifecycle_status"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          ad_account_id?: string
+          audience?: Json
+          budget_type?: Database["public"]["Enums"]["ad_budget_type"]
+          buying_type?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          daily_budget_minor_units?: number | null
+          destination_type?: Database["public"]["Enums"]["ad_destination_type"]
+          draft_creative_id?: string | null
+          end_at?: string | null
+          external_campaign_id?: string | null
+          facebook_page_id?: string | null
+          id?: string
+          instagram_account_id?: string | null
+          integration_id?: string
+          last_publish_error?: Json | null
+          last_readiness_check?: Json | null
+          lifetime_budget_minor_units?: number | null
+          name?: string
+          objective?: Database["public"]["Enums"]["ad_campaign_objective"]
+          placements?: Json
+          provider_configured_status?: string | null
+          provider_effective_status?: string | null
+          provider_state?: Json
+          source_content_media_asset_id?: string | null
+          source_content_series_id?: string | null
+          start_at?: string
+          status?: Database["public"]["Enums"]["ad_lifecycle_status"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_campaigns_ad_account_id_fkey"
+            columns: ["ad_account_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_meta_ad_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_draft_creative_id_fkey"
+            columns: ["draft_creative_id"]
+            isOneToOne: false
+            referencedRelation: "ad_creatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_facebook_page_id_fkey"
+            columns: ["facebook_page_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_facebook_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_instagram_account_id_fkey"
+            columns: ["instagram_account_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_instagram_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_source_content_media_asset_id_fkey"
+            columns: ["source_content_media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_source_content_series_id_fkey"
+            columns: ["source_content_series_id"]
+            isOneToOne: false
+            referencedRelation: "content_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_campaigns_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_creatives: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          cta: string
+          description: string | null
+          destination_url: string | null
+          external_creative_id: string | null
+          headline: string | null
+          id: string
+          media_asset_id: string
+          platform_variant_id: string | null
+          primary_text: string
+          status: Database["public"]["Enums"]["ad_creative_status"]
+          updated_at: string
+          whatsapp_number_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          cta: string
+          description?: string | null
+          destination_url?: string | null
+          external_creative_id?: string | null
+          headline?: string | null
+          id?: string
+          media_asset_id: string
+          platform_variant_id?: string | null
+          primary_text: string
+          status?: Database["public"]["Enums"]["ad_creative_status"]
+          updated_at?: string
+          whatsapp_number_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          cta?: string
+          description?: string | null
+          destination_url?: string | null
+          external_creative_id?: string | null
+          headline?: string | null
+          id?: string
+          media_asset_id?: string
+          platform_variant_id?: string | null
+          primary_text?: string
+          status?: Database["public"]["Enums"]["ad_creative_status"]
+          updated_at?: string
+          whatsapp_number_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_creatives_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_creatives_media_asset_id_fkey"
+            columns: ["media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_creatives_platform_variant_id_fkey"
+            columns: ["platform_variant_id"]
+            isOneToOne: false
+            referencedRelation: "content_platform_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_creatives_whatsapp_number_id_fkey"
+            columns: ["whatsapp_number_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_whatsapp_numbers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_creatives_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_publish_operations: {
+        Row: {
+          campaign_id: string
+          created_at: string
+          error: Json | null
+          finished_at: string | null
+          id: string
+          idempotency_key: string
+          requested_by: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["ad_publish_operation_status"]
+          steps: Json
+          workspace_id: string
+        }
+        Insert: {
+          campaign_id: string
+          created_at?: string
+          error?: Json | null
+          finished_at?: string | null
+          id?: string
+          idempotency_key: string
+          requested_by?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["ad_publish_operation_status"]
+          steps?: Json
+          workspace_id: string
+        }
+        Update: {
+          campaign_id?: string
+          created_at?: string
+          error?: Json | null
+          finished_at?: string | null
+          id?: string
+          idempotency_key?: string
+          requested_by?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["ad_publish_operation_status"]
+          steps?: Json
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_publish_operations_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_publish_operations_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_publish_operations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ad_sets: {
+        Row: {
+          billing_event: string
+          campaign_id: string
+          created_at: string
+          daily_budget_minor_units: number | null
+          end_at: string | null
+          external_adset_id: string | null
+          id: string
+          lifetime_budget_minor_units: number | null
+          name: string
+          optimization_goal: string
+          placements: Json
+          provider_configured_status: string | null
+          provider_effective_status: string | null
+          start_at: string
+          status: Database["public"]["Enums"]["ad_lifecycle_status"]
+          targeting: Json
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          billing_event: string
+          campaign_id: string
+          created_at?: string
+          daily_budget_minor_units?: number | null
+          end_at?: string | null
+          external_adset_id?: string | null
+          id?: string
+          lifetime_budget_minor_units?: number | null
+          name: string
+          optimization_goal: string
+          placements?: Json
+          provider_configured_status?: string | null
+          provider_effective_status?: string | null
+          start_at: string
+          status?: Database["public"]["Enums"]["ad_lifecycle_status"]
+          targeting?: Json
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          billing_event?: string
+          campaign_id?: string
+          created_at?: string
+          daily_budget_minor_units?: number | null
+          end_at?: string | null
+          external_adset_id?: string | null
+          id?: string
+          lifetime_budget_minor_units?: number | null
+          name?: string
+          optimization_goal?: string
+          placements?: Json
+          provider_configured_status?: string | null
+          provider_effective_status?: string | null
+          start_at?: string
+          status?: Database["public"]["Enums"]["ad_lifecycle_status"]
+          targeting?: Json
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_sets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ad_sets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads: {
+        Row: {
+          ad_set_id: string
+          created_at: string
+          creative_id: string
+          external_ad_id: string | null
+          id: string
+          name: string
+          provider_configured_status: string | null
+          provider_effective_status: string | null
+          status: Database["public"]["Enums"]["ad_lifecycle_status"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          ad_set_id: string
+          created_at?: string
+          creative_id: string
+          external_ad_id?: string | null
+          id?: string
+          name: string
+          provider_configured_status?: string | null
+          provider_effective_status?: string | null
+          status?: Database["public"]["Enums"]["ad_lifecycle_status"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          ad_set_id?: string
+          created_at?: string
+          creative_id?: string
+          external_ad_id?: string | null
+          id?: string
+          name?: string
+          provider_configured_status?: string | null
+          provider_effective_status?: string | null
+          status?: Database["public"]["Enums"]["ad_lifecycle_status"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "ad_creatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ads_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attribution_events: {
         Row: {
           attribution_confidence: string | null
@@ -1280,6 +1868,28 @@ export type Database = {
       }
     }
     Enums: {
+      ad_budget_type: "daily" | "lifetime"
+      ad_campaign_objective:
+        | "OUTCOME_AWARENESS"
+        | "OUTCOME_TRAFFIC"
+        | "OUTCOME_ENGAGEMENT"
+        | "OUTCOME_SALES"
+      ad_creative_status: "draft" | "ready" | "active" | "archived"
+      ad_destination_type: "website" | "whatsapp" | "page_profile"
+      ad_lifecycle_status:
+        | "draft"
+        | "ready"
+        | "publishing"
+        | "active"
+        | "paused"
+        | "completed"
+        | "failed"
+      ad_publish_operation_status:
+        | "pending"
+        | "in_progress"
+        | "succeeded"
+        | "partial"
+        | "failed"
       content_asset_status: "active" | "archived"
       content_platform: "facebook" | "instagram" | "linkedin"
       content_post_status:
@@ -1441,8 +2051,36 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
+      ad_budget_type: ["daily", "lifetime"],
+      ad_campaign_objective: [
+        "OUTCOME_AWARENESS",
+        "OUTCOME_TRAFFIC",
+        "OUTCOME_ENGAGEMENT",
+        "OUTCOME_SALES",
+      ],
+      ad_creative_status: ["draft", "ready", "active", "archived"],
+      ad_destination_type: ["website", "whatsapp", "page_profile"],
+      ad_lifecycle_status: [
+        "draft",
+        "ready",
+        "publishing",
+        "active",
+        "paused",
+        "completed",
+        "failed",
+      ],
+      ad_publish_operation_status: [
+        "pending",
+        "in_progress",
+        "succeeded",
+        "partial",
+        "failed",
+      ],
       content_asset_status: ["active", "archived"],
       content_platform: ["facebook", "instagram", "linkedin"],
       content_post_status: [

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, Sparkles } from "lucide-react";
+import { Archive, Megaphone, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -19,12 +20,14 @@ type MediaAssetRow = {
   storage_path: string;
   width_px: number;
   height_px: number;
+  default_caption: string | null;
   content_platform_variants: { id: string; platform: string }[];
 };
 
 export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: MediaAssetRow) => void; selectable?: boolean }) {
   const { currentWorkspaceId, hasPermission } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: assets, isLoading, isError } = useContentMediaAssets(currentWorkspaceId);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
 
@@ -114,6 +117,20 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
                     </Button>
                   )}
                 </div>
+              )}
+              {!selectable && hasPermission("campaign.create") && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-full text-xs"
+                  onClick={() =>
+                    navigate("/campaigns/new", {
+                      state: { prefill: { sourceContentMediaAssetId: asset.id, primaryText: asset.default_caption || "" } },
+                    })
+                  }
+                >
+                  <Megaphone className="mr-1 h-3 w-3" /> Promote as Campaign
+                </Button>
               )}
             </div>
           </Card>

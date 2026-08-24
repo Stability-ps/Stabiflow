@@ -18,6 +18,9 @@ import ContentPublished from "@/pages/dashboard/content/Published";
 import ContentDrafts from "@/pages/dashboard/content/Drafts";
 import ContentMediaLibrary from "@/pages/dashboard/content/MediaLibrary";
 import Campaigns from "@/pages/dashboard/Campaigns";
+import NewCampaign from "@/pages/dashboard/campaigns/New";
+import EditCampaign from "@/pages/dashboard/campaigns/Edit";
+import CampaignDetailPage from "@/pages/dashboard/campaigns/Detail";
 import CreativeStudio from "@/pages/dashboard/CreativeStudio";
 import Inbox from "@/pages/dashboard/Inbox";
 import Leads from "@/pages/dashboard/Leads";
@@ -67,6 +70,9 @@ function AppRoutes() {
           <Route path="media-library" element={<ContentMediaLibrary />} />
         </Route>
         <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/campaigns/new" element={<NewCampaign />} />
+        <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
+        <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
         <Route path="/creative-studio" element={<CreativeStudio />} />
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/leads" element={<Leads />} />

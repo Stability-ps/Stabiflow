@@ -1,14 +1,13 @@
-import { Megaphone } from "lucide-react";
-import { PlaceholderPage } from "@/components/layout/PlaceholderPage";
+import { CampaignsList } from "@/components/campaigns/CampaignsList";
 
 export default function Campaigns() {
   return (
-    <PlaceholderPage
-      icon={Megaphone}
-      title="Campaigns"
-      description="Meta advertising campaigns, creatives, and performance."
-      emptyTitle="No campaigns yet"
-      emptyDescription="Connect a Meta account under Integrations, then create your first campaign here."
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Campaigns</h1>
+        <p className="text-sm text-muted-foreground">Meta advertising campaigns, creatives, and performance.</p>
+      </div>
+      <CampaignsList />
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, CalendarX2, Copy, ExternalLink, MoreHorizontal, Send, XCircle } from "lucide-react";
+import { CalendarClock, CalendarX2, Copy, ExternalLink, Megaphone, MoreHorizontal, Send, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export function PostsList({ statusFilter, workspaceTimezone, emptyTitle, emptyDe
 }) {
   const { currentWorkspaceId, hasPermission } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: posts, isLoading } = useContentScheduledPosts(currentWorkspaceId, statusFilter);
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [rescheduleValue, setRescheduleValue] = useState("");
@@ -199,6 +201,17 @@ export function PostsList({ statusFilter, workspaceTimezone, emptyTitle, emptyDe
                     <DropdownMenuItem onClick={() => openReschedule(post)}><CalendarClock className="mr-2 h-4 w-4" /> Reschedule</DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => handleDuplicate(post)}><Copy className="mr-2 h-4 w-4" /> Duplicate</DropdownMenuItem>
+                  {hasPermission("campaign.create") && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        navigate("/campaigns/new", {
+                          state: { prefill: { sourceContentMediaAssetId: post.media_asset_id, primaryText: post.caption } },
+                        })
+                      }
+                    >
+                      <Megaphone className="mr-2 h-4 w-4" /> Promote as Campaign
+                    </DropdownMenuItem>
+                  )}
                   {(post.status === "scheduled" || post.status === "draft" || post.status === "failed") && (
                     <DropdownMenuItem onClick={() => handleCancel(post.id)} className="text-destructive"><XCircle className="mr-2 h-4 w-4" /> Cancel</DropdownMenuItem>
                   )}
