@@ -27,6 +27,19 @@ interface AuthContextType {
   setCurrentWorkspaceId: (id: string) => void;
   currentMembership: WorkspaceMembership | null;
   refreshMemberships: () => Promise<void>;
+  /**
+   * Synchronously merges a just-created membership into local state,
+   * without waiting on a network round-trip. Exists specifically for
+   * create_workspace(): a route guard (RequireWorkspace) reads
+   * memberships/currentWorkspaceId from THIS context, so redirecting the
+   * caller right after a successful creation is only safe once this
+   * context - not just the database - knows the new workspace exists.
+   * refreshMemberships() alone can't guarantee that by the time its
+   * caller resumes (it's a separate async round-trip); this call is a
+   * plain setState, so it's guaranteed applied before whatever runs next
+   * in the same synchronous block (e.g. an immediate navigate()).
+   */
+  addWorkspaceMembership: (membership: WorkspaceMembership) => void;
   signOut: () => Promise<{ error: Error | null }>;
   /**
    * UX-only convenience for hiding/showing controls the current role
@@ -49,6 +62,7 @@ const AuthContext = createContext<AuthContextType>({
   setCurrentWorkspaceId: () => {},
   currentMembership: null,
   refreshMemberships: async () => {},
+  addWorkspaceMembership: () => {},
   signOut: async () => ({ error: null }),
   hasPermission: () => false,
 });
@@ -100,6 +114,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshMemberships = async () => {
     if (user) await loadProfileAndMemberships(user.id);
+  };
+
+  const addWorkspaceMembership = (membership: WorkspaceMembership) => {
+    setMemberships((prev) => (prev.some((m) => m.workspaceId === membership.workspaceId) ? prev : [...prev, membership]));
   };
 
   useEffect(() => {
@@ -158,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCurrentWorkspaceId,
         currentMembership,
         refreshMemberships,
+        addWorkspaceMembership,
         signOut,
         hasPermission,
       }}
