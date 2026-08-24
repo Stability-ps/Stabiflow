@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { roleHasPermission, type WorkspacePermission } from "@/lib/permissions";
 
 type Profile = Tables<"profiles">;
 type WorkspaceRow = Tables<"workspaces">;
@@ -27,6 +28,14 @@ interface AuthContextType {
   currentMembership: WorkspaceMembership | null;
   refreshMemberships: () => Promise<void>;
   signOut: () => Promise<{ error: Error | null }>;
+  /**
+   * UX-only convenience for hiding/showing controls the current role
+   * can't use. NEVER the actual security boundary - the database
+   * (has_workspace_role()/has_workspace_permission(), checked inside
+   * every RLS policy and RPC) is authoritative and re-validates
+   * independently of whatever this returns.
+   */
+  hasPermission: (permission: WorkspacePermission) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -41,6 +50,7 @@ const AuthContext = createContext<AuthContextType>({
   currentMembership: null,
   refreshMemberships: async () => {},
   signOut: async () => ({ error: null }),
+  hasPermission: () => false,
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -133,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const currentMembership = memberships.find((m) => m.workspaceId === currentWorkspaceId) ?? null;
+  const hasPermission = (permission: WorkspacePermission) => roleHasPermission(currentMembership?.role, permission);
 
   return (
     <AuthContext.Provider
@@ -148,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         currentMembership,
         refreshMemberships,
         signOut,
+        hasPermission,
       }}
     >
       {children}
