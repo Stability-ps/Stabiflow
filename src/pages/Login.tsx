@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthLayout } from "@/components/layout/AuthLayout";
 
 export default function Login() {
   const { user, loading } = useAuth();
@@ -25,10 +26,10 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <AuthLayout>
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">Sign in to StabiFlow</CardTitle>
+          <CardTitle className="text-xl">Sign in</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -37,7 +38,10 @@ export default function Login() {
               <Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                <Link to="/forgot-password" className="text-xs text-muted-foreground underline">Forgot password?</Link>
+              </div>
               <Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
@@ -49,6 +53,6 @@ export default function Login() {
           </p>
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }

@@ -1,31 +1,23 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 
-export default function Signup() {
-  const { user, loading } = useAuth();
-  const [fullName, setFullName] = useState("");
+export default function ForgotPassword() {
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
-  if (!loading && user) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
     });
     setSubmitting(false);
     if (error) {
@@ -42,9 +34,9 @@ export default function Signup() {
           <CardHeader><CardTitle className="text-xl">Check your email</CardTitle></CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              We sent a confirmation link to <strong>{email}</strong>. Confirm your address, then{" "}
-              <Link to="/login" className="text-foreground underline">sign in</Link>.
+              If an account exists for <strong>{email}</strong>, we've sent a link to reset your password.
             </p>
+            <Link to="/login" className="mt-4 block text-center text-sm text-foreground underline">Back to sign in</Link>
           </CardContent>
         </Card>
       </AuthLayout>
@@ -55,29 +47,22 @@ export default function Signup() {
     <AuthLayout>
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">Create your account</CardTitle>
+          <CardTitle className="text-xl">Reset your password</CardTitle>
         </CardHeader>
         <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Enter the email address on your account and we'll send you a link to reset your password.
+          </p>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="fullName">Full name</Label>
-              <Input id="fullName" autoComplete="name" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
-            </div>
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
-            </div>
             <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Creating account..." : "Create account"}
+              {submitting ? "Sending..." : "Send reset link"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            Already have an account? <Link to="/login" className="text-foreground underline">Sign in</Link>
-          </p>
+          <Link to="/login" className="mt-4 block text-center text-sm text-muted-foreground underline">Back to sign in</Link>
         </CardContent>
       </Card>
     </AuthLayout>

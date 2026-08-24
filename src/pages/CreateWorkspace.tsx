@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthLayout } from "@/components/layout/AuthLayout";
 import { slugify } from "@/lib/slug";
 
 export default function CreateWorkspace() {
@@ -36,7 +37,7 @@ export default function CreateWorkspace() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <AuthLayout>
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-xl">Create your workspace</CardTitle>
@@ -49,7 +50,7 @@ export default function CreateWorkspace() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="workspaceName">Company name</Label>
-              <Input id="workspaceName" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acapolite Consulting" />
+              <Input id="workspaceName" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Acme Retail" />
               {name.trim() ? <p className="text-xs text-muted-foreground">stabiflow.com/{slugify(name)}</p> : null}
             </div>
             <Button type="submit" className="w-full" disabled={submitting}>
@@ -59,6 +60,6 @@ export default function CreateWorkspace() {
           <Button variant="ghost" className="mt-2 w-full" onClick={() => signOut()}>Sign out</Button>
         </CardContent>
       </Card>
-    </div>
+    </AuthLayout>
   );
 }
