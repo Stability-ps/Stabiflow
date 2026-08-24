@@ -4,10 +4,22 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RequireAuth } from "@/components/RequireAuth";
+import { RequireWorkspace } from "@/components/RequireWorkspace";
+import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
+import ForgotPassword from "@/pages/ForgotPassword";
 import CreateWorkspace from "@/pages/CreateWorkspace";
-import Dashboard from "@/pages/Dashboard";
+import Overview from "@/pages/dashboard/Overview";
+import Content from "@/pages/dashboard/Content";
+import Campaigns from "@/pages/dashboard/Campaigns";
+import CreativeStudio from "@/pages/dashboard/CreativeStudio";
+import Inbox from "@/pages/dashboard/Inbox";
+import Leads from "@/pages/dashboard/Leads";
+import Analytics from "@/pages/dashboard/Analytics";
+import FlowAI from "@/pages/dashboard/FlowAI";
+import Integrations from "@/pages/dashboard/Integrations";
+import Settings from "@/pages/dashboard/Settings";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +34,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route
         path="/create-workspace"
         element={
@@ -31,13 +44,25 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/"
         element={
           <RequireAuth>
-            <Dashboard />
+            <RequireWorkspace>
+              <AppLayout />
+            </RequireWorkspace>
           </RequireAuth>
         }
-      />
+      >
+        <Route path="/" element={<Overview />} />
+        <Route path="/content" element={<Content />} />
+        <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/creative-studio" element={<CreativeStudio />} />
+        <Route path="/inbox" element={<Inbox />} />
+        <Route path="/leads" element={<Leads />} />
+        <Route path="/analytics" element={<Analytics />} />
+        <Route path="/flow-ai" element={<FlowAI />} />
+        <Route path="/integrations" element={<Integrations />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
     </Routes>
   );
 }
