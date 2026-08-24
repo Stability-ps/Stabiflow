@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +11,9 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 
 export default function Signup() {
   const { user, loading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const redirectParam = searchParams.get("redirect");
+  const loginHref = redirectParam ? `/login?redirect=${encodeURIComponent(redirectParam)}` : "/login";
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,7 +46,7 @@ export default function Signup() {
           <CardContent>
             <p className="text-sm text-muted-foreground">
               We sent a confirmation link to <strong>{email}</strong>. Confirm your address, then{" "}
-              <Link to="/login" className="text-foreground underline">sign in</Link>.
+              <Link to={loginHref} className="text-foreground underline">sign in</Link>.
             </p>
           </CardContent>
         </Card>
@@ -76,7 +79,7 @@ export default function Signup() {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Already have an account? <Link to="/login" className="text-foreground underline">Sign in</Link>
+            Already have an account? <Link to={loginHref} className="text-foreground underline">Sign in</Link>
           </p>
         </CardContent>
       </Card>

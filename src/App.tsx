@@ -10,6 +10,7 @@ import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import ForgotPassword from "@/pages/ForgotPassword";
 import CreateWorkspace from "@/pages/CreateWorkspace";
+import AcceptInvitation from "@/pages/AcceptInvitation";
 import Overview from "@/pages/dashboard/Overview";
 import Content from "@/pages/dashboard/Content";
 import ContentCalendar from "@/pages/dashboard/content/Calendar";
@@ -51,6 +52,7 @@ function AppRoutes() {
           </RequireAuth>
         }
       />
+      <Route path="/accept-invitation" element={<AcceptInvitation />} />
       <Route
         element={
           <RequireAuth>
