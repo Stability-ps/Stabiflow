@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +12,7 @@ import { slugify } from "@/lib/slug";
 
 export default function CreateWorkspace() {
   const { refreshMemberships, setCurrentWorkspaceId, signOut } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -34,6 +36,10 @@ export default function CreateWorkspace() {
     await refreshMemberships();
     if (workspaceId) setCurrentWorkspaceId(workspaceId);
     toast.success(`${name.trim()} created`);
+    // Without this, the user is left on this page with fully valid state
+    // (currentWorkspaceId set, memberships refreshed) that RequireWorkspace
+    // would happily render past - nothing ever tells the router to leave.
+    navigate("/", { replace: true });
   };
 
   return (
