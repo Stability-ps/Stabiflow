@@ -76,6 +76,556 @@ export type Database = {
           },
         ]
       }
+      content_media_assets: {
+        Row: {
+          aspect_ratio: number
+          checksum_sha256: string
+          created_at: string
+          created_by: string | null
+          default_caption: string | null
+          file_size_bytes: number
+          height_px: number
+          id: string
+          mime_type: string
+          status: Database["public"]["Enums"]["content_asset_status"]
+          storage_path: string
+          title: string
+          updated_at: string
+          width_px: number
+          workspace_id: string
+        }
+        Insert: {
+          aspect_ratio: number
+          checksum_sha256: string
+          created_at?: string
+          created_by?: string | null
+          default_caption?: string | null
+          file_size_bytes: number
+          height_px: number
+          id?: string
+          mime_type: string
+          status?: Database["public"]["Enums"]["content_asset_status"]
+          storage_path: string
+          title: string
+          updated_at?: string
+          width_px: number
+          workspace_id: string
+        }
+        Update: {
+          aspect_ratio?: number
+          checksum_sha256?: string
+          created_at?: string
+          created_by?: string | null
+          default_caption?: string | null
+          file_size_bytes?: number
+          height_px?: number
+          id?: string
+          mime_type?: string
+          status?: Database["public"]["Enums"]["content_asset_status"]
+          storage_path?: string
+          title?: string
+          updated_at?: string
+          width_px?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_media_assets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_media_assets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_platform_variants: {
+        Row: {
+          aspect_ratio: number
+          created_at: string
+          file_size_bytes: number
+          height_px: number
+          id: string
+          media_asset_id: string
+          mime_type: string
+          platform: Database["public"]["Enums"]["content_platform"]
+          storage_path: string
+          transformation_metadata: Json
+          width_px: number
+          workspace_id: string
+        }
+        Insert: {
+          aspect_ratio: number
+          created_at?: string
+          file_size_bytes: number
+          height_px: number
+          id?: string
+          media_asset_id: string
+          mime_type: string
+          platform: Database["public"]["Enums"]["content_platform"]
+          storage_path: string
+          transformation_metadata?: Json
+          width_px: number
+          workspace_id: string
+        }
+        Update: {
+          aspect_ratio?: number
+          created_at?: string
+          file_size_bytes?: number
+          height_px?: number
+          id?: string
+          media_asset_id?: string
+          mime_type?: string
+          platform?: Database["public"]["Enums"]["content_platform"]
+          storage_path?: string
+          transformation_metadata?: Json
+          width_px?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_platform_variants_media_asset_id_fkey"
+            columns: ["media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_platform_variants_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_publish_attempts: {
+        Row: {
+          attempt_number: number
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          finished_at: string
+          id: string
+          provider_response: Json | null
+          scheduled_post_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["content_publish_attempt_status"]
+          workspace_id: string
+        }
+        Insert: {
+          attempt_number: number
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          finished_at: string
+          id?: string
+          provider_response?: Json | null
+          scheduled_post_id: string
+          started_at: string
+          status: Database["public"]["Enums"]["content_publish_attempt_status"]
+          workspace_id: string
+        }
+        Update: {
+          attempt_number?: number
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string
+          id?: string
+          provider_response?: Json | null
+          scheduled_post_id?: string
+          started_at?: string
+          status?: Database["public"]["Enums"]["content_publish_attempt_status"]
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_publish_attempts_scheduled_post_id_fkey"
+            columns: ["scheduled_post_id"]
+            isOneToOne: false
+            referencedRelation: "content_scheduled_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_publish_attempts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_scheduled_posts: {
+        Row: {
+          attempt_count: number
+          caption: string
+          claimed_at: string | null
+          claimed_by: string | null
+          created_at: string
+          facebook_page_id: string | null
+          failure_code: string | null
+          failure_message: string | null
+          hashtags: string[]
+          id: string
+          idempotency_key: string
+          instagram_account_id: string | null
+          last_attempt_at: string | null
+          media_asset_id: string
+          next_retry_at: string | null
+          platform_variant_id: string | null
+          provider_permalink: string | null
+          provider_post_id: string | null
+          published_at: string | null
+          scheduled_at: string
+          series_id: string | null
+          series_item_id: string | null
+          status: Database["public"]["Enums"]["content_post_status"]
+          target_platform: Database["public"]["Enums"]["content_platform"]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          caption: string
+          claimed_at?: string | null
+          claimed_by?: string | null
+          created_at?: string
+          facebook_page_id?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
+          hashtags?: string[]
+          id?: string
+          idempotency_key: string
+          instagram_account_id?: string | null
+          last_attempt_at?: string | null
+          media_asset_id: string
+          next_retry_at?: string | null
+          platform_variant_id?: string | null
+          provider_permalink?: string | null
+          provider_post_id?: string | null
+          published_at?: string | null
+          scheduled_at: string
+          series_id?: string | null
+          series_item_id?: string | null
+          status?: Database["public"]["Enums"]["content_post_status"]
+          target_platform: Database["public"]["Enums"]["content_platform"]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          attempt_count?: number
+          caption?: string
+          claimed_at?: string | null
+          claimed_by?: string | null
+          created_at?: string
+          facebook_page_id?: string | null
+          failure_code?: string | null
+          failure_message?: string | null
+          hashtags?: string[]
+          id?: string
+          idempotency_key?: string
+          instagram_account_id?: string | null
+          last_attempt_at?: string | null
+          media_asset_id?: string
+          next_retry_at?: string | null
+          platform_variant_id?: string | null
+          provider_permalink?: string | null
+          provider_post_id?: string | null
+          published_at?: string | null
+          scheduled_at?: string
+          series_id?: string | null
+          series_item_id?: string | null
+          status?: Database["public"]["Enums"]["content_post_status"]
+          target_platform?: Database["public"]["Enums"]["content_platform"]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_scheduled_posts_facebook_page_id_fkey"
+            columns: ["facebook_page_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_facebook_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduled_posts_instagram_account_id_fkey"
+            columns: ["instagram_account_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_instagram_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduled_posts_media_asset_id_fkey"
+            columns: ["media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduled_posts_platform_variant_id_fkey"
+            columns: ["platform_variant_id"]
+            isOneToOne: false
+            referencedRelation: "content_platform_variants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduled_posts_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "content_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduled_posts_series_item_id_fkey"
+            columns: ["series_item_id"]
+            isOneToOne: false
+            referencedRelation: "content_series_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduled_posts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_scheduler_settings: {
+        Row: {
+          auto_publish_enabled: boolean
+          created_at: string
+          id: string
+          updated_at: string
+          updated_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          auto_publish_enabled?: boolean
+          created_at?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          auto_publish_enabled?: boolean
+          created_at?: string
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_scheduler_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_scheduler_settings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_series: {
+        Row: {
+          activated_at: string | null
+          approved_at: string | null
+          approved_by: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          default_caption_template: string | null
+          default_hashtags: string[]
+          description: string | null
+          id: string
+          interval_days: number
+          name: string
+          paused_at: string | null
+          start_at: string
+          status: Database["public"]["Enums"]["content_series_status"]
+          target_platforms: Database["public"]["Enums"]["content_platform"][]
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          activated_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_caption_template?: string | null
+          default_hashtags?: string[]
+          description?: string | null
+          id?: string
+          interval_days?: number
+          name: string
+          paused_at?: string | null
+          start_at: string
+          status?: Database["public"]["Enums"]["content_series_status"]
+          target_platforms?: Database["public"]["Enums"]["content_platform"][]
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          activated_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_caption_template?: string | null
+          default_hashtags?: string[]
+          description?: string | null
+          id?: string
+          interval_days?: number
+          name?: string
+          paused_at?: string | null
+          start_at?: string
+          status?: Database["public"]["Enums"]["content_series_status"]
+          target_platforms?: Database["public"]["Enums"]["content_platform"][]
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_series_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_series_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_series_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_series_excluded_dates: {
+        Row: {
+          created_at: string
+          excluded_date: string
+          id: string
+          reason: string | null
+          series_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          excluded_date: string
+          id?: string
+          reason?: string | null
+          series_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          excluded_date?: string
+          id?: string
+          reason?: string | null
+          series_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_series_excluded_dates_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "content_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_series_excluded_dates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      content_series_items: {
+        Row: {
+          caption_override: string | null
+          created_at: string
+          hashtags_override: string[] | null
+          id: string
+          media_asset_id: string
+          position: number
+          series_id: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          caption_override?: string | null
+          created_at?: string
+          hashtags_override?: string[] | null
+          id?: string
+          media_asset_id: string
+          position: number
+          series_id: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          caption_override?: string | null
+          created_at?: string
+          hashtags_override?: string[] | null
+          id?: string
+          media_asset_id?: string
+          position?: number
+          series_id?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_series_items_media_asset_id_fkey"
+            columns: ["media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_series_items_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "content_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_series_items_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -679,6 +1229,24 @@ export type Database = {
         Args: { p_token: string }
         Returns: string
       }
+      can_grant_workspace_role: {
+        Args: {
+          p_new_role: Database["public"]["Enums"]["workspace_role"]
+          p_workspace_id: string
+        }
+        Returns: boolean
+      }
+      can_manage_member_with_role: {
+        Args: {
+          p_current_role: Database["public"]["Enums"]["workspace_role"]
+          p_workspace_id: string
+        }
+        Returns: boolean
+      }
+      content_storage_path_workspace_id: {
+        Args: { p_name: string }
+        Returns: string
+      }
       create_workspace: {
         Args: { p_name: string; p_slug: string }
         Returns: string
@@ -712,6 +1280,27 @@ export type Database = {
       }
     }
     Enums: {
+      content_asset_status: "active" | "archived"
+      content_platform: "facebook" | "instagram" | "linkedin"
+      content_post_status:
+        | "draft"
+        | "scheduled"
+        | "publishing"
+        | "published"
+        | "failed"
+        | "cancelled"
+        | "skipped"
+      content_publish_attempt_status:
+        | "success"
+        | "temporary_failure"
+        | "permanent_failure"
+      content_series_status:
+        | "draft"
+        | "approved"
+        | "active"
+        | "paused"
+        | "completed"
+        | "archived"
       integration_provider: "meta" | "whatsapp"
       integration_status: "connected" | "disconnected" | "error"
       workspace_invitation_status:
@@ -854,6 +1443,30 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      content_asset_status: ["active", "archived"],
+      content_platform: ["facebook", "instagram", "linkedin"],
+      content_post_status: [
+        "draft",
+        "scheduled",
+        "publishing",
+        "published",
+        "failed",
+        "cancelled",
+        "skipped",
+      ],
+      content_publish_attempt_status: [
+        "success",
+        "temporary_failure",
+        "permanent_failure",
+      ],
+      content_series_status: [
+        "draft",
+        "approved",
+        "active",
+        "paused",
+        "completed",
+        "archived",
+      ],
       integration_provider: ["meta", "whatsapp"],
       integration_status: ["connected", "disconnected", "error"],
       workspace_invitation_status: [

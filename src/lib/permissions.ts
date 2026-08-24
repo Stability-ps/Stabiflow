@@ -20,22 +20,46 @@ export type WorkspacePermission =
   | "manage_inbox"
   | "manage_leads"
   | "manage_pipelines"
-  | "view_analytics";
+  | "view_analytics"
+  // Content module (Phase 5) - fine-grained, mirroring
+  // 20260826060100_content_permissions.sql. Added alongside the existing
+  // manage_content permission (kept, not removed) because marketing/sales/
+  // support are rank-peers who need to be differentiated by name, not rank.
+  | "content.view"
+  | "content.create"
+  | "content.edit"
+  | "content.publish"
+  | "content.delete"
+  | "media.view"
+  | "media.upload"
+  | "media.delete";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
     "manage_workspace", "manage_members", "manage_billing", "manage_integrations",
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
+    "content.view", "content.create", "content.edit", "content.publish", "content.delete",
+    "media.view", "media.upload", "media.delete",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
     "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
+    "content.view", "content.create", "content.edit", "content.publish", "content.delete",
+    "media.view", "media.upload", "media.delete",
   ],
-  manager: ["manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics"],
-  marketing: ["manage_content", "manage_campaigns", "view_analytics"],
-  sales: ["manage_leads", "view_analytics"],
-  support: ["manage_inbox", "manage_leads"],
-  viewer: ["view_analytics"],
+  manager: [
+    "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
+    "content.view", "content.create", "content.edit", "content.publish", "content.delete",
+    "media.view", "media.upload", "media.delete",
+  ],
+  marketing: [
+    "manage_content", "manage_campaigns", "view_analytics",
+    "content.view", "content.create", "content.edit", "content.publish", "content.delete",
+    "media.view", "media.upload", "media.delete",
+  ],
+  sales: ["manage_leads", "view_analytics", "content.view", "media.view"],
+  support: ["manage_inbox", "manage_leads", "content.view", "media.view"],
+  viewer: ["view_analytics", "content.view", "media.view"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {
