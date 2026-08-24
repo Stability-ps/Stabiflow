@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -12,6 +12,11 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import CreateWorkspace from "@/pages/CreateWorkspace";
 import Overview from "@/pages/dashboard/Overview";
 import Content from "@/pages/dashboard/Content";
+import ContentCalendar from "@/pages/dashboard/content/Calendar";
+import ContentScheduled from "@/pages/dashboard/content/Scheduled";
+import ContentPublished from "@/pages/dashboard/content/Published";
+import ContentDrafts from "@/pages/dashboard/content/Drafts";
+import ContentMediaLibrary from "@/pages/dashboard/content/MediaLibrary";
 import Campaigns from "@/pages/dashboard/Campaigns";
 import CreativeStudio from "@/pages/dashboard/CreativeStudio";
 import Inbox from "@/pages/dashboard/Inbox";
@@ -53,7 +58,14 @@ function AppRoutes() {
         }
       >
         <Route path="/" element={<Overview />} />
-        <Route path="/content" element={<Content />} />
+        <Route path="/content" element={<Content />}>
+          <Route index element={<Navigate to="calendar" replace />} />
+          <Route path="calendar" element={<ContentCalendar />} />
+          <Route path="scheduled" element={<ContentScheduled />} />
+          <Route path="published" element={<ContentPublished />} />
+          <Route path="drafts" element={<ContentDrafts />} />
+          <Route path="media-library" element={<ContentMediaLibrary />} />
+        </Route>
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/creative-studio" element={<CreativeStudio />} />
         <Route path="/inbox" element={<Inbox />} />
