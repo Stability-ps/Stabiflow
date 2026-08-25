@@ -38,9 +38,20 @@ export const META_SCOPES = [
 ];
 
 // WhatsApp Business Platform:
-//   whatsapp_business_management - list/read the WhatsApp Business Account and its phone numbers (discovery, this phase)
-//   whatsapp_business_messaging  - send/receive messages (NOT used by any code in this phase - Phase C explicitly does not send messages - but requested alongside management now because Meta's own recommended onboarding grants both in one consent, and re-running OAuth solely to add messaging later would be poor UX for a workspace that already connected WhatsApp intending to message). See Phase C completion report for this tradeoff.
-export const WHATSAPP_SCOPES = ["whatsapp_business_management", "whatsapp_business_messaging"];
+//   whatsapp_business_management - list/read the WhatsApp Business Account and its phone numbers (discovery, this phase) - this is the ONLY scope Phase C's code actually calls: GET /me/businesses, GET /{business}/owned_whatsapp_business_accounts, GET /{waba}/phone_numbers are all documented under whatsapp_business_management, not messaging.
+//
+// whatsapp_business_messaging is deliberately NOT requested here (least
+// privilege, per Phase C review): it grants sending/receiving messages via
+// the Cloud API, which nothing in this phase does or calls - Phase C is
+// connection/discovery only (see instruction #43: "do not send WhatsApp
+// replies"). An earlier draft of this module requested it upfront to avoid
+// a second consent screen once messaging ships; that was rejected in
+// review as scope-creep with no concrete provider requirement behind it.
+// Phase D (Inbox) adds "whatsapp_business_messaging" to this array when it
+// implements sending/receiving - a workspace that connected under Phase C
+// will need to reconnect once to grant it, which is the correct tradeoff
+// for not holding an unused, sensitive permission in the meantime.
+export const WHATSAPP_SCOPES = ["whatsapp_business_management"];
 
 export function scopesForProvider(provider: IntegrationProvider): string[] {
   return provider === "meta" ? META_SCOPES : WHATSAPP_SCOPES;
