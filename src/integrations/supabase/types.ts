@@ -1436,17 +1436,68 @@ export type Database = {
           },
         ]
       }
+      workspace_integration_oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          provider: Database["public"]["Enums"]["integration_provider"]
+          state: string
+          used_at: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          provider: Database["public"]["Enums"]["integration_provider"]
+          state: string
+          used_at?: string | null
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          provider?: Database["public"]["Enums"]["integration_provider"]
+          state?: string
+          used_at?: string | null
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_integration_oauth_states_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_integration_oauth_states_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_integrations: {
         Row: {
           connected_at: string | null
           connected_by: string | null
           created_at: string
+          disconnected_at: string | null
           id: string
           last_health_check_at: string | null
           last_health_check_message: string | null
           last_health_check_status: string | null
+          last_success_at: string | null
           provider: Database["public"]["Enums"]["integration_provider"]
           status: Database["public"]["Enums"]["integration_status"]
+          token_expires_at: string | null
           updated_at: string
           vault_secret_id: string | null
           workspace_id: string
@@ -1455,12 +1506,15 @@ export type Database = {
           connected_at?: string | null
           connected_by?: string | null
           created_at?: string
+          disconnected_at?: string | null
           id?: string
           last_health_check_at?: string | null
           last_health_check_message?: string | null
           last_health_check_status?: string | null
+          last_success_at?: string | null
           provider: Database["public"]["Enums"]["integration_provider"]
           status?: Database["public"]["Enums"]["integration_status"]
+          token_expires_at?: string | null
           updated_at?: string
           vault_secret_id?: string | null
           workspace_id: string
@@ -1469,12 +1523,15 @@ export type Database = {
           connected_at?: string | null
           connected_by?: string | null
           created_at?: string
+          disconnected_at?: string | null
           id?: string
           last_health_check_at?: string | null
           last_health_check_message?: string | null
           last_health_check_status?: string | null
+          last_success_at?: string | null
           provider?: Database["public"]["Enums"]["integration_provider"]
           status?: Database["public"]["Enums"]["integration_status"]
+          token_expires_at?: string | null
           updated_at?: string
           vault_secret_id?: string | null
           workspace_id?: string
@@ -1752,7 +1809,11 @@ export type Database = {
           integration_id: string
           is_active: boolean
           phone_number_id: string
+          platform_status: string | null
+          quality_rating: string | null
           updated_at: string
+          verified_name: string | null
+          waba_id: string | null
           workspace_id: string
         }
         Insert: {
@@ -1763,7 +1824,11 @@ export type Database = {
           integration_id: string
           is_active?: boolean
           phone_number_id: string
+          platform_status?: string | null
+          quality_rating?: string | null
           updated_at?: string
+          verified_name?: string | null
+          waba_id?: string | null
           workspace_id: string
         }
         Update: {
@@ -1774,7 +1839,11 @@ export type Database = {
           integration_id?: string
           is_active?: boolean
           phone_number_id?: string
+          platform_status?: string | null
+          quality_rating?: string | null
           updated_at?: string
+          verified_name?: string | null
+          waba_id?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -1787,6 +1856,44 @@ export type Database = {
           },
           {
             foreignKeyName: "workspace_whatsapp_numbers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_whatsapp_webhook_events: {
+        Row: {
+          event_type: string
+          id: string
+          payload_summary: Json
+          phone_number_id: string
+          provider_event_id: string
+          received_at: string
+          workspace_id: string | null
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          payload_summary?: Json
+          phone_number_id: string
+          provider_event_id: string
+          received_at?: string
+          workspace_id?: string | null
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          payload_summary?: Json
+          phone_number_id?: string
+          provider_event_id?: string
+          received_at?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_whatsapp_webhook_events_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1851,6 +1958,10 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: boolean
+      }
+      clear_workspace_integration_secret: {
+        Args: { p_integration_id: string }
+        Returns: undefined
       }
       content_storage_path_workspace_id: {
         Args: { p_name: string }

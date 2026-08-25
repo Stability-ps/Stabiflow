@@ -43,7 +43,16 @@ export type WorkspacePermission =
   | "campaign.publish"
   | "campaign.pause"
   | "campaign.delete"
-  | "campaign.metrics.view";
+  | "campaign.metrics.view"
+  // Integrations module (Phase C) - fine-grained, mirroring
+  // 20260829060000_integrations_foundation.sql. integration.view is broad
+  // (every role, like content.view/campaign.view - the row never carries a
+  // decrypted secret); connect/manage/disconnect stay owner/admin-only,
+  // same grant set as the pre-existing manage_integrations permission.
+  | "integration.view"
+  | "integration.connect"
+  | "integration.manage"
+  | "integration.disconnect";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -52,6 +61,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
@@ -59,22 +69,25 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view",
   ],
-  sales: ["manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
-  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
-  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
+  sales: ["manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
+  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
+  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {
