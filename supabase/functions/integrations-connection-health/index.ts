@@ -1,0 +1,140 @@
+// Connection health check for Meta OR WhatsApp (Phase C instruction #8/
+// #32/#33). Validates the workspace's ACTUAL provider resources via live
+// Graph API calls rather than trusting workspace_integrations.status - a
+// row can say "connected" while the underlying token has since been
+// revoked at the provider, and this is the one place that finds out.
+// Manual-trigger only (instruction #33: no aggressive cron for V1).
+//
+// Same two-step authorization as every other permission-gated edge
+// function: verify the caller's own permission on their own session
+// first, then switch to the service-role client only to resolve the
+// vault-backed token (never returned to the client - only the classified
+// category/message is).
+import { checkMetaAdAccountHealth, checkMetaInstagramHealth, checkMetaPageHealth, checkMetaTokenHealth } from "../_shared/integration-providers/metaDiscovery.ts";
+import { checkWhatsAppNumberHealth } from "../_shared/integration-providers/whatsappDiscovery.ts";
+import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import type { IntegrationErrorCategory } from "../_shared/integration-providers/types.ts";
+import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+
+type ResourceHealth = { type: string; id: string; label: string; healthy: boolean; category?: IntegrationErrorCategory; message?: string };
+
+async function checkResource(fn: () => Promise<unknown>, type: string, id: string, label: string): Promise<ResourceHealth> {
+  try {
+    await fn();
+    return { type, id, label, healthy: true };
+  } catch (error) {
+    const sanitized = sanitizeIntegrationError(error);
+    return { type, id, label, healthy: false, category: sanitized.category, message: sanitized.message };
+  }
+}
+
+// Maps the resource-level results into the user-facing status vocabulary
+// from instruction #8 and stores it in the existing free-text
+// last_health_check_status column (instruction #16: reuse, don't add a
+// new enum).
+function summarizeStatus(tokenHealthy: boolean, allHealthy: boolean): { status: string; message: string } {
+  if (!tokenHealthy) return { status: "reauthorization_required", message: "Your authorization has expired or was revoked. Reconnect to restore access." };
+  if (allHealthy) return { status: "healthy", message: "All connected resources are healthy." };
+  return { status: "needs_attention", message: "One or more connected resources need attention." };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
+  }
+  if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
+
+  const token = bearerToken(req);
+  if (!token) return json(req, { error: "Forbidden" }, 403);
+  const callerSb = createCallerClient(token);
+  const actorId = await getCallerUserId(callerSb);
+  if (!actorId) return json(req, { error: "Forbidden" }, 403);
+
+  let body: { workspace_id?: unknown; provider?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json(req, { error: "Invalid JSON body" }, 400);
+  }
+  const workspaceId = body.workspace_id;
+  const provider = body.provider;
+  if (typeof workspaceId !== "string" || !workspaceId) return json(req, { error: "workspace_id is required" }, 400);
+  if (provider !== "meta" && provider !== "whatsapp") return json(req, { error: "provider must be 'meta' or 'whatsapp'" }, 400);
+
+  if (!(await hasWorkspacePermission(callerSb, workspaceId, "integration.view"))) {
+    return json(req, { error: "Forbidden" }, 403);
+  }
+
+  const serviceSb = createServiceClient();
+  const nowIso = new Date().toISOString();
+
+  const { data: integration } = await serviceSb.from("workspace_integrations").select("id, status").eq("workspace_id", workspaceId).eq("provider", provider).maybeSingle();
+  if (!integration) return json(req, { ok: true, integration: { connected: false }, resources: [] });
+  if (integration.status !== "connected") return json(req, { ok: true, integration: { connected: false }, resources: [] });
+
+  const { data: tokenValue, error: tokenError } = await serviceSb.rpc("get_workspace_integration_secret", { p_integration_id: integration.id });
+  if (tokenError || !tokenValue) {
+    await serviceSb
+      .from("workspace_integrations")
+      .update({ last_health_check_at: nowIso, last_health_check_status: "reauthorization_required", last_health_check_message: "Stored credential is unavailable." })
+      .eq("id", integration.id);
+    return json(req, { ok: true, integration: { connected: false, category: "expired_token" as IntegrationErrorCategory }, resources: [] });
+  }
+
+  const cred = { token: tokenValue, apiVersion: envVar("INTEGRATIONS_META_GRAPH_API_VERSION") };
+  const resources: ResourceHealth[] = [];
+  let tokenHealthy: boolean;
+
+  if (provider === "meta") {
+    const tokenHealth = await checkResource(() => checkMetaTokenHealth(cred), "token", integration.id, "Meta access token");
+    resources.push(tokenHealth);
+    tokenHealthy = tokenHealth.healthy;
+    if (tokenHealthy) {
+      const [{ data: pages }, { data: igAccounts }, { data: adAccounts }] = await Promise.all([
+        serviceSb.from("workspace_facebook_pages").select("id, page_id, page_name").eq("workspace_id", workspaceId).eq("is_active", true),
+        serviceSb.from("workspace_instagram_accounts").select("id, ig_business_account_id, username").eq("workspace_id", workspaceId).eq("is_active", true),
+        serviceSb.from("workspace_meta_ad_accounts").select("id, ad_account_id, name").eq("workspace_id", workspaceId).eq("is_active", true),
+      ]);
+      for (const page of pages || []) resources.push(await checkResource(() => checkMetaPageHealth(cred, page.page_id), "facebook_page", page.id, page.page_name || page.page_id));
+      for (const ig of igAccounts || []) resources.push(await checkResource(() => checkMetaInstagramHealth(cred, ig.ig_business_account_id), "instagram_account", ig.id, ig.username || ig.ig_business_account_id));
+      for (const acct of adAccounts || []) resources.push(await checkResource(() => checkMetaAdAccountHealth(cred, acct.ad_account_id), "ad_account", acct.id, acct.name || acct.ad_account_id));
+    }
+  } else {
+    // WhatsApp has no separate "/me" identity check - a phone number's own
+    // health check IS the token health check (an invalid/expired token
+    // fails the first number lookup the same way it would fail /me).
+    const { data: numbers } = await serviceSb.from("workspace_whatsapp_numbers").select("id, phone_number_id, display_phone_number").eq("workspace_id", workspaceId).eq("is_active", true);
+    if (!numbers || numbers.length === 0) {
+      tokenHealthy = true; // nothing to check against yet - not itself a token failure
+    } else {
+      for (const num of numbers) {
+        resources.push(await checkResource(() => checkWhatsAppNumberHealth(cred, num.phone_number_id), "whatsapp_number", num.id, num.display_phone_number || num.phone_number_id));
+      }
+      tokenHealthy = resources.every((r) => r.category !== "expired_token" && r.category !== "authorization_failure");
+    }
+  }
+
+  const allHealthy = resources.every((r) => r.healthy);
+  const { status, message } = summarizeStatus(tokenHealthy, allHealthy);
+
+  await serviceSb
+    .from("workspace_integrations")
+    .update({
+      last_health_check_at: nowIso,
+      last_health_check_status: status,
+      last_health_check_message: message,
+      ...(allHealthy ? { last_success_at: nowIso } : {}),
+    })
+    .eq("id", integration.id);
+
+  await serviceSb.from("workspace_activity_log").insert({
+    workspace_id: workspaceId,
+    actor_user_id: actorId,
+    action: allHealthy ? "integration_health_check_passed" : "integration_health_check_failed",
+    target_type: "workspace_integration",
+    target_id: integration.id,
+    metadata: { provider, status, resource_count: resources.length },
+  });
+
+  return json(req, { ok: true, integration: { connected: true, healthy: allHealthy, status }, resources });
+});

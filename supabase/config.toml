@@ -371,6 +371,16 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# Hit directly by Meta's browser redirect / webhook infrastructure, never
+# by StabiFlow's own frontend, so there is no Supabase JWT on the request
+# at all - see each function's own header comment for how it authorizes
+# itself instead (OAuth state row / webhook signature verification).
+[functions.integrations-oauth-callback]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
