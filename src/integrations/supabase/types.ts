@@ -1686,30 +1686,51 @@ export type Database = {
       }
       workspace_settings: {
         Row: {
+          business_description: string | null
+          contact_email: string | null
+          contact_phone: string | null
           created_at: string
+          currency: string
           feature_flags: Json
           id: string
+          industry: string | null
+          logo_path: string | null
           terminology: Json
           timezone: string
           updated_at: string
+          website: string | null
           workspace_id: string
         }
         Insert: {
+          business_description?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
+          currency?: string
           feature_flags?: Json
           id?: string
+          industry?: string | null
+          logo_path?: string | null
           terminology?: Json
           timezone?: string
           updated_at?: string
+          website?: string | null
           workspace_id: string
         }
         Update: {
+          business_description?: string | null
+          contact_email?: string | null
+          contact_phone?: string | null
           created_at?: string
+          currency?: string
           feature_flags?: Json
           id?: string
+          industry?: string | null
+          logo_path?: string | null
           terminology?: Json
           timezone?: string
           updated_at?: string
+          website?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -1858,9 +1879,17 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: boolean
       }
+      is_workspace_slug_available: {
+        Args: { p_exclude_workspace_id?: string; p_slug: string }
+        Returns: boolean
+      }
       set_workspace_integration_secret: {
         Args: { p_integration_id: string; p_secret: string }
         Returns: undefined
+      }
+      workspace_assets_path_workspace_id: {
+        Args: { p_name: string }
+        Returns: string
       }
       workspace_role_rank: {
         Args: { p_role: Database["public"]["Enums"]["workspace_role"] }
