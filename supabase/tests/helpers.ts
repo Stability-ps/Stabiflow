@@ -28,6 +28,13 @@ if (!SUPABASE_URL || !ANON_KEY || !SERVICE_ROLE_KEY) {
   throw new Error("Missing SUPABASE_URL/SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY in .env.test.local");
 }
 
+/** Reads any other value from .env.test.local (e.g. a dev-only shared secret a test needs to compute a matching signature against a deployed edge function). Throws if missing so a misconfigured test env fails loudly rather than silently skipping coverage. */
+export function getTestEnv(key: string): string {
+  const value = env[key];
+  if (!value) throw new Error(`Missing ${key} in .env.test.local`);
+  return value;
+}
+
 export const admin: SupabaseClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 
 export type TestTenant = { userId: string; email: string; client: SupabaseClient; workspaceId: string };
