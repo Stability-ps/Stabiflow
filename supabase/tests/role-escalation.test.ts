@@ -32,12 +32,13 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Deleting owner/otherOwner's workspaces cascades away the
+  // adminUser/admin2/marketingUser membership rows seeded into
+  // owner.workspaceId too - adminUser/admin2/marketingUser/outsider are
+  // pooled identities (see helpers.ts) with no workspace of their own to
+  // clean up, and are never deleted themselves (shared fixtures).
   await cleanupTenant(owner);
   await cleanupTenant(otherOwner);
-  await admin.auth.admin.deleteUser(adminUser.userId);
-  await admin.auth.admin.deleteUser(admin2.userId);
-  await admin.auth.admin.deleteUser(marketingUser.userId);
-  await admin.auth.admin.deleteUser(outsider.userId);
 });
 
 async function currentRole(workspaceId: string, userId: string): Promise<string | null> {
