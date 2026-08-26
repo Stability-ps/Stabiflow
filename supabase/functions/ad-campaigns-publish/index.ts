@@ -21,8 +21,11 @@
 // idempotency keys from concurrently publishing the same campaign.
 import { checkCampaignReadiness, isReady } from "../_shared/adReadiness.ts";
 import { loadReadinessInput, CAMPAIGN_COLUMNS } from "../_shared/adCampaignLoader.ts";
-import { claimCampaignForPublish, executeCampaignPublish } from "../_shared/adPublishExecution.ts";
+import { claimCampaignForPublish, executeCampaignPublish, REAL_META_PROVIDER, type MetaAdsProvider, type PublishStep } from "../_shared/adPublishExecution.ts";
+import * as mockMetaProvider from "../_shared/ad-providers/metaMarketingApiMock.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+
+const MOCK_PROVIDER: MetaAdsProvider = mockMetaProvider;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -128,10 +131,23 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Unable to record the publish operation" }, 500);
   }
 
+  // Mock mode (Phase F instruction #43): deployment-wide, the same
+  // INTEGRATIONS_META_MOCK_MODE flag Phase C's OAuth connect already uses
+  // - a workspace connected while this is true has a fabricated token, so
+  // this is the only safe moment to hand the saga a provider that fakes
+  // its Meta responses too rather than letting every step fail against a
+  // fake token. mock_fail_step is a test-only hook read from the
+  // campaign's own audience jsonb, and is only ever honored when mock
+  // mode is active - never in a real deployment.
+  const mockMode = (Deno.env.get("INTEGRATIONS_META_MOCK_MODE") || "").trim().toLowerCase() === "true";
+  const mockFailStep = mockMode ? (((claimed.audience as Record<string, unknown> | null)?._mock_fail_step as PublishStep | undefined) ?? null) : null;
+
   const result = await executeCampaignPublish(serviceSb, claimed, {
     actorUserId: actorId,
     apiVersion: envVar("AD_META_GRAPH_API_VERSION"),
     operationId: operation.id,
+    provider: mockMode ? MOCK_PROVIDER : REAL_META_PROVIDER,
+    mockFailStep,
   });
 
   await serviceSb.from("workspace_activity_log").insert({

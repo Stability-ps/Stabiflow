@@ -18,16 +18,29 @@
 // below) before calling executeCampaignPublish - this module assumes both
 // already happened and performs no locking of its own.
 import { PermanentAdError, TemporaryAdError } from "./ad-providers/types.ts";
-import {
-  createAd,
-  createAdCreative,
-  createAdSet,
-  createCampaign,
-  updateObjectStatus,
-} from "./ad-providers/metaMarketingApi.ts";
+import type { CreatedObject, CreateAdCreativeInput, CreateAdInput, CreateAdSetInput, CreateCampaignInput, MetaCredential } from "./ad-providers/types.ts";
+import * as realMetaProvider from "./ad-providers/metaMarketingApi.ts";
 import { sanitizeAdErrorForStorage } from "./ad-providers/metaAdsErrorClassifier.ts";
 import { getObjectiveRule } from "./adObjectiveRules.ts";
 import { buildMetaTargetingSpec } from "./adAudience.ts";
+import { normalizePhoneNumber } from "./phone.ts";
+
+// Dependency-injected so a mock provider (metaMarketingApiMock.ts) can
+// stand in during tests/mock-mode publishing without this module - or the
+// edge function calling it - ever branching on "is this mock mode" itself
+// beyond picking WHICH provider object to pass in. See metaMarketingApiMock.ts
+// for why this exists: proving the actual 4-step saga (not just the
+// idempotency claim around it) under success/partial-failure/retry without
+// a real Meta API call.
+export type MetaAdsProvider = {
+  createCampaign(cred: MetaCredential, input: CreateCampaignInput): Promise<CreatedObject>;
+  createAdSet(cred: MetaCredential, input: CreateAdSetInput): Promise<CreatedObject>;
+  createAdCreative(cred: MetaCredential, input: CreateAdCreativeInput): Promise<CreatedObject>;
+  createAd(cred: MetaCredential, input: CreateAdInput): Promise<CreatedObject>;
+  updateObjectStatus(cred: MetaCredential, externalId: string, status: "ACTIVE" | "PAUSED"): Promise<{ success: boolean }>;
+};
+
+export const REAL_META_PROVIDER: MetaAdsProvider = realMetaProvider;
 
 // deno-lint-ignore no-explicit-any
 export type AnySupabaseClient = any;
@@ -80,6 +93,12 @@ export type ExecutePublishOptions = {
   actorUserId: string | null;
   apiVersion: string;
   operationId: string;
+  provider: MetaAdsProvider;
+  // Test-only forced-failure hook (see metaMarketingApiMock.ts's header) -
+  // the calling edge function only ever sets this when mock mode is
+  // active, so it can never affect a real campaign even if a stray value
+  // somehow ended up in a campaign's audience jsonb.
+  mockFailStep?: PublishStep | null;
 };
 
 export type ExecutePublishResult = {
@@ -130,8 +149,15 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
 
     let step = resolveNextStep(providerState);
 
+    const maybeForceFail = (atStep: PublishStep) => {
+      if (options.mockFailStep === atStep) {
+        throw new PermanentAdError("mock_forced_failure", `Mock-mode forced failure at step "${atStep}" (test-only)`, "invalid_request");
+      }
+    };
+
     if (step === "campaign") {
-      const created = await createCampaign(cred, {
+      maybeForceFail("campaign");
+      const created = await options.provider.createCampaign(cred, {
         adAccountId: externalAdAccountId,
         name: campaign.name as string,
         objective: campaign.objective as string,
@@ -151,7 +177,8 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
 
     let adSetRow: Record<string, unknown> | null = null;
     if (step === "ad_set") {
-      const created = await createAdSet(cred, {
+      maybeForceFail("ad_set");
+      const created = await options.provider.createAdSet(cred, {
         adAccountId: externalAdAccountId,
         campaignExternalId: providerState.campaign!.external_id,
         name: `${campaign.name} - Ad Set`,
@@ -209,11 +236,24 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
     }
     if (!pageExternalId) throw new PermanentAdError("missing_page", "A Facebook Page is required to create the ad creative", "invalid_resource");
 
+    let whatsappNumberDigits: string | null = null;
+    if (campaign.destination_type === "whatsapp") {
+      if (!creative.whatsapp_number_id) throw new PermanentAdError("missing_whatsapp_number", "A WhatsApp number is required for a WhatsApp destination", "invalid_creative");
+      const { data: waNumber } = await sb.from("workspace_whatsapp_numbers").select("workspace_id, display_phone_number, is_active").eq("id", creative.whatsapp_number_id).single();
+      if (!waNumber || waNumber.workspace_id !== campaign.workspace_id || !waNumber.is_active) {
+        throw new PermanentAdError("whatsapp_number_unavailable", "The selected WhatsApp number is no longer connected or active for this workspace", "invalid_creative");
+      }
+      const normalized = normalizePhoneNumber(waNumber.display_phone_number);
+      if (!normalized) throw new PermanentAdError("invalid_whatsapp_number", "The selected WhatsApp number could not be normalized", "invalid_creative");
+      whatsappNumberDigits = normalized.slice(1); // wa.me links use digits only, no leading '+'
+    }
+
     if (step === "creative") {
+      maybeForceFail("creative");
       const { data: signed, error: signError } = await sb.storage.from(CONTENT_MEDIA_BUCKET).createSignedUrl(mediaAsset.storage_path, SIGNED_URL_SECONDS);
       if (signError || !signed?.signedUrl) throw new TemporaryAdError("signed_url_failed", "Unable to create a signed URL for the creative's media", "temporary_unavailable");
 
-      const created = await createAdCreative(cred, {
+      const created = await options.provider.createAdCreative(cred, {
         adAccountId: externalAdAccountId,
         name: `${campaign.name} - Creative`,
         pageId: pageExternalId,
@@ -225,6 +265,7 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
         cta: creative.cta,
         destinationUrl: creative.destination_url,
         linkOrigin: campaign.destination_type as "website" | "page_profile" | "whatsapp",
+        whatsappNumber: whatsappNumberDigits,
       });
       steps.push({ step: "creative", status: "success", external_id: created.id });
       await persistState({ ...providerState, creative: { external_id: created.id, created_at: new Date().toISOString() } });
@@ -233,7 +274,8 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
     }
 
     if (step === "ad") {
-      const created = await createAd(cred, {
+      maybeForceFail("ad");
+      const created = await options.provider.createAd(cred, {
         adAccountId: externalAdAccountId,
         adSetExternalId: providerState.ad_set!.external_id,
         creativeExternalId: providerState.creative!.external_id,
@@ -255,9 +297,9 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
       // to ACTIVE at Meta. This ordering is what makes a partial failure
       // safe: nothing StabiFlow created can spend budget until every piece
       // of it exists.
-      await updateObjectStatus(cred, providerState.campaign!.external_id, "ACTIVE");
-      await updateObjectStatus(cred, providerState.ad_set!.external_id, "ACTIVE");
-      await updateObjectStatus(cred, created.id, "ACTIVE").catch(() => {
+      await options.provider.updateObjectStatus(cred, providerState.campaign!.external_id, "ACTIVE");
+      await options.provider.updateObjectStatus(cred, providerState.ad_set!.external_id, "ACTIVE");
+      await options.provider.updateObjectStatus(cred, created.id, "ACTIVE").catch(() => {
         // The ad's own activation is the one that matters for delivery;
         // if this specific call fails after everything else succeeded,
         // the campaign is still correctly marked active below and a
