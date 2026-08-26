@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Bot, CheckCircle2, Paperclip, Send, Sparkles, UserCheck } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, CheckCircle2, Paperclip, Send, Sparkles, UserCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,8 +14,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { getInboxMediaUrl, useInboxInternalNotes, useInboxMessages, type InboxMessageRow } from "@/hooks/useInboxMessages";
 import type { InboxConversationRow } from "@/hooks/useInboxConversations";
+import { useLead } from "@/hooks/useLeads";
 import { addInternalNote, assignConversation, markConversationRead, replyToConversation, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
 import { aiHumanStatusText, buildMissingInfoReply, deliveryLabel, deliveryTone, inboxStatusLabel, priorityLabel } from "@/lib/inboxPresentation";
+import { roleHasPermission } from "@/lib/permissions";
+import { createLeadFromConversation, linkLeadConversation, type DuplicateLeadCandidate } from "@/lib/leads";
+import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
+import { openOpportunityActionLabel } from "@/lib/terminology";
 
 function MessageBubble({ message }: { message: InboxMessageRow }) {
   const isInbound = message.direction === "inbound";
@@ -59,12 +65,19 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   onBack?: () => void;
   onChanged: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, currentMembership } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: messages, isLoading: messagesLoading } = useInboxMessages(conversation.id);
   const { data: notes } = useInboxInternalNotes(conversation.id);
   const { data: members } = useWorkspaceMembers(workspaceId);
+  const { data: lead } = useLead(conversation.lead_id);
+  const opportunityLabel = useOpportunityTerminology(workspaceId);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const role = currentMembership?.role;
+  const canCreateLead = roleHasPermission(role, "lead.create");
+  const canViewLead = roleHasPermission(role, "lead.view");
 
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -72,6 +85,8 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const [confirmResolve, setConfirmResolve] = useState(false);
   const [confirmReturnToAI, setConfirmReturnToAI] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [creatingLead, setCreatingLead] = useState(false);
+  const [leadDuplicates, setLeadDuplicates] = useState<DuplicateLeadCandidate[] | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -176,6 +191,42 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
 
   const isAssignedToMe = conversation.assigned_staff_id === user?.id;
 
+  const handleCreateLead = async (force = false) => {
+    setCreatingLead(true);
+    try {
+      const result = await createLeadFromConversation(workspaceId, conversation.id, force);
+      if (!result.created && result.duplicates?.length) {
+        setLeadDuplicates(result.duplicates);
+        return;
+      }
+      setLeadDuplicates(null);
+      queryClient.invalidateQueries({ queryKey: ["inbox-conversations", workspaceId] });
+      toast.success(result.already_linked ? "This conversation already has a linked lead" : "Lead created");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create a lead");
+    } finally {
+      setCreatingLead(false);
+    }
+  };
+
+  const goToLead = (leadId: string, openOpportunityForm = false) => {
+    navigate("/leads", { state: { selectedLeadId: leadId, openOpportunityForm } });
+  };
+
+  const handleLinkExisting = async (leadId: string) => {
+    setCreatingLead(true);
+    try {
+      await linkLeadConversation(workspaceId, leadId, conversation.id);
+      setLeadDuplicates(null);
+      queryClient.invalidateQueries({ queryKey: ["inbox-conversations", workspaceId] });
+      toast.success("Conversation linked to existing lead");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to link this conversation");
+    } finally {
+      setCreatingLead(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b p-3">
@@ -187,6 +238,39 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>
         {conversation.priority_level !== "normal" && <Badge variant="secondary">{priorityLabel(conversation.priority_level)}</Badge>}
       </div>
+
+      {(canCreateLead || canViewLead) && (
+        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 p-2">
+          {conversation.lead_id ? (
+            <>
+              <Badge variant="secondary">Lead: {lead?.human_reference || "..."}</Badge>
+              {canViewLead && <Button size="sm" variant="ghost" onClick={() => goToLead(conversation.lead_id as string)}>View lead</Button>}
+              {canViewLead && <Button size="sm" variant="ghost" onClick={() => goToLead(conversation.lead_id as string, true)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button>}
+            </>
+          ) : canCreateLead ? (
+            leadDuplicates ? (
+              <div className="w-full space-y-2 text-xs">
+                <p className="font-medium">Possible existing lead</p>
+                {leadDuplicates.map((d) => (
+                  <div key={d.id} className="flex items-center justify-between rounded-md border bg-background p-2">
+                    <span>{d.contact_name || d.phone || d.human_reference} ({d.human_reference})</span>
+                    <div className="flex gap-1.5">
+                      <Button size="sm" variant="ghost" className="h-7" onClick={() => goToLead(d.id)}>Open existing</Button>
+                      <Button size="sm" variant="outline" className="h-7" disabled={creatingLead} onClick={() => handleLinkExisting(d.id)}>Link conversation</Button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" className="h-7" onClick={() => setLeadDuplicates(null)}>Cancel</Button>
+                  <Button size="sm" variant="outline" className="h-7" disabled={creatingLead} onClick={() => handleCreateLead(true)}>Create new anyway</Button>
+                </div>
+              </div>
+            ) : (
+              <Button size="sm" variant="outline" disabled={creatingLead} onClick={() => handleCreateLead(false)}><UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create lead</Button>
+            )
+          ) : null}
+        </div>
+      )}
 
       {canManage && (
         <div className="border-b bg-muted/30 p-3">
