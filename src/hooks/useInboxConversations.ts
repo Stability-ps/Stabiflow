@@ -20,10 +20,11 @@ export type InboxConversationRow = {
   last_inbound_at: string | null;
   last_outbound_at: string | null;
   updated_at: string;
+  lead_id: string | null;
 };
 
 const CONVERSATION_COLUMNS =
-  "id, wa_id, phone_number, display_name, status, ai_enabled, inbox_status, priority_level, assigned_staff_id, assigned_staff_name, ai_summary, intake_missing_fields, intake_payload, last_inbound_at, last_outbound_at, updated_at";
+  "id, wa_id, phone_number, display_name, status, ai_enabled, inbox_status, priority_level, assigned_staff_id, assigned_staff_name, ai_summary, intake_missing_fields, intake_payload, last_inbound_at, last_outbound_at, updated_at, lead_id";
 
 export function useInboxConversations(workspaceId: string | null) {
   const queryClient = useQueryClient();

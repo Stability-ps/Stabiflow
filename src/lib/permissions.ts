@@ -60,7 +60,25 @@ export type WorkspacePermission =
   // conversations carry customer PII, so this is NOT broadly granted to
   // marketing/sales/viewer.
   | "inbox.view"
-  | "inbox.manage";
+  | "inbox.manage"
+  // Leads/Pipelines/Opportunities module (Phase E) - fine-grained, mirroring
+  // 20260901060000_leads_pipelines_schema.sql. Sales owns leads/opportunities
+  // day to day; pipeline.manage (workspace sales-process configuration) is
+  // manager-and-up only, same rank cutoff as manage_content/manage_campaigns.
+  // Support gets lead.view/lead.create (a conversation they're handling may
+  // already need one) but not edit/assign/close - marketing/viewer get
+  // view-only, like content.view/campaign.view.
+  | "lead.view"
+  | "lead.create"
+  | "lead.edit"
+  | "lead.assign"
+  | "lead.delete"
+  | "pipeline.view"
+  | "pipeline.manage"
+  | "opportunity.view"
+  | "opportunity.create"
+  | "opportunity.edit"
+  | "opportunity.close";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -71,6 +89,9 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
     "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete",
+    "pipeline.view", "pipeline.manage",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
@@ -80,6 +101,9 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
     "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete",
+    "pipeline.view", "pipeline.manage",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
@@ -88,6 +112,9 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view",
     "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete",
+    "pipeline.view", "pipeline.manage",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
@@ -95,10 +122,21 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view",
+    "lead.view", "pipeline.view", "opportunity.view",
   ],
-  sales: ["manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
-  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage"],
-  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
+  sales: [
+    "manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view",
+    "lead.view", "lead.create", "lead.edit", "lead.assign",
+    "pipeline.view",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
+  ],
+  support: [
+    "manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage",
+    "lead.view", "lead.create",
+    "pipeline.view",
+    "opportunity.view",
+  ],
+  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "lead.view", "pipeline.view", "opportunity.view"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {
