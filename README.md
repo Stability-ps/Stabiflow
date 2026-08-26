@@ -54,6 +54,13 @@ cross-tenant reads/writes/inserts/deletes as one against the other's data,
 and asserts every one is blocked - then deletes both. **Never point this
 at a project with real customer data.**
 
+Before any *live/manual browser* testing (as opposed to the automated
+suites above), see
+[`docs/testing/browser-test-identity-safety.md`](docs/testing/browser-test-identity-safety.md) -
+a shared browser can carry a real authenticated session across tabs,
+and mutating test data under the wrong identity is a real failure mode,
+not a hypothetical one.
+
 ## Security assumptions
 
 - Tenant isolation is enforced by Postgres RLS, not frontend filtering.
