@@ -1,26 +1,213 @@
-// WhatsApp webhook receiver - ROUTING FOUNDATION ONLY (Phase C instruction
-// #13/#14/#15/#41). This function proves and exercises the routing path
-// phone_number_id -> workspace_whatsapp_numbers -> integration -> workspace
-// that the future Inbox phase depends on. It deliberately does NOT parse
-// message content, create conversations, or reply to anything - see
-// instruction #43 ("do not migrate WhatsApp Inbox / do not send WhatsApp
-// replies").
+// WhatsApp webhook receiver - routing (Phase C) PLUS full message
+// processing (Phase D). Adapted from Acapolite's whatsapp-agent/index.ts
+// main handler - same overall flow (dedup -> upsert conversation -> store
+// media -> skip if human-controlled/AI-disabled -> fast-path checks -> AI
+// call -> safety guardrails -> send reply), generalized: no tax/SARS
+// content, no service_request bridge, and every step resolves its
+// workspace/credential from StabiFlow's OWN per-workspace
+// workspace_whatsapp_numbers/workspace_integrations + Vault, never a
+// global WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID env var.
 //
 // Hit directly by Meta's webhook infrastructure, not by StabiFlow's
 // frontend - deployed with verify_jwt=false (see supabase/config.toml).
-// Every inbound POST is signature-verified (X-Hub-Signature-256, HMAC-SHA256
-// over the RAW body) before its JSON is even parsed - this is the entire
-// authentication boundary for this endpoint, replacing what a JWT would
-// normally provide. Routing NEVER trusts a caller-supplied workspace id
-// (there isn't one in a webhook payload to begin with) - only the
-// signature-verified phone_number_id, looked up against StabiFlow's own
-// workspace_whatsapp_numbers table.
+// Every inbound POST is signature-verified before its JSON is even parsed;
+// routing/workspace resolution is ALWAYS derived from the signature-verified
+// phone_number_id, never a caller-supplied workspace id (instruction: "do
+// not trust a workspace ID supplied only by the browser or webhook
+// caller").
 import { verifyMetaWebhookSignature, verifyWebhookChallenge } from "../_shared/integration-providers/webhookSignature.ts";
 import { parseWhatsAppWebhookEvents } from "../_shared/integration-providers/whatsappWebhookPayload.ts";
 import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
+import { applyStatusUpdate, incomingStatuses } from "../_shared/inbox/whatsappStatus.ts";
+import { normalizePhone, parseInboundMessageEvents, type InboundMessageEvent } from "../_shared/inbox/webhookMessageParser.ts";
+import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
+import { generateAIReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
+import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, sendWhatsAppText, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
+import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = any;
 
 function text(body: string, status = 200) {
   return new Response(body, { status, headers: { "Content-Type": "text/plain" } });
+}
+
+type NumberRow = { id: string; workspace_id: string; integration_id: string; phone_number_id: string };
+
+async function resolveCredential(sb: AnySupabaseClient, numberRow: NumberRow): Promise<WhatsAppSendCredential | null> {
+  const { data: integration } = await sb.from("workspace_integrations").select("id,status").eq("id", numberRow.integration_id).maybeSingle();
+  if (!integration || integration.status !== "connected") return null;
+  const { data: token, error } = await sb.rpc("get_workspace_integration_secret", { p_integration_id: integration.id });
+  if (error || !token) return null;
+  return { token, phoneNumberId: numberRow.phone_number_id, apiVersion: envVar("INTEGRATIONS_META_GRAPH_API_VERSION") };
+}
+
+async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential, workspaceId: string, conversationId: string, waId: string, body: string, senderType: "ai" | "system" | "staff" = "ai") {
+  const cleaned = cleanReply(body);
+  if (!cleaned) return;
+  let providerMessageId: string | null = null;
+  let deliveryStatus = "submitted";
+  try {
+    providerMessageId = await sendWhatsAppText(cred, waId, cleaned);
+  } catch (error) {
+    console.error("whatsapp-webhook: send failed", sanitizeIntegrationError(error).message);
+    deliveryStatus = "failed";
+  }
+  await sb.from("inbox_messages").insert({
+    workspace_id: workspaceId,
+    conversation_id: conversationId,
+    provider_message_id: providerMessageId,
+    direction: "outbound",
+    sender_type: senderType,
+    message_type: "text",
+    content: cleaned,
+    delivery_status: deliveryStatus,
+  });
+  await sb.from("inbox_conversations").update({ last_outbound_at: new Date().toISOString() }).eq("id", conversationId);
+}
+
+async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
+  const { data: numberRow } = await sb
+    .from("workspace_whatsapp_numbers")
+    .select("id,workspace_id,integration_id,phone_number_id")
+    .eq("phone_number_id", event.phoneNumberId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!numberRow) return; // unknown/inactive number - safe no-op, matches Phase C routing behavior
+
+  // Dedup: a webhook retry for a message StabiFlow already processed is a
+  // safe no-op, never processed twice.
+  const { data: duplicate } = await sb.from("inbox_messages").select("id").eq("provider_message_id", event.messageId).maybeSingle();
+  if (duplicate) return;
+
+  const nowIso = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    workspace_id: numberRow.workspace_id,
+    whatsapp_number_id: numberRow.id,
+    wa_id: event.waId,
+    phone_number: normalizePhone(event.waId),
+    last_inbound_at: nowIso,
+  };
+  if (event.displayName) patch.display_name = event.displayName;
+  if (event.referral?.sourceType) patch.referral_source = event.referral.sourceType;
+  if (event.referral?.sourceId) patch.referral_ad_id = event.referral.sourceId;
+  if (event.referral?.headline) patch.referral_headline = event.referral.headline;
+  if (event.referral?.ctwaClid) patch.referral_campaign_id = event.referral.ctwaClid;
+
+  const { data: conversation, error: conversationError } = await sb
+    .from("inbox_conversations")
+    .upsert(patch, { onConflict: "whatsapp_number_id,wa_id" })
+    .select("id,workspace_id,status,ai_enabled,intake_payload,intake_missing_fields")
+    .single();
+  if (conversationError || !conversation) {
+    console.error("whatsapp-webhook: conversation upsert failed", conversationError?.message);
+    return;
+  }
+
+  let mime = event.mime;
+  let size: number | null = null;
+  let sha256 = event.sha256;
+  let storagePath: string | null = null;
+  const cred = await resolveCredential(sb, numberRow);
+
+  if ((event.kind === "image" || event.kind === "document") && event.mediaId && cred) {
+    try {
+      const media = await downloadWhatsAppMedia(cred, event.mediaId);
+      mime = media.mime;
+      size = media.size;
+      sha256 = media.sha256 || sha256;
+      const allowed = ALLOWED_INBOUND_MEDIA_MIME_TYPES.has(mime || "");
+      if (allowed) {
+        const ext = mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+        const safeName = (event.filename || `whatsapp.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_");
+        const path = `${numberRow.workspace_id}/${conversation.id}/${Date.now()}-${event.messageId}-${safeName}`;
+        const { error: uploadError } = await sb.storage.from("inbox-media").upload(path, media.bytes, { contentType: mime, upsert: false });
+        if (!uploadError) storagePath = path;
+      }
+    } catch (mediaError) {
+      console.error("whatsapp-webhook: media download failed", mediaError instanceof Error ? mediaError.message : mediaError);
+    }
+  }
+
+  const inboundContent = event.text || (event.kind === "image" ? "[Image attached]" : event.kind === "document" ? "[Document attached]" : "[Unsupported message]");
+  const { error: inboundError } = await sb.from("inbox_messages").insert({
+    workspace_id: numberRow.workspace_id,
+    conversation_id: conversation.id,
+    provider_message_id: event.messageId,
+    direction: "inbound",
+    sender_type: "customer",
+    message_type: event.kind,
+    content: inboundContent,
+    media_id: event.mediaId,
+    media_mime_type: mime,
+    media_filename: event.filename,
+    media_sha256: sha256,
+    media_size_bytes: size,
+    media_storage_path: storagePath,
+  });
+  if (inboundError && inboundError.code !== "23505") {
+    console.error("whatsapp-webhook: inbound insert failed", inboundError.message);
+    return;
+  }
+  if (inboundError?.code === "23505") return; // exact duplicate delivery, already recorded
+
+  if (!cred) return; // no connected/working credential - leave for staff, cannot auto-reply
+  if (!conversation.ai_enabled || conversation.status === "human_handoff") return; // human control is active - AI stays silent
+  if (event.kind === "unsupported") {
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Please send that as text, an image, or a PDF and I'll help you from there.", "system");
+    return;
+  }
+
+  if (event.kind === "text" && isSimpleGreeting(event.text)) {
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Hi! How can we help you today?");
+    return;
+  }
+
+  const nowIso2 = new Date().toISOString();
+  if (event.kind === "text" && requestsHumanHandoff(event.text)) {
+    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: nowIso2 }).eq("id", conversation.id);
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+    return;
+  }
+
+  const openaiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+  const openaiModel = Deno.env.get("OPENAI_WHATSAPP_MODEL")?.trim();
+  if (!openaiKey || !openaiModel) {
+    console.error("whatsapp-webhook: OPENAI_API_KEY/OPENAI_WHATSAPP_MODEL not configured - leaving message for staff, no auto-reply");
+    return;
+  }
+
+  const { data: rows } = await sb.from("inbox_messages").select("direction,content").eq("conversation_id", conversation.id).neq("provider_message_id", event.messageId).order("created_at", { ascending: false }).limit(16);
+  const history = ([...(rows || [])].reverse()) as ConversationHistoryMessage[];
+  const { data: workspaceRow } = await sb.from("workspaces").select("name").eq("id", numberRow.workspace_id).maybeSingle();
+  const businessName = workspaceRow?.name || "our team";
+
+  let ai;
+  try {
+    ai = await generateAIReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, (conversation.intake_payload || {}) as Record<string, unknown>);
+  } catch (aiError) {
+    console.error("whatsapp-webhook: AI reply generation failed", aiError instanceof Error ? aiError.message : aiError);
+    return;
+  }
+
+  if (ai.human_handoff_requested) {
+    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversation.id);
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+    return;
+  }
+
+  const nextIntake = mergeExtracted((conversation.intake_payload || {}) as Record<string, unknown>, ai.extracted);
+  const nextMissing = missingFields(nextIntake);
+  await sb.from("inbox_conversations").update({
+    intake_payload: nextIntake,
+    intake_missing_fields: nextMissing,
+    ai_summary: ai.extracted.interest_summary || null,
+  }).eq("id", conversation.id);
+
+  let answer = cleanReply(ai.reply);
+  if (containsInventedPersonalIdentity(answer)) answer = "I'm an AI-assisted assistant here to help. How can we help you today?";
+  if (containsFalseActionClaim(answer)) answer = "Thanks for the details - a team member will follow up on this.";
+  await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, answer || "Thanks for reaching out - how can we help?");
 }
 
 Deno.serve(async (req: Request) => {
@@ -56,43 +243,46 @@ Deno.serve(async (req: Request) => {
     return text("OK", 200);
   }
 
-  const events = parseWhatsAppWebhookEvents(payload);
   const serviceSb = createServiceClient();
 
-  for (const event of events) {
-    // Resolve phone_number_id -> workspace, purely from StabiFlow's own
-    // table - the webhook payload is never trusted to say WHICH workspace
-    // this is for (instruction #14: "do not route inbound webhook events
-    // solely based on a caller-provided workspace ID").
-    const { data: numberRow } = await serviceSb
-      .from("workspace_whatsapp_numbers")
-      .select("workspace_id")
-      .eq("phone_number_id", event.phoneNumberId)
-      .eq("is_active", true)
-      .maybeSingle();
-
-    // Idempotent insert: the unique index on (phone_number_id,
-    // provider_event_id) makes a retried delivery a safe no-op rather than
-    // double-processing (instruction #15/#41). An unresolved number is
-    // still recorded (workspace_id null) instead of silently dropped, so
-    // "we got an event for a number we don't recognise" stays visible.
+  // Phase C's routing/idempotency ledger (instruction #15/#41): records
+  // EVERY event (message or status) keyed on (phone_number_id,
+  // provider_event_id), independent of whether Phase D's richer processing
+  // below succeeds - this is what proves "duplicate delivery can never be
+  // processed twice" and "an unknown number is a safe no-op" regardless of
+  // any bug in the newer conversation/AI logic. Kept as its own pass rather
+  // than folded into processMessageEvent so a webhook_events row always
+  // exists even for status callbacks, which processMessageEvent never sees.
+  for (const routable of parseWhatsAppWebhookEvents(payload)) {
+    const { data: numberRow } = await serviceSb.from("workspace_whatsapp_numbers").select("workspace_id").eq("phone_number_id", routable.phoneNumberId).eq("is_active", true).maybeSingle();
     const { error: insertError } = await serviceSb.from("workspace_whatsapp_webhook_events").insert({
       workspace_id: numberRow?.workspace_id ?? null,
-      phone_number_id: event.phoneNumberId,
-      provider_event_id: event.eventId,
-      event_type: event.eventType,
+      phone_number_id: routable.phoneNumberId,
+      provider_event_id: routable.eventId,
+      event_type: routable.eventType,
       payload_summary: { resolved: !!numberRow },
     });
-    // A 23505 unique-violation here IS the idempotency guarantee working -
-    // this exact (phone_number_id, provider_event_id) was already
-    // recorded, so this is a safe no-op, not an error to surface.
-    if (insertError && insertError.code !== "23505") {
-      console.error("whatsapp-webhook: failed to record event", insertError.message);
+    if (insertError && insertError.code !== "23505") console.error("whatsapp-webhook: failed to record routing event", insertError.message);
+  }
+
+  for (const status of incomingStatuses(payload)) {
+    try {
+      await applyStatusUpdate(serviceSb, status);
+    } catch (statusError) {
+      console.error("whatsapp-webhook: status processing error", statusError instanceof Error ? statusError.message : statusError);
     }
   }
 
-  // Meta expects a fast 200 ack regardless of what routing found - a slow
-  // or non-200 response causes Meta to retry (and eventually disable) the
-  // subscription.
+  for (const event of parseInboundMessageEvents(payload)) {
+    try {
+      await processMessageEvent(serviceSb, event);
+    } catch (messageError) {
+      console.error("whatsapp-webhook: message processing error", messageError instanceof Error ? messageError.message : messageError);
+    }
+  }
+
+  // Meta expects a fast 200 ack regardless of what processing found - a
+  // slow or non-200 response causes Meta to retry (and eventually disable)
+  // the subscription.
   return text("OK", 200);
 });

@@ -1214,6 +1214,398 @@ export type Database = {
           },
         ]
       }
+      inbox_alerts: {
+        Row: {
+          alert_type: string
+          assigned_staff_id: string | null
+          body: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          is_resolved: boolean
+          message_id: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          title: string
+          workspace_id: string
+        }
+        Insert: {
+          alert_type: string
+          assigned_staff_id?: string | null
+          body?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          message_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          title: string
+          workspace_id: string
+        }
+        Update: {
+          alert_type?: string
+          assigned_staff_id?: string | null
+          body?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          is_resolved?: boolean
+          message_id?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          title?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_alerts_assigned_staff_id_fkey"
+            columns: ["assigned_staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_alerts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_alerts_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_alerts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_alerts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_conversation_reads: {
+        Row: {
+          conversation_id: string
+          last_read_at: string
+          staff_id: string
+        }
+        Insert: {
+          conversation_id: string
+          last_read_at?: string
+          staff_id: string
+        }
+        Update: {
+          conversation_id?: string
+          last_read_at?: string
+          staff_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_conversation_reads_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversation_reads_staff_id_fkey"
+            columns: ["staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_conversations: {
+        Row: {
+          ai_enabled: boolean
+          ai_summary: string | null
+          assigned_at: string | null
+          assigned_by: string | null
+          assigned_staff_id: string | null
+          assigned_staff_name: string | null
+          created_at: string
+          display_name: string | null
+          first_staff_reply_at: string | null
+          human_handoff_requested_at: string | null
+          id: string
+          inbox_status: string
+          intake_missing_fields: string[]
+          intake_payload: Json
+          last_inbound_at: string | null
+          last_outbound_at: string | null
+          last_staff_reply_at: string | null
+          phone_number: string
+          priority_level: string
+          referral_ad_id: string | null
+          referral_campaign_id: string | null
+          referral_headline: string | null
+          referral_source: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          updated_at: string
+          wa_id: string
+          whatsapp_number_id: string
+          workspace_id: string
+        }
+        Insert: {
+          ai_enabled?: boolean
+          ai_summary?: string | null
+          assigned_at?: string | null
+          assigned_by?: string | null
+          assigned_staff_id?: string | null
+          assigned_staff_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          first_staff_reply_at?: string | null
+          human_handoff_requested_at?: string | null
+          id?: string
+          inbox_status?: string
+          intake_missing_fields?: string[]
+          intake_payload?: Json
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          last_staff_reply_at?: string | null
+          phone_number: string
+          priority_level?: string
+          referral_ad_id?: string | null
+          referral_campaign_id?: string | null
+          referral_headline?: string | null
+          referral_source?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          wa_id: string
+          whatsapp_number_id: string
+          workspace_id: string
+        }
+        Update: {
+          ai_enabled?: boolean
+          ai_summary?: string | null
+          assigned_at?: string | null
+          assigned_by?: string | null
+          assigned_staff_id?: string | null
+          assigned_staff_name?: string | null
+          created_at?: string
+          display_name?: string | null
+          first_staff_reply_at?: string | null
+          human_handoff_requested_at?: string | null
+          id?: string
+          inbox_status?: string
+          intake_missing_fields?: string[]
+          intake_payload?: Json
+          last_inbound_at?: string | null
+          last_outbound_at?: string | null
+          last_staff_reply_at?: string | null
+          phone_number?: string
+          priority_level?: string
+          referral_ad_id?: string | null
+          referral_campaign_id?: string | null
+          referral_headline?: string | null
+          referral_source?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          updated_at?: string
+          wa_id?: string
+          whatsapp_number_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_conversations_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversations_assigned_staff_id_fkey"
+            columns: ["assigned_staff_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversations_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversations_whatsapp_number_id_fkey"
+            columns: ["whatsapp_number_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_whatsapp_numbers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_internal_notes: {
+        Row: {
+          author_id: string
+          author_name: string
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          mentioned_staff_ids: string[]
+          workspace_id: string
+        }
+        Insert: {
+          author_id: string
+          author_name: string
+          body: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          mentioned_staff_ids?: string[]
+          workspace_id: string
+        }
+        Update: {
+          author_id?: string
+          author_name?: string
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          mentioned_staff_ids?: string[]
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_internal_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_internal_notes_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_internal_notes_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_messages: {
+        Row: {
+          content: string | null
+          conversation_id: string
+          created_at: string
+          delivery_status: string | null
+          direction: string
+          id: string
+          media_filename: string | null
+          media_id: string | null
+          media_mime_type: string | null
+          media_sha256: string | null
+          media_size_bytes: number | null
+          media_storage_path: string | null
+          message_type: string
+          provider_message_id: string | null
+          sender_type: string
+          staff_sender_id: string | null
+          staff_sender_name: string | null
+          workspace_id: string
+        }
+        Insert: {
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          delivery_status?: string | null
+          direction: string
+          id?: string
+          media_filename?: string | null
+          media_id?: string | null
+          media_mime_type?: string | null
+          media_sha256?: string | null
+          media_size_bytes?: number | null
+          media_storage_path?: string | null
+          message_type?: string
+          provider_message_id?: string | null
+          sender_type: string
+          staff_sender_id?: string | null
+          staff_sender_name?: string | null
+          workspace_id: string
+        }
+        Update: {
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          delivery_status?: string | null
+          direction?: string
+          id?: string
+          media_filename?: string | null
+          media_id?: string | null
+          media_mime_type?: string | null
+          media_sha256?: string | null
+          media_size_bytes?: number | null
+          media_storage_path?: string | null
+          message_type?: string
+          provider_message_id?: string | null
+          sender_type?: string
+          staff_sender_id?: string | null
+          staff_sender_name?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_staff_sender_id_fkey"
+            columns: ["staff_sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1985,6 +2377,10 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: boolean
+      }
+      inbox_storage_path_workspace_id: {
+        Args: { p_name: string }
+        Returns: string
       }
       is_workspace_member: {
         Args: { p_workspace_id: string }

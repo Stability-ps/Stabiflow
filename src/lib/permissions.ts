@@ -52,7 +52,15 @@ export type WorkspacePermission =
   | "integration.view"
   | "integration.connect"
   | "integration.manage"
-  | "integration.disconnect";
+  | "integration.disconnect"
+  // Inbox module (Phase D) - fine-grained, mirroring
+  // 20260830060000_whatsapp_inbox_foundation.sql. Granted to exactly the
+  // same role set the pre-existing manage_inbox permission uses
+  // (owner/admin/manager/support) - unlike content.view, inbox
+  // conversations carry customer PII, so this is NOT broadly granted to
+  // marketing/sales/viewer.
+  | "inbox.view"
+  | "inbox.manage";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -62,6 +70,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
+    "inbox.view", "inbox.manage",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
@@ -70,6 +79,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
+    "inbox.view", "inbox.manage",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
@@ -77,6 +87,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view",
+    "inbox.view", "inbox.manage",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
@@ -86,7 +97,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "integration.view",
   ],
   sales: ["manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
-  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
+  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage"],
   viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view"],
 };
 
