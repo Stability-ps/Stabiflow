@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { useAuth } from "@/hooks/useAuth";
 import { useMetaAdAccounts, useMetaFacebookPages, useMetaInstagramAccounts, useMetaIntegration } from "@/hooks/useMetaAccountResources";
+import { useAllWhatsAppNumbers } from "@/hooks/useIntegrations";
 import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
 import { useAdCampaign } from "@/hooks/useAdCampaign";
 import { DESTINATION_TYPE_LABELS, OBJECTIVE_OPTIONS, getObjectiveOption, type DestinationType, type SupportedObjective } from "@/lib/adObjectives";
@@ -39,6 +40,8 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   const { data: pages } = useMetaFacebookPages(currentWorkspaceId);
   const { data: igAccounts } = useMetaInstagramAccounts(currentWorkspaceId);
   const { data: mediaAssets } = useContentMediaAssets(currentWorkspaceId);
+  const { data: whatsappNumbers } = useAllWhatsAppNumbers(currentWorkspaceId);
+  const activeWhatsappNumbers = (whatsappNumbers || []).filter((n) => n.is_active);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [name, setName] = useState("");
@@ -61,6 +64,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   const [description, setDescription] = useState("");
   const [cta, setCta] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
+  const [whatsappNumberId, setWhatsappNumberId] = useState("");
 
   const [savedCampaignId, setSavedCampaignId] = useState<string | null>(campaignId ?? null);
   const [saving, setSaving] = useState(false);
@@ -91,7 +95,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setBudgetDecimal(minorUnitsToDecimalString(existing.budget_type === "daily" ? existing.daily_budget_minor_units : existing.lifetime_budget_minor_units) || "100.00");
     setStartAt(existing.start_at.slice(0, 10));
     setEndAt(existing.end_at ? existing.end_at.slice(0, 10) : "");
-    const creative = existing.ad_creatives as unknown as { media_asset_id: string; headline: string | null; primary_text: string; description: string | null; cta: string; destination_url: string | null } | null;
+    const creative = existing.ad_creatives as unknown as { media_asset_id: string; headline: string | null; primary_text: string; description: string | null; cta: string; destination_url: string | null; whatsapp_number_id: string | null } | null;
     if (creative) {
       setMediaAssetId(creative.media_asset_id);
       setHeadline(creative.headline || "");
@@ -99,6 +103,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       setDescription(creative.description || "");
       setCta(creative.cta);
       setDestinationUrl(creative.destination_url || "");
+      setWhatsappNumberId(creative.whatsapp_number_id || "");
     }
   }, [existing, isEdit]);
 
@@ -114,6 +119,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   const canSaveDraft =
     !!name.trim() && !!objective && !!adAccountId && !!destinationType && !!mediaAssetId && !!primaryText.trim() && !!cta &&
     (destinationType !== "website" || !!destinationUrl.trim()) &&
+    (destinationType !== "whatsapp" || !!whatsappNumberId) &&
     !!startAt && geoCountryList.length > 0 && Number(budgetDecimal) > 0;
 
   const handleSaveDraft = async () => {
@@ -147,6 +153,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         description: description.trim() || null,
         cta,
         destination_url: destinationType === "website" ? destinationUrl.trim() : null,
+        whatsapp_number_id: destinationType === "whatsapp" ? whatsappNumberId : null,
       };
 
       if (savedCampaignId) {
@@ -291,7 +298,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
                   <SelectTrigger><SelectValue placeholder="Choose a destination" /></SelectTrigger>
                   <SelectContent>
                     {objectiveOption.allowedDestinationTypes.map((d) => (
-                      <SelectItem key={d} value={d} disabled={d === "whatsapp"}>{DESTINATION_TYPE_LABELS[d]}</SelectItem>
+                      <SelectItem key={d} value={d}>{DESTINATION_TYPE_LABELS[d]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -411,6 +418,22 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
                   <Input value={destinationUrl} onChange={(e) => setDestinationUrl(e.target.value)} placeholder="https://" />
                 </div>
               )}
+              {destinationType === "whatsapp" && (
+                <div className="space-y-1.5">
+                  <Label>WhatsApp number</Label>
+                  <Select value={whatsappNumberId} onValueChange={setWhatsappNumberId}>
+                    <SelectTrigger><SelectValue placeholder="Choose a WhatsApp number" /></SelectTrigger>
+                    <SelectContent>
+                      {activeWhatsappNumbers.map((n) => (
+                        <SelectItem key={n.id} value={n.id}>{n.display_phone_number || n.phone_number_id}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {activeWhatsappNumbers.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No active WhatsApp number is connected for this workspace. Connect one in Integrations first.</p>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -437,7 +460,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
                 <MediaPreview storagePath={(mediaAssets || []).find((m) => m.id === mediaAssetId)?.storage_path || ""} alt="Creative preview" className="h-16 w-16 shrink-0 rounded" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{primaryText}</p>
-                  <p className="text-xs text-muted-foreground">{cta} {destinationUrl ? `→ ${destinationUrl}` : ""}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {cta} {destinationUrl ? `→ ${destinationUrl}` : ""}
+                    {destinationType === "whatsapp" && whatsappNumberId ? `→ ${activeWhatsappNumbers.find((n) => n.id === whatsappNumberId)?.display_phone_number || "WhatsApp"}` : ""}
+                  </p>
                 </div>
               </div>
             )}

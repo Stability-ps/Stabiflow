@@ -100,6 +100,7 @@ export type CreativeDraftInput = {
   description: string | null;
   cta: string;
   destination_url: string | null;
+  whatsapp_number_id?: string | null;
 };
 
 export async function createCampaignDraft(campaign: CampaignDraftInput, creative: CreativeDraftInput) {

@@ -78,8 +78,22 @@ not a hypothetical one.
 
 ## Project status
 
-Phases 1-3 complete: repository foundation, independent Supabase project
-with the workspace/authorization/attribution/integration schema, and
-authentication + workspace creation with proven tenant isolation. Content,
-Campaigns, WhatsApp Inbox, Leads, Analytics, and Flow AI are later phases
-- see `docs/architecture/` as it grows.
+Complete: repository foundation and workspace/authorization/attribution
+schema; Content (media library, Facebook/Instagram variants, scheduling,
+Content Calendar); Campaigns foundation; workspace-scoped Integrations
+(Meta, WhatsApp, Vault-backed secrets, resource discovery); WhatsApp Inbox
+(conversations, AI/human control, delivery statuses); Leads/Pipelines/
+Opportunities/Customers (the generic conversion-management layer,
+conversation-to-lead linking).
+
+Next: Meta Paid Advertising Campaigns, then Attribution & Conversion
+Tracking, Analytics, Flow AI, and the Automation Engine - see
+[`docs/architecture/product-roadmap.md`](docs/architecture/product-roadmap.md)
+for the full sequence and long-term product data flow,
+[`docs/architecture/acapolite-reuse-strategy.md`](docs/architecture/acapolite-reuse-strategy.md)
+for how existing Acapolite systems are (and aren't) reused,
+[`docs/architecture/ai-architecture.md`](docs/architecture/ai-architecture.md)
+for how AI credentials/features are meant to be structured (including the
+WhatsApp AI vs. future Flow AI split), and
+[`docs/architecture/automation-architecture.md`](docs/architecture/automation-architecture.md)
+for the not-yet-built Automations module's intended shape.
