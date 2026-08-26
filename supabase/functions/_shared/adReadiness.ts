@@ -44,7 +44,9 @@ export type ReadinessInput = {
     mediaWidthPx: number | null;
     mediaHeightPx: number | null;
     mediaMimeType: string | null;
+    whatsappNumberId: string | null;
   } | null;
+  whatsappNumber: { isActive: boolean } | null;
   tokenHealthy: boolean | null; // null = not checked (readiness check without a live provider call)
 };
 
@@ -118,6 +120,13 @@ export function checkCampaignReadiness(input: ReadinessInput): ReadinessIssue[] 
     }
     if (input.campaign.destinationType === "website" && !input.creative.destinationUrl) {
       push("missing_destination_url", "A destination URL is required for a website destination.");
+    }
+    if (input.campaign.destinationType === "whatsapp") {
+      if (!input.creative.whatsappNumberId) {
+        push("missing_whatsapp_number", "A WhatsApp number is required for a WhatsApp destination.");
+      } else if (!input.whatsappNumber || !input.whatsappNumber.isActive) {
+        push("whatsapp_number_inactive", "The selected WhatsApp number is not connected or not active.");
+      }
     }
     if (input.creative.mediaMimeType && !SUPPORTED_CREATIVE_MIME_TYPES.has(input.creative.mediaMimeType)) {
       push("unsupported_creative_media_type", `Media type "${input.creative.mediaMimeType}" is not supported for ads.`);

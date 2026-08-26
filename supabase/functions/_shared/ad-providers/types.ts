@@ -87,6 +87,7 @@ export type CreateAdCreativeInput = {
   cta: string;
   destinationUrl: string | null;
   linkOrigin: "website" | "page_profile" | "whatsapp";
+  whatsappNumber: string | null; // E.164-ish digits (no leading +), required when linkOrigin === "whatsapp"
 };
 
 export type CreateAdInput = {
