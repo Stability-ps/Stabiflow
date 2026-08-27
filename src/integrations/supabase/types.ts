@@ -579,59 +579,266 @@ export type Database = {
       }
       attribution_events: {
         Row: {
+          ad_id: string | null
+          ad_set_id: string | null
           attribution_confidence: string | null
+          attribution_method: string | null
           attribution_source: string | null
+          campaign_id: string | null
+          click_id: string | null
+          conversation_id: string | null
           created_at: string
+          creative_id: string | null
+          customer_id: string | null
+          destination: string | null
           event_type: string
           external_ad_id: string | null
           external_adset_id: string | null
           external_campaign_id: string | null
           external_creative_id: string | null
           id: string
+          lead_id: string | null
+          medium: string | null
           metadata: Json
           occurred_at: string
+          opportunity_id: string | null
           platform: string | null
-          subject_id: string | null
-          subject_type: string | null
+          provider_event_id: string | null
+          received_at: string
+          referrer: string | null
+          source: string | null
+          source_type: string | null
+          tracking_token: string | null
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
           workspace_id: string
         }
         Insert: {
+          ad_id?: string | null
+          ad_set_id?: string | null
           attribution_confidence?: string | null
+          attribution_method?: string | null
           attribution_source?: string | null
+          campaign_id?: string | null
+          click_id?: string | null
+          conversation_id?: string | null
           created_at?: string
+          creative_id?: string | null
+          customer_id?: string | null
+          destination?: string | null
           event_type: string
           external_ad_id?: string | null
           external_adset_id?: string | null
           external_campaign_id?: string | null
           external_creative_id?: string | null
           id?: string
+          lead_id?: string | null
+          medium?: string | null
           metadata?: Json
           occurred_at?: string
+          opportunity_id?: string | null
           platform?: string | null
-          subject_id?: string | null
-          subject_type?: string | null
+          provider_event_id?: string | null
+          received_at?: string
+          referrer?: string | null
+          source?: string | null
+          source_type?: string | null
+          tracking_token?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
           workspace_id: string
         }
         Update: {
+          ad_id?: string | null
+          ad_set_id?: string | null
           attribution_confidence?: string | null
+          attribution_method?: string | null
           attribution_source?: string | null
+          campaign_id?: string | null
+          click_id?: string | null
+          conversation_id?: string | null
           created_at?: string
+          creative_id?: string | null
+          customer_id?: string | null
+          destination?: string | null
           event_type?: string
           external_ad_id?: string | null
           external_adset_id?: string | null
           external_campaign_id?: string | null
           external_creative_id?: string | null
           id?: string
+          lead_id?: string | null
+          medium?: string | null
           metadata?: Json
           occurred_at?: string
+          opportunity_id?: string | null
           platform?: string | null
-          subject_id?: string | null
-          subject_type?: string | null
+          provider_event_id?: string | null
+          received_at?: string
+          referrer?: string | null
+          source?: string | null
+          source_type?: string | null
+          tracking_token?: string | null
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
           workspace_id?: string
         }
         Relationships: [
           {
+            foreignKeyName: "attribution_events_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "ad_creatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attribution_events_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "attribution_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_entry_tokens: {
+        Row: {
+          ad_id: string | null
+          ad_set_id: string | null
+          campaign_id: string | null
+          created_at: string
+          created_by: string | null
+          creative_id: string | null
+          destination_type: string | null
+          expires_at: string | null
+          id: string
+          label: string | null
+          token: string
+          workspace_id: string
+        }
+        Insert: {
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string | null
+          destination_type?: string | null
+          expires_at?: string | null
+          id?: string
+          label?: string | null
+          token: string
+          workspace_id: string
+        }
+        Update: {
+          ad_id?: string | null
+          ad_set_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          creative_id?: string | null
+          destination_type?: string | null
+          expires_at?: string | null
+          id?: string
+          label?: string | null
+          token?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_entry_tokens_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_entry_tokens_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_entry_tokens_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "ad_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_entry_tokens_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_entry_tokens_creative_id_fkey"
+            columns: ["creative_id"]
+            isOneToOne: false
+            referencedRelation: "ad_creatives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "campaign_entry_tokens_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1448,7 +1655,7 @@ export type Database = {
           phone_number: string
           priority_level: string
           referral_ad_id: string | null
-          referral_campaign_id: string | null
+          referral_click_id: string | null
           referral_headline: string | null
           referral_source: string | null
           resolved_at: string | null
@@ -1481,7 +1688,7 @@ export type Database = {
           phone_number: string
           priority_level?: string
           referral_ad_id?: string | null
-          referral_campaign_id?: string | null
+          referral_click_id?: string | null
           referral_headline?: string | null
           referral_source?: string | null
           resolved_at?: string | null
@@ -1514,7 +1721,7 @@ export type Database = {
           phone_number?: string
           priority_level?: string
           referral_ad_id?: string | null
-          referral_campaign_id?: string | null
+          referral_click_id?: string | null
           referral_headline?: string | null
           referral_source?: string | null
           resolved_at?: string | null
@@ -2071,6 +2278,93 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      revenue_events: {
+        Row: {
+          amount_minor: number
+          created_at: string
+          created_by: string | null
+          currency: string
+          customer_id: string | null
+          event_type: string
+          id: string
+          lead_id: string | null
+          metadata: Json
+          occurred_at: string
+          opportunity_id: string | null
+          reference: string | null
+          source: string
+          workspace_id: string
+        }
+        Insert: {
+          amount_minor: number
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          customer_id?: string | null
+          event_type: string
+          id?: string
+          lead_id?: string | null
+          metadata?: Json
+          occurred_at?: string
+          opportunity_id?: string | null
+          reference?: string | null
+          source?: string
+          workspace_id: string
+        }
+        Update: {
+          amount_minor?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          customer_id?: string | null
+          event_type?: string
+          id?: string
+          lead_id?: string | null
+          metadata?: Json
+          occurred_at?: string
+          opportunity_id?: string | null
+          reference?: string | null
+          source?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revenue_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "revenue_events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "revenue_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "revenue_events_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "revenue_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workspace_activity_log: {
         Row: {
@@ -2827,6 +3121,34 @@ export type Database = {
       create_workspace: {
         Args: { p_name: string; p_slug: string }
         Returns: string
+      }
+      get_campaign_conversion_counts: {
+        Args: { p_campaign_id: string; p_workspace_id: string }
+        Returns: {
+          conversations: number
+          customers: number
+          leads: number
+          opportunities: number
+        }[]
+      }
+      get_touch_summary: {
+        Args: {
+          p_target_id: string
+          p_target_type: string
+          p_workspace_id: string
+        }
+        Returns: {
+          ad_id: string
+          attribution_confidence: string
+          campaign_id: string
+          creative_id: string
+          event_id: string
+          occurred_at: string
+          platform: string
+          source: string
+          source_type: string
+          touch_kind: string
+        }[]
       }
       get_workspace_integration_secret: {
         Args: { p_integration_id: string }
