@@ -38,20 +38,25 @@ export const META_SCOPES = [
 ];
 
 // WhatsApp Business Platform:
-//   whatsapp_business_management - list/read the WhatsApp Business Account and its phone numbers (discovery, this phase) - this is the ONLY scope Phase C's code actually calls: GET /me/businesses, GET /{business}/owned_whatsapp_business_accounts, GET /{waba}/phone_numbers are all documented under whatsapp_business_management, not messaging.
+//   whatsapp_business_management - list/read the WhatsApp Business Account and its phone numbers, and (Phase L-1) list its message templates - GET /me/businesses, GET /{business}/owned_whatsapp_business_accounts, GET /{waba}/phone_numbers, GET /{waba}/message_templates are all documented under whatsapp_business_management, not messaging.
+//   whatsapp_business_messaging - send/receive messages via the Cloud API (POST /{phone_number_id}/messages) - required by every outbound send path (_shared/inbox/whatsappSend.ts: free-form text via whatsapp-webhook's AI replies and inbox-actions' staff replies, and Phase L-1's template sends) and by the inbound webhook delivery itself.
 //
-// whatsapp_business_messaging is deliberately NOT requested here (least
-// privilege, per Phase C review): it grants sending/receiving messages via
-// the Cloud API, which nothing in this phase does or calls - Phase C is
-// connection/discovery only (see instruction #43: "do not send WhatsApp
-// replies"). An earlier draft of this module requested it upfront to avoid
-// a second consent screen once messaging ships; that was rejected in
-// review as scope-creep with no concrete provider requirement behind it.
-// Phase D (Inbox) adds "whatsapp_business_messaging" to this array when it
-// implements sending/receiving - a workspace that connected under Phase C
-// will need to reconnect once to grant it, which is the correct tradeoff
-// for not holding an unused, sensitive permission in the meantime.
-export const WHATSAPP_SCOPES = ["whatsapp_business_management"];
+// Phase C originally requested whatsapp_business_management only (least
+// privilege: Phase C was connection/discovery only, before anything sent a
+// message). Phase D then built the full send/receive Inbox on top of that
+// without ever adding this scope - a real gap this comment used to
+// document as deliberate-and-deferred; it is now added because Phase D's
+// functionality has shipped and depends on it. A workspace that connected
+// before this change needs to reconnect once to grant it - Meta re-issues
+// a consent screen for the new scope, it does not silently apply.
+//
+// Production use of either WhatsApp scope still requires Meta's own
+// Advanced Access / App Review approval for a real (non-developer-role)
+// user to complete this OAuth flow successfully - see
+// docs/launch-readiness.md for the current approval status and submission
+// checklist. Requesting the scope here does not grant it in production by
+// itself.
+export const WHATSAPP_SCOPES = ["whatsapp_business_management", "whatsapp_business_messaging"];
 
 export function scopesForProvider(provider: IntegrationProvider): string[] {
   return provider === "meta" ? META_SCOPES : WHATSAPP_SCOPES;

@@ -31,14 +31,16 @@ Deno.test("whatsapp provider requests the WhatsApp scope set only", () => {
   const url = new URL(buildMetaAuthorizeUrl({ appId: "a", apiVersion: "v21.0", redirectUri: "https://x", state: "s", provider: "whatsapp" }));
   const scope = url.searchParams.get("scope") || "";
   assertEquals(scope.includes("whatsapp_business_management"), true);
+  assertEquals(scope.includes("whatsapp_business_messaging"), true);
   assertEquals(scope.includes("pages_manage_posts"), false);
 });
 
-Deno.test("REGRESSION (least privilege): whatsapp_business_messaging is never requested in Phase C - nothing in this phase sends/receives messages, so the scope isn't granted until Phase D actually needs it", () => {
-  assertEquals(WHATSAPP_SCOPES.includes("whatsapp_business_messaging"), false);
+Deno.test("REGRESSION (Phase L-1): whatsapp_business_messaging IS requested - every outbound send path (AI replies, staff replies, template sends) and the inbound webhook depend on it; this must never silently regress back to management-only", () => {
+  assertEquals(WHATSAPP_SCOPES.includes("whatsapp_business_management"), true);
+  assertEquals(WHATSAPP_SCOPES.includes("whatsapp_business_messaging"), true);
   const url = new URL(buildMetaAuthorizeUrl({ appId: "a", apiVersion: "v21.0", redirectUri: "https://x", state: "s", provider: "whatsapp" }));
   const scope = url.searchParams.get("scope") || "";
-  assertEquals(scope.includes("whatsapp_business_messaging"), false);
+  assertEquals(scope.includes("whatsapp_business_messaging"), true);
 });
 
 Deno.test("scopesForProvider is exhaustive and the two scope sets share no accidental overlap that would leak ads permission into a whatsapp-only connect", () => {
