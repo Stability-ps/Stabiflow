@@ -3133,6 +3133,20 @@ export type Database = {
           pipeline_id: string
         }[]
       }
+      get_analytics_kpis: {
+        Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
+        Returns: {
+          conversations: number
+          customers: number
+          leads: number
+          opportunities: number
+          qualified_leads: number
+          revenue_attributed: Json
+          revenue_total: Json
+          revenue_unattributed: Json
+          spend: Json
+        }[]
+      }
       get_campaign_conversion_counts: {
         Args: { p_campaign_id: string; p_workspace_id: string }
         Returns: {
@@ -3140,6 +3154,56 @@ export type Database = {
           customers: number
           leads: number
           opportunities: number
+        }[]
+      }
+      get_campaign_performance: {
+        Args: {
+          p_attribution_model?: string
+          p_date_from: string
+          p_date_to: string
+          p_workspace_id: string
+        }
+        Returns: {
+          campaign_id: string
+          clicks: number
+          conversations: number
+          currency: string
+          customers: number
+          impressions: number
+          leads: number
+          name: string
+          opportunities: number
+          qualified_leads: number
+          reach: number
+          revenue: Json
+          spend_minor: number
+          status: string
+        }[]
+      }
+      get_creative_performance: {
+        Args: {
+          p_attribution_model?: string
+          p_date_from: string
+          p_date_to: string
+          p_workspace_id: string
+        }
+        Returns: {
+          campaign_id: string
+          campaign_name: string
+          conversations: number
+          creative_id: string
+          customers: number
+          leads: number
+          media_storage_path: string
+          primary_text: string
+          revenue: Json
+        }[]
+      }
+      get_lead_source_breakdown: {
+        Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
+        Returns: {
+          lead_count: number
+          source_label: string
         }[]
       }
       get_touch_summary: {
@@ -3159,6 +3223,17 @@ export type Database = {
           source: string
           source_type: string
           touch_kind: string
+        }[]
+      }
+      get_whatsapp_analytics: {
+        Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
+        Returns: {
+          ai_reply_count: number
+          became_customers: number
+          became_leads: number
+          became_qualified: number
+          conversations_started: number
+          staff_reply_count: number
         }[]
       }
       get_workspace_integration_secret: {
