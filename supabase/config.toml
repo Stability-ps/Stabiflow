@@ -156,11 +156,41 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
+#
+# Deliberately still the local dev default, NOT https://app.stabiflow.com,
+# even though the production/preview domains are already in
+# additional_redirect_urls below - site_url also drives the links embedded
+# in transactional emails (password reset, magic link), and app.stabiflow.com
+# does not resolve yet (DNS is pending Hostinger records - see the Phase K
+# deployment report). Flip this to "https://app.stabiflow.com" only once
+# that domain is confirmed live, so a reset-password email sent in the
+# interim never contains a dead link.
 site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
-# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# A list of *exact* URLs (glob patterns allowed) that auth providers are
+# permitted to redirect to post authentication. Mirrors what was applied
+# directly to the live project via the Management API during the Phase K
+# Vercel deployment (see the deployment report) - kept here too so it's
+# version-controlled, not just a live-only change. The vercel.app entries
+# cover this specific project's default alias + preview deployments only
+# (scoped to "-acapolite", never a bare "*.vercel.app").
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "http://localhost:8081",
+  "http://localhost:8081/**",
+  "https://app.stabiflow.com",
+  "https://app.stabiflow.com/**",
+  "https://stabiflow.com",
+  "https://stabiflow.com/**",
+  "https://www.stabiflow.com",
+  "https://www.stabiflow.com/**",
+  "https://stabiflow.vercel.app",
+  "https://stabiflow.vercel.app/**",
+  "https://stabiflow-acapolite.vercel.app",
+  "https://stabiflow-acapolite.vercel.app/**",
+  "https://stabiflow-*-acapolite.vercel.app/**",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
