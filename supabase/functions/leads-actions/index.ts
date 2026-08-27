@@ -71,15 +71,21 @@ async function isWorkspaceMember(sb: AnySupabaseClient, workspaceId: string, use
 // automatically, same as create_opportunity's own fallback - otherwise a
 // lead created with no explicit pipeline can never appear on the Kanban
 // board at all, since nothing in the UI lets a lead join a pipeline for
-// the first time (only move BETWEEN stages once it's already in one). A
-// workspace with no default pipeline yet (shouldn't happen once
-// ensure_default_pipeline has run, but is possible before then) simply
-// leaves the lead unplaced - never an error.
-async function resolveDefaultPipelineFirstStage(sb: AnySupabaseClient, workspaceId: string): Promise<{ pipelineId: string | null; stageId: string | null }> {
-  const { data: pipeline } = await sb.from("pipelines").select("id").eq("workspace_id", workspaceId).eq("is_default", true).maybeSingle();
-  if (!pipeline) return { pipelineId: null, stageId: null };
-  const { data: stage } = await sb.from("pipeline_stages").select("id").eq("workspace_id", workspaceId).eq("pipeline_id", pipeline.id).eq("is_active", true).order("sort_order", { ascending: true }).limit(1).maybeSingle();
-  return { pipelineId: pipeline.id, stageId: stage?.id ?? null };
+// the first time (only move BETWEEN stages once it's already in one).
+//
+// Defensively GUARANTEES a default pipeline exists (via the same
+// authoritative public.ensure_default_pipeline() every other bootstrap
+// path uses) rather than merely reading one - lead creation must never
+// depend on create_workspace()'s own bootstrap or a prior /leads visit
+// having already run. Idempotent and concurrency-safe: two simultaneous
+// lead creations in a brand-new workspace both resolve to the SAME
+// pipeline, never two defaults.
+async function resolveDefaultPipelineFirstStage(sb: AnySupabaseClient, workspaceId: string, createdBy: string): Promise<{ pipelineId: string | null; stageId: string | null }> {
+  const { data: ensured } = await sb.rpc("ensure_default_pipeline", { p_workspace_id: workspaceId, p_created_by: createdBy }).single();
+  const pipelineId = ensured?.pipeline_id ?? null;
+  if (!pipelineId) return { pipelineId: null, stageId: null };
+  const { data: stage } = await sb.from("pipeline_stages").select("id").eq("workspace_id", workspaceId).eq("pipeline_id", pipelineId).eq("is_active", true).order("sort_order", { ascending: true }).limit(1).maybeSingle();
+  return { pipelineId, stageId: stage?.id ?? null };
 }
 
 Deno.serve(async (req: Request) => {
@@ -148,7 +154,7 @@ Deno.serve(async (req: Request) => {
       if (duplicates.length > 0) return json(req, { duplicates, created: false });
     }
 
-    const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId);
+    const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
     const { data: lead, error: leadError } = await serviceSb
       .from("leads")
       .insert({
@@ -189,7 +195,7 @@ Deno.serve(async (req: Request) => {
       if (duplicates.length > 0) return json(req, { duplicates, created: false });
     }
 
-    const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId);
+    const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
     const { data: lead, error: leadError } = await serviceSb
       .from("leads")
       .insert({
