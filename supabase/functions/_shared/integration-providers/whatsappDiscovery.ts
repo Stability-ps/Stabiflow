@@ -13,7 +13,7 @@
 // not full WhatsApp number provisioning.
 import { classifyIntegrationNetworkError, classifyMetaGraphError } from "./metaGraphError.ts";
 import { graphApiBaseUrl } from "./metaOAuth.ts";
-import type { DiscoveredWabaPhoneNumber, MetaCredential } from "./types.ts";
+import type { DiscoveredWabaPhoneNumber, DiscoveredWabaTemplate, MetaCredential } from "./types.ts";
 
 async function graphGet<T>(cred: MetaCredential, path: string): Promise<T> {
   const url = new URL(`${graphApiBaseUrl(cred.apiVersion)}${path}`);
@@ -55,6 +55,26 @@ export function parseWabaPhoneNumbersResponse(
   }));
 }
 
+// Phase L-1: GET /{waba_id}/message_templates - Meta's real, documented
+// endpoint for a WABA's own template library (approved, pending, and
+// rejected are all returned; the send path is what filters to APPROVED
+// only). components is Meta's own HEADER/BODY/FOOTER/BUTTONS structure,
+// stored verbatim (see the migration header) rather than re-modeled.
+export function parseMessageTemplatesResponse(
+  json: { data?: Array<{ id: string; name?: string; language?: string; category?: string; status?: string; components?: unknown }> },
+  wabaId: string,
+): DiscoveredWabaTemplate[] {
+  return (json.data || []).map((t) => ({
+    wabaId,
+    providerTemplateId: t.id,
+    name: t.name ?? "",
+    language: t.language ?? "",
+    category: t.category ?? null,
+    status: t.status ?? "UNKNOWN",
+    components: Array.isArray(t.components) ? t.components : [],
+  }));
+}
+
 // --- Fetch-performing functions ----------------------------------------------
 
 export async function fetchBusinesses(cred: MetaCredential): Promise<Array<{ id: string; name: string | null }>> {
@@ -75,6 +95,13 @@ export async function fetchWabaPhoneNumbers(cred: MetaCredential, wabaId: string
     data?: Array<{ id: string; display_phone_number?: string; verified_name?: string; quality_rating?: string; code_verification_status?: string }>;
   }>(cred, `/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status&limit=200`);
   return parseWabaPhoneNumbersResponse(json, wabaId);
+}
+
+export async function fetchWabaTemplates(cred: MetaCredential, wabaId: string): Promise<DiscoveredWabaTemplate[]> {
+  const json = await graphGet<{
+    data?: Array<{ id: string; name?: string; language?: string; category?: string; status?: string; components?: unknown }>;
+  }>(cred, `/${wabaId}/message_templates?fields=id,name,language,category,status,components&limit=200`);
+  return parseMessageTemplatesResponse(json, wabaId);
 }
 
 // --- Connection health (instruction #8, WhatsApp equivalent) -----------------
