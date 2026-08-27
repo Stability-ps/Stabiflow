@@ -381,6 +381,17 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 verify_jwt = false
 
+# Cron-triggered only (pg_cron -> pg_net, see
+# 20260912060300_schedule_automations_tick.sql) - authorizes itself via the
+# x-cron-secret header, never a Supabase JWT, since there is no live user
+# session to attach one. Tracked here (unlike content-publish-worker/
+# ad-campaigns-metrics-sync, which rely on remembering --no-verify-jwt at
+# deploy time) because the gap that convention leaves is exactly what
+# caused this function to silently 401 on every real cron tick until this
+# entry existed - see the Phase J completion report.
+[functions.automations-tick]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
