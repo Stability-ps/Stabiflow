@@ -3096,6 +3096,10 @@ export type Database = {
         Args: { p_token: string }
         Returns: string
       }
+      backfill_lead_pipeline_placement: {
+        Args: { p_workspace_id: string }
+        Returns: number
+      }
       can_grant_workspace_role: {
         Args: {
           p_new_role: Database["public"]["Enums"]["workspace_role"]
@@ -3121,6 +3125,13 @@ export type Database = {
       create_workspace: {
         Args: { p_name: string; p_slug: string }
         Returns: string
+      }
+      ensure_default_pipeline: {
+        Args: { p_created_by?: string; p_workspace_id: string }
+        Returns: {
+          created: boolean
+          pipeline_id: string
+        }[]
       }
       get_campaign_conversion_counts: {
         Args: { p_campaign_id: string; p_workspace_id: string }
