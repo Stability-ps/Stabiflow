@@ -21,6 +21,7 @@ import { roleHasPermission } from "@/lib/permissions";
 import { createLeadFromConversation, linkLeadConversation, type DuplicateLeadCandidate } from "@/lib/leads";
 import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
 import { openOpportunityActionLabel } from "@/lib/terminology";
+import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
 
 function MessageBubble({ message }: { message: InboxMessageRow }) {
   const isInbound = message.direction === "inbound";
@@ -237,6 +238,10 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         </div>
         <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>
         {conversation.priority_level !== "normal" && <Badge variant="secondary">{priorityLabel(conversation.priority_level)}</Badge>}
+      </div>
+
+      <div className="border-b p-2">
+        <AttributionSourceSummary workspaceId={workspaceId} targetType="conversation" targetId={conversation.id} compact fallbackLabel="Direct WhatsApp - no ad referral." />
       </div>
 
       {(canCreateLead || canViewLead) && (

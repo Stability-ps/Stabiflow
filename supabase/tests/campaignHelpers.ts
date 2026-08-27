@@ -29,6 +29,34 @@ export async function seedAdCreative(workspaceId: string, mediaAssetId: string, 
   return data.id as string;
 }
 
+export async function seedAdSet(workspaceId: string, campaignId: string, overrides: Record<string, unknown> = {}) {
+  const { data, error } = await admin
+    .from("ad_sets")
+    .insert({
+      workspace_id: workspaceId,
+      campaign_id: campaignId,
+      name: "Test Ad Set",
+      optimization_goal: "REACH",
+      billing_event: "IMPRESSIONS",
+      start_at: new Date(Date.now() + 86400_000).toISOString(),
+      ...overrides,
+    })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`Failed to seed ad_sets: ${error?.message}`);
+  return data.id as string;
+}
+
+export async function seedAd(workspaceId: string, adSetId: string, creativeId: string, overrides: Record<string, unknown> = {}) {
+  const { data, error } = await admin
+    .from("ads")
+    .insert({ workspace_id: workspaceId, ad_set_id: adSetId, creative_id: creativeId, name: "Test Ad", ...overrides })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`Failed to seed ads: ${error?.message}`);
+  return data.id as string;
+}
+
 export async function seedAdCampaign(
   workspaceId: string,
   integrationId: string,

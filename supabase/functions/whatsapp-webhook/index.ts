@@ -24,6 +24,7 @@ import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity,
 import { generateAIReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, sendWhatsAppText, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import { recordConversationTouchpoint } from "../_shared/attribution.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
@@ -92,7 +93,25 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   if (event.referral?.sourceType) patch.referral_source = event.referral.sourceType;
   if (event.referral?.sourceId) patch.referral_ad_id = event.referral.sourceId;
   if (event.referral?.headline) patch.referral_headline = event.referral.headline;
-  if (event.referral?.ctwaClid) patch.referral_campaign_id = event.referral.ctwaClid;
+  // ctwa_clid is an opaque per-click id, not a campaign id - Meta's real
+  // referral payload never includes a campaign id (see the migration
+  // comment on inbox_conversations.referral_click_id for the full
+  // investigation). The deterministic campaign/ad_set/creative chain, when
+  // resolvable, lives in attribution_events (recordConversationTouchpoint
+  // below), not on this column.
+  if (event.referral?.ctwaClid) patch.referral_click_id = event.referral.ctwaClid;
+
+  // Attribution touchpoints belong to the CONVERSATION's creation, not to
+  // every inbound message - detect insert-vs-update before the upsert so a
+  // second/third message in an ongoing conversation never creates a
+  // second touchpoint.
+  const { data: existingConversation } = await sb
+    .from("inbox_conversations")
+    .select("id")
+    .eq("whatsapp_number_id", numberRow.id)
+    .eq("wa_id", event.waId)
+    .maybeSingle();
+  const isNewConversation = !existingConversation;
 
   const { data: conversation, error: conversationError } = await sb
     .from("inbox_conversations")
@@ -102,6 +121,10 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   if (conversationError || !conversation) {
     console.error("whatsapp-webhook: conversation upsert failed", conversationError?.message);
     return;
+  }
+
+  if (isNewConversation) {
+    await recordConversationTouchpoint(sb, numberRow.workspace_id, conversation.id, nowIso, event.referral ?? null);
   }
 
   let mime = event.mime;

@@ -30,10 +30,19 @@ const VALID_ACTIONS = new Set([
   "mark_opportunity_won",
   "mark_opportunity_lost",
   "reopen_opportunity",
+  "override_attribution",
 ]);
 
 const LEAD_SOURCES = new Set(["whatsapp", "meta", "website", "manual", "referral", "organic", "google_later", "other"]);
 const QUALIFICATION_STATUSES = new Set(["unqualified", "qualifying", "qualified", "not_qualified"]);
+
+// Phase G additive-backfill (never rewrite, never duplicate): the ORIGINAL
+// attribution_events row(s) recorded when a touchpoint first happened get
+// a downstream id filled in as the entity that touchpoint fed progresses
+// through the funnel - occurred_at and every evidence field are untouched.
+async function backfillAttribution(sb: AnySupabaseClient, column: "lead_id" | "opportunity_id" | "customer_id", value: string, matchColumn: "conversation_id" | "lead_id" | "opportunity_id", matchValue: string) {
+  await sb.from("attribution_events").update({ [column]: value }).eq(matchColumn, matchValue).is(column, null);
+}
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, targetType: string, targetId: string | null, metadata: Record<string, unknown> = {}) {
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: targetType, target_id: targetId, metadata });
@@ -158,6 +167,7 @@ Deno.serve(async (req: Request) => {
     if (leadError || !lead) return json(req, { error: "Unable to create this lead" }, 500);
 
     await serviceSb.from("inbox_conversations").update({ lead_id: lead.id }).eq("id", conversationId);
+    await backfillAttribution(serviceSb, "lead_id", lead.id, "conversation_id", conversationId);
     await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, { source: "whatsapp", conversation_id: conversationId });
     await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", lead.id, { conversation_id: conversationId });
 
@@ -218,6 +228,7 @@ Deno.serve(async (req: Request) => {
 
     const { error } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to link this conversation" }, 500);
+    await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
     await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
     return json(req, { ok: true });
   }
@@ -383,6 +394,7 @@ Deno.serve(async (req: Request) => {
       .select("*")
       .single();
     if (error || !opportunity) return json(req, { error: "Unable to create this opportunity" }, 500);
+    await backfillAttribution(serviceSb, "opportunity_id", opportunity.id, "lead_id", leadId);
     await logActivity(serviceSb, workspaceId, actorId, "opportunity_created", "opportunity", opportunity.id, { lead_id: leadId });
     return json(req, { opportunity });
   }
@@ -442,6 +454,7 @@ Deno.serve(async (req: Request) => {
       if (!customerError && createdCustomer) {
         customer = createdCustomer;
         await serviceSb.from("leads").update({ status: "converted", converted_at: nowIso }).eq("id", opportunity.lead_id);
+        await backfillAttribution(serviceSb, "customer_id", createdCustomer.id, "opportunity_id", opportunityId);
         await logActivity(serviceSb, workspaceId, actorId, "customer_created", "customer", createdCustomer.id, { lead_id: opportunity.lead_id, opportunity_id: opportunityId });
       } else if (customerError?.code === "23505") {
         // Idempotent retry: a customer already exists for this opportunity.
@@ -469,6 +482,59 @@ Deno.serve(async (req: Request) => {
     }).eq("id", opportunityId);
     if (error) return json(req, { error: "Unable to mark this opportunity lost" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "opportunity_lost", "opportunity", opportunityId, {});
+    return json(req, { ok: true });
+  }
+
+  // --- manual attribution override (Phase G) ---------------------------------
+  // "Never silently rewrite historical attribution" - this APPENDS a new
+  // attribution_events row (attribution_method='manual', confidence='exact'
+  // since a human is making an explicit, deliberate call) rather than
+  // editing any existing row. The previous best-known source is recorded in
+  // metadata for the explainability requirement, and a workspace_activity_log
+  // entry captures actor/reason - manual overrides require attribution.manage
+  // (stronger than the broad attribution.view every staff role gets).
+  if (action === "override_attribution") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "attribution.manage"))) return json(req, { error: "Forbidden" }, 403);
+    const targetType = body.target_type;
+    const targetId = body.target_id;
+    const newSource = typeof body.source === "string" ? body.source.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (targetType !== "lead" && targetType !== "opportunity" && targetType !== "customer") {
+      return json(req, { error: "target_type must be 'lead', 'opportunity', or 'customer'" }, 400);
+    }
+    if (typeof targetId !== "string" || !targetId) return json(req, { error: "target_id is required" }, 400);
+    if (!newSource) return json(req, { error: "source is required" }, 400);
+    if (!reason) return json(req, { error: "A reason is required for a manual attribution override" }, 400);
+
+    const table = targetType === "lead" ? "leads" : targetType === "opportunity" ? "opportunities" : "customers";
+    const { data: target } = await serviceSb.from(table).select("id").eq("id", targetId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!target) return json(req, { error: `${targetType} not found` }, 404);
+
+    const { data: previous } = await serviceSb
+      .from("attribution_events")
+      .select("source, attribution_confidence")
+      .eq(`${targetType}_id`, targetId)
+      .order("occurred_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const insertRow: Record<string, unknown> = {
+      workspace_id: workspaceId,
+      event_type: "manual_attribution_override",
+      occurred_at: nowIso,
+      platform: "manual",
+      source_type: "unknown",
+      source: newSource,
+      attribution_method: "manual",
+      attribution_confidence: "exact",
+      attribution_source: "manual",
+      metadata: { override: true, previous_source: previous?.source ?? null, previous_confidence: previous?.attribution_confidence ?? null, reason, overridden_by: actorId },
+    };
+    insertRow[`${targetType}_id`] = targetId;
+
+    const { error } = await serviceSb.from("attribution_events").insert(insertRow);
+    if (error) return json(req, { error: "Unable to record this override" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "attribution_overridden", targetType, targetId, { new_source: newSource, reason });
     return json(req, { ok: true });
   }
 
