@@ -85,11 +85,18 @@ describe("Inbox webhook message processing (release blocker)", () => {
       referral: { source_type: "ad", source_id: "ad-123", headline: "Spring sale", ctwa_clid: "clid-xyz" },
     }));
 
-    const { data: conversation } = await admin.from("inbox_conversations").select("referral_source, referral_ad_id, referral_headline, referral_campaign_id").eq("whatsapp_number_id", number.id).eq("wa_id", "27820000099").single();
+    // referral_campaign_id was Phase D's original (buggy) column name for
+    // this field - ctwa_clid is Meta's opaque per-CLICK id, not a campaign
+    // id (Meta's real referral payload never includes a campaign id at
+    // all). Phase G renamed it to referral_click_id to match its true
+    // meaning; the deterministic campaign/ad_set/creative chain, when
+    // resolvable, now lives in attribution_events (see
+    // attribution-and-revenue.test.ts), not on this column.
+    const { data: conversation } = await admin.from("inbox_conversations").select("referral_source, referral_ad_id, referral_headline, referral_click_id").eq("whatsapp_number_id", number.id).eq("wa_id", "27820000099").single();
     expect(conversation!.referral_source).toBe("ad");
     expect(conversation!.referral_ad_id).toBe("ad-123");
     expect(conversation!.referral_headline).toBe("Spring sale");
-    expect(conversation!.referral_campaign_id).toBe("clid-xyz");
+    expect(conversation!.referral_click_id).toBe("clid-xyz");
   });
 
   it("a human-handoff phrase flips the conversation to human_handoff with AI disabled, and stores a system message even though the (mock) send itself fails", async () => {
