@@ -35,3 +35,5 @@ deno.lock
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*

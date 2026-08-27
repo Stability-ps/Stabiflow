@@ -156,11 +156,38 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+#
+# https://app.stabiflow.com - the canonical production app domain, DNS
+# verified and HTTPS-healthy as of the Phase K post-DNS verification pass.
+# stabiflow.com/www.stabiflow.com redirect to it at the Vercel domain level
+# (temporary, until a public marketing site exists at the root domain) - see
+# the Phase K deployment report for the full rationale and history.
+site_url = "https://app.stabiflow.com"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
-# A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# A list of *exact* URLs (glob patterns allowed) that auth providers are
+# permitted to redirect to post authentication. Mirrors what was applied
+# directly to the live project via the Management API during the Phase K
+# Vercel deployment (see the deployment report) - kept here too so it's
+# version-controlled, not just a live-only change. The vercel.app entries
+# cover this specific project's default alias + preview deployments only
+# (scoped to "-acapolite", never a bare "*.vercel.app").
+additional_redirect_urls = [
+  "https://127.0.0.1:3000",
+  "http://localhost:8081",
+  "http://localhost:8081/**",
+  "https://app.stabiflow.com",
+  "https://app.stabiflow.com/**",
+  "https://stabiflow.com",
+  "https://stabiflow.com/**",
+  "https://www.stabiflow.com",
+  "https://www.stabiflow.com/**",
+  "https://stabiflow.vercel.app",
+  "https://stabiflow.vercel.app/**",
+  "https://stabiflow-acapolite.vercel.app",
+  "https://stabiflow-acapolite.vercel.app/**",
+  "https://stabiflow-*-acapolite.vercel.app/**",
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
