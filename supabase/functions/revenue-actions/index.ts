@@ -11,6 +11,7 @@
 // or 'refund'), never a rewrite of a past one. This mirrors the
 // append-only convention attribution_events already established.
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 const VALID_ACTIONS = new Set(["record", "edit_reference"]);
 const EVENT_TYPES = new Set(["sale", "payment", "contract_value", "adjustment", "refund"]);
@@ -89,6 +90,11 @@ Deno.serve(async (req: Request) => {
     if (error || !revenueEvent) return json(req, { error: "Unable to record this revenue event" }, 500);
 
     await logActivity(serviceSb, workspaceId, actorId, "revenue_recorded", revenueEvent.id, { event_type: eventType, amount_minor: amountMinor, currency });
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "revenue.recorded", entityType: "revenue_event", entityId: revenueEvent.id,
+      payload: { entity_id: revenueEvent.id, amount_minor: amountMinor, currency, revenue_event_type: eventType, customer_id: customerId, opportunity_id: opportunityId, lead_id: leadId },
+      dedupeKey: `revenue.recorded:${revenueEvent.id}`,
+    });
     return json(req, { revenue_event: revenueEvent });
   }
 

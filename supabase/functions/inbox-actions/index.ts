@@ -14,6 +14,7 @@ import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, 
 import { cleanReply } from "../_shared/inbox/replyGuardrails.ts";
 import { sendWhatsAppText, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
@@ -102,6 +103,13 @@ Deno.serve(async (req: Request) => {
     }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to assign this conversation" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, wasAssigned ? "inbox_conversation_reassigned" : "inbox_conversation_assigned", conversationId, { staff_id: staffId });
+    if (conversation.ai_enabled) {
+      await emitDomainEvent(serviceSb, {
+        workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
+        payload: { entity_id: conversationId, staff_id: staffId },
+        dedupeKey: `conversation.human_takeover:${conversationId}:${nowIso}`,
+      });
+    }
     return json(req, { ok: true });
   }
 
@@ -193,6 +201,7 @@ Deno.serve(async (req: Request) => {
 
   await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, delivery_status: deliveryStatus }).eq("id", pendingRow.id);
 
+  const wasAiEnabled = conversation.ai_enabled;
   const assignedToSelf = conversation.assigned_staff_id ? {} : { assigned_staff_id: actorId, assigned_staff_name: actorName, assigned_at: nowIso, assigned_by: actorId };
   await serviceSb.from("inbox_conversations").update({
     status: "human_handoff",
@@ -204,6 +213,13 @@ Deno.serve(async (req: Request) => {
   }).eq("id", conversationId);
 
   await logActivity(serviceSb, workspaceId, actorId, "inbox_staff_reply_sent", conversationId, { delivery_status: deliveryStatus, provider_message_id: providerMessageId });
+  if (wasAiEnabled) {
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
+      payload: { entity_id: conversationId, staff_id: actorId },
+      dedupeKey: `conversation.human_takeover:${conversationId}:${nowIso}`,
+    });
+  }
 
   return json(req, { ok: true, delivery_status: deliveryStatus, warning });
 });

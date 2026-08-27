@@ -8,6 +8,8 @@
 // customer_id as an entity progresses), never rewritten or duplicated.
 //
 // deno-lint-ignore-file no-explicit-any
+import { emitDomainEvent } from "./automations/emitDomainEvent.ts";
+
 type AnySupabaseClient = any;
 
 export type InboundReferralLike = {
@@ -142,11 +144,22 @@ export async function recordConversationTouchpoint(
     };
   }
 
-  const { error } = await sb.from("attribution_events").insert(insert);
+  const { data: inserted, error } = await sb.from("attribution_events").insert(insert).select("id").maybeSingle();
   // 23505 = provider_event_id already recorded (a racing duplicate webhook
   // delivery for the same brand-new conversation) - the touchpoint already
   // exists, which is exactly the outcome we want, not an error to surface.
   if (error && error.code !== "23505") {
     console.error("attribution: failed to record conversation touchpoint", error.message);
+    return;
+  }
+  if (inserted) {
+    await emitDomainEvent(sb, {
+      workspaceId,
+      eventType: "attribution.created",
+      entityType: "attribution_event",
+      entityId: inserted.id,
+      payload: { entity_id: inserted.id, conversation_id: conversationId, source_type: insert.source_type, attribution_confidence: insert.attribution_confidence },
+      dedupeKey: `attribution.created:${provider_event_id}`,
+    });
   }
 }
