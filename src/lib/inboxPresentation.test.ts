@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiHumanStatusText, buildMissingInfoReply, deliveryTone, inboxStatusLabel } from "./inboxPresentation";
+import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel } from "./inboxPresentation";
 
 describe("aiHumanStatusText", () => {
   it("tells staff AI is active and to take over before replying", () => {
@@ -62,5 +62,43 @@ describe("buildMissingInfoReply", () => {
 
   it("falls back to the raw field name for an unrecognised field, rather than dropping it silently", () => {
     expect(buildMissingInfoReply(["custom_field"])).toContain("custom_field");
+  });
+});
+
+describe("computeMessagingWindowState (display-only mirror of the server-side authoritative check)", () => {
+  const NOW = new Date("2026-08-28T12:00:00.000Z");
+
+  it("a message from moments ago is open", () => {
+    expect(computeMessagingWindowState(new Date(NOW.getTime() - 60_000).toISOString(), NOW)).toBe("open");
+  });
+
+  it("exactly inside 24 hours is open", () => {
+    expect(computeMessagingWindowState(new Date(NOW.getTime() - (23 * 60 + 59) * 60 * 1000).toISOString(), NOW)).toBe("open");
+  });
+
+  it("just outside 24 hours is closed", () => {
+    expect(computeMessagingWindowState(new Date(NOW.getTime() - (24 * 60 + 1) * 60 * 1000).toISOString(), NOW)).toBe("closed");
+  });
+
+  it("no inbound message at all is unknown, never open", () => {
+    expect(computeMessagingWindowState(null, NOW)).toBe("unknown");
+  });
+});
+
+describe("messagingWindowLabel", () => {
+  it("labels each state clearly", () => {
+    expect(messagingWindowLabel("open")).toBe("Messaging window open");
+    expect(messagingWindowLabel("closed")).toBe("24-hour window closed");
+    expect(messagingWindowLabel("unknown")).toBe("Messaging window unknown");
+  });
+});
+
+describe("deliveryLabel/deliveryTone for a window-blocked message", () => {
+  it("labels blocked_window_closed clearly instead of a raw status string", () => {
+    expect(deliveryLabel("blocked_window_closed")).toBe("Not sent - messaging window closed");
+  });
+
+  it("classifies blocked_window_closed as an error tone, never healthy/neutral", () => {
+    expect(deliveryTone("blocked_window_closed")).toBe("error");
   });
 });

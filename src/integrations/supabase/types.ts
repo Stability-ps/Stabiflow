@@ -2959,6 +2959,69 @@ export type Database = {
           },
         ]
       }
+      whatsapp_message_templates: {
+        Row: {
+          category: string | null
+          components: Json
+          created_at: string
+          id: string
+          integration_id: string
+          language: string
+          last_synced_at: string
+          name: string
+          provider_status: string
+          provider_template_id: string
+          updated_at: string
+          waba_id: string
+          workspace_id: string
+        }
+        Insert: {
+          category?: string | null
+          components?: Json
+          created_at?: string
+          id?: string
+          integration_id: string
+          language: string
+          last_synced_at?: string
+          name: string
+          provider_status: string
+          provider_template_id: string
+          updated_at?: string
+          waba_id: string
+          workspace_id: string
+        }
+        Update: {
+          category?: string | null
+          components?: Json
+          created_at?: string
+          id?: string
+          integration_id?: string
+          language?: string
+          last_synced_at?: string
+          name?: string
+          provider_status?: string
+          provider_template_id?: string
+          updated_at?: string
+          waba_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_message_templates_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_integrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_message_templates_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_activity_log: {
         Row: {
           action: string

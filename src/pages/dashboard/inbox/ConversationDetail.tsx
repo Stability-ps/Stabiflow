@@ -15,8 +15,9 @@ import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { getInboxMediaUrl, useInboxInternalNotes, useInboxMessages, type InboxMessageRow } from "@/hooks/useInboxMessages";
 import type { InboxConversationRow } from "@/hooks/useInboxConversations";
 import { useLead } from "@/hooks/useLeads";
-import { addInternalNote, assignConversation, markConversationRead, replyToConversation, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
-import { aiHumanStatusText, buildMissingInfoReply, deliveryLabel, deliveryTone, inboxStatusLabel, priorityLabel } from "@/lib/inboxPresentation";
+import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
+import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
+import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
 import { roleHasPermission } from "@/lib/permissions";
 import { createLeadFromConversation, linkLeadConversation, type DuplicateLeadCandidate } from "@/lib/leads";
 import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
@@ -73,6 +74,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const { data: notes } = useInboxInternalNotes(conversation.id);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: lead } = useLead(conversation.lead_id);
+  const { data: templates } = useInboxTemplates(workspaceId);
   const opportunityLabel = useOpportunityTerminology(workspaceId);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -88,6 +90,27 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const [busy, setBusy] = useState(false);
   const [creatingLead, setCreatingLead] = useState(false);
   const [leadDuplicates, setLeadDuplicates] = useState<DuplicateLeadCandidate[] | null>(null);
+
+  // Phase L-1: display-only indicator, computed client-side from the
+  // already-fetched last_inbound_at - the actual send is always re-checked
+  // server-side against the real message log regardless of this value.
+  const windowState = computeMessagingWindowState(conversation.last_inbound_at);
+  const windowOpen = windowState === "open";
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateParams, setTemplateParams] = useState<string[]>([]);
+  const [sendingTemplate, setSendingTemplate] = useState(false);
+  const usableTemplates = approvedTemplates(templates);
+  const selectedTemplate = usableTemplates.find((t) => t.id === selectedTemplateId) || null;
+
+  useEffect(() => {
+    // A fresh inbound message reopens the window - drop any half-filled
+    // template draft rather than leaving a stale one selected once normal
+    // replies become available again.
+    if (windowOpen) {
+      setSelectedTemplateId("");
+      setTemplateParams([]);
+    }
+  }, [windowOpen]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -173,6 +196,29 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
     }
   };
 
+  const handleSelectTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const template = usableTemplates.find((t) => t.id === templateId);
+    setTemplateParams(template ? Array(templateBodyParameterCount(template)).fill("") : []);
+  };
+
+  const handleSendTemplate = async () => {
+    if (!selectedTemplate) return;
+    setSendingTemplate(true);
+    try {
+      const result = await replyWithTemplate(workspaceId, conversation.id, selectedTemplate.id, templateParams);
+      setSelectedTemplateId("");
+      setTemplateParams([]);
+      invalidate();
+      if (result.delivery_status === "failed") toast.error(result.warning || "The template was saved but could not be delivered");
+      else toast.success("Template sent");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send this template");
+    } finally {
+      setSendingTemplate(false);
+    }
+  };
+
   const handleAskMissingInfo = () => {
     const draft = buildMissingInfoReply(conversation.intake_missing_fields || []);
     if (draft) setReplyText(draft);
@@ -238,6 +284,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         </div>
         <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>
         {conversation.priority_level !== "normal" && <Badge variant="secondary">{priorityLabel(conversation.priority_level)}</Badge>}
+        <Badge variant={windowState === "open" ? "outline" : "destructive"}>{messagingWindowLabel(windowState)}</Badge>
       </div>
 
       <div className="border-b p-2">
@@ -331,10 +378,45 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
 
       {canManage && (
         <div className="space-y-2 border-t p-3">
-          <div className="flex gap-2">
-            <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a reply..." className="min-h-[60px]" maxLength={1000} />
-            <Button onClick={handleSend} disabled={sending || !replyText.trim()} className="self-end"><Send className="h-4 w-4" /></Button>
-          </div>
+          {windowOpen ? (
+            <div className="flex gap-2">
+              <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a reply..." className="min-h-[60px]" maxLength={1000} />
+              <Button onClick={handleSend} disabled={sending || !replyText.trim()} className="self-end"><Send className="h-4 w-4" /></Button>
+            </div>
+          ) : (
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                24-hour messaging window closed - a normal reply can't be sent until the customer messages again, or you send an approved template below.
+              </p>
+              {usableTemplates.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No approved templates are available for this workspace yet. Connect WhatsApp and sync templates under Integrations.</p>
+              ) : (
+                <>
+                  <Select value={selectedTemplateId} onValueChange={handleSelectTemplate}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Choose an approved template..." /></SelectTrigger>
+                    <SelectContent>
+                      {usableTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.language})</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplate && templateParams.map((value, i) => (
+                    <input
+                      key={i}
+                      value={value}
+                      onChange={(e) => setTemplateParams(templateParams.map((p, j) => (j === i ? e.target.value : p)))}
+                      placeholder={`Parameter ${i + 1}`}
+                      className="w-full rounded-md border bg-background px-2 py-1 text-xs"
+                    />
+                  ))}
+                  {selectedTemplate && (
+                    <Button size="sm" onClick={handleSendTemplate} disabled={sendingTemplate || templateParams.some((p) => !p.trim())}>
+                      <Send className="mr-1.5 h-3.5 w-3.5" /> Send template
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           <div className="flex gap-2">
             <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add an internal note (not sent to the customer)" className="flex-1 rounded-md border bg-background px-2 py-1 text-xs" onKeyDown={(e) => e.key === "Enter" && handleAddNote()} />
             <Button variant="ghost" size="sm" onClick={handleAddNote} disabled={!noteText.trim()}>Add note</Button>

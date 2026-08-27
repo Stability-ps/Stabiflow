@@ -12,7 +12,7 @@ async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T
   return data as T;
 }
 
-export type InboxAction = "assign" | "return_to_ai" | "resolve" | "reopen" | "reply" | "mark_read" | "add_note";
+export type InboxAction = "assign" | "return_to_ai" | "resolve" | "reopen" | "reply" | "reply_template" | "mark_read" | "add_note";
 
 export function runInboxAction(workspaceId: string, conversationId: string, action: InboxAction, params: Record<string, unknown> = {}) {
   return invoke<{ ok: true; delivery_status?: string; warning?: string | null }>("inbox-actions", {
@@ -49,4 +49,8 @@ export function addInternalNote(workspaceId: string, conversationId: string, not
 
 export function replyToConversation(workspaceId: string, conversationId: string, message: string) {
   return runInboxAction(workspaceId, conversationId, "reply", { message });
+}
+
+export function replyWithTemplate(workspaceId: string, conversationId: string, templateId: string, parameters: string[]) {
+  return runInboxAction(workspaceId, conversationId, "reply_template", { template_id: templateId, parameters });
 }
