@@ -577,6 +577,172 @@ export type Database = {
           },
         ]
       }
+      ai_conversations: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          title?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_conversations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_conversations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_messages: {
+        Row: {
+          content: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+          tool_args: Json | null
+          tool_call_id: string | null
+          tool_name: string | null
+          workspace_id: string
+        }
+        Insert: {
+          content?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+          tool_args?: Json | null
+          tool_call_id?: string | null
+          tool_name?: string | null
+          workspace_id: string
+        }
+        Update: {
+          content?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+          tool_args?: Json | null
+          tool_call_id?: string | null
+          tool_name?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage_events: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          estimated_cost: number | null
+          feature: string
+          id: string
+          input_tokens: number
+          latency_ms: number | null
+          model: string
+          output_tokens: number
+          provider: string
+          status: string
+          total_tokens: number | null
+          user_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          estimated_cost?: number | null
+          feature?: string
+          id?: string
+          input_tokens?: number
+          latency_ms?: number | null
+          model: string
+          output_tokens?: number
+          provider?: string
+          status: string
+          total_tokens?: number | null
+          user_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          estimated_cost?: number | null
+          feature?: string
+          id?: string
+          input_tokens?: number
+          latency_ms?: number | null
+          model?: string
+          output_tokens?: number
+          provider?: string
+          status?: string
+          total_tokens?: number | null
+          user_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_events_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attribution_events: {
         Row: {
           ad_id: string | null
@@ -3095,6 +3261,96 @@ export type Database = {
       accept_workspace_invitation: {
         Args: { p_token: string }
         Returns: string
+      }
+      ai_list_campaigns: {
+        Args: { p_limit?: number; p_status?: string; p_workspace_id: string }
+        Returns: {
+          created_at: string
+          currency: string
+          daily_budget_minor_units: number
+          end_at: string
+          id: string
+          lifetime_budget_minor_units: number
+          name: string
+          objective: string
+          start_at: string
+          status: string
+        }[]
+      }
+      ai_list_content: {
+        Args: { p_limit?: number; p_status?: string; p_workspace_id: string }
+        Returns: {
+          caption_preview: string
+          id: string
+          published_at: string
+          scheduled_at: string
+          status: string
+          target_platform: string
+        }[]
+      }
+      ai_list_customers: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_limit?: number
+          p_workspace_id: string
+        }
+        Returns: {
+          company_name: string
+          customer_since: string
+          id: string
+          name: string
+        }[]
+      }
+      ai_list_integrations: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          connected_at: string
+          last_health_check_at: string
+          last_health_check_status: string
+          provider: string
+          status: string
+        }[]
+      }
+      ai_list_leads: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_limit?: number
+          p_qualification_status?: string
+          p_status?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          company_name: string
+          contact_name: string
+          created_at: string
+          human_reference: string
+          id: string
+          qualification_status: string
+          source: string
+          status: string
+        }[]
+      }
+      ai_list_opportunities: {
+        Args: {
+          p_date_from?: string
+          p_date_to?: string
+          p_limit?: number
+          p_status?: string
+          p_workspace_id: string
+        }
+        Returns: {
+          actual_value: number
+          created_at: string
+          estimated_value: number
+          id: string
+          lost_at: string
+          probability: number
+          status: string
+          title: string
+          won_at: string
+        }[]
       }
       backfill_lead_pipeline_placement: {
         Args: { p_workspace_id: string }
