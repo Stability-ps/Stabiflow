@@ -12,14 +12,18 @@
 // audit trail.
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 import { cleanReply } from "../_shared/inbox/replyGuardrails.ts";
-import { sendWhatsAppText, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
+import type { WhatsAppSendCredential, WhatsAppTemplateParameter } from "../_shared/inbox/whatsappSend.ts";
+import { isWhatsAppMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
+import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
+import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
+import { describeTemplateEligibilityError, validateTemplateEligibility } from "../_shared/inbox/templateValidation.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "mark_read", "add_note"]);
+const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note"]);
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, conversationId: string, metadata: Record<string, unknown> = {}) {
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: "inbox_conversation", target_id: conversationId, metadata });
@@ -168,58 +172,149 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true });
   }
 
-  // action === "reply"
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message || message.length > 1000) return json(req, { error: "Message must be between 1 and 1000 characters" }, 400);
+  const markHumanTakeover = async (wasAiEnabled: boolean) => {
+    if (!wasAiEnabled) return;
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
+      payload: { entity_id: conversationId, staff_id: actorId },
+      dedupeKey: `conversation.human_takeover:${conversationId}:${nowIso}`,
+    });
+  };
+
+  if (action === "reply") {
+    const message = typeof body.message === "string" ? body.message.trim() : "";
+    if (!message || message.length > 1000) return json(req, { error: "Message must be between 1 and 1000 characters" }, 400);
+
+    const cred = await resolveCredential(serviceSb, conversation.whatsapp_number_id);
+    if (!cred) return json(req, { error: "WhatsApp is not connected for this workspace" }, 409);
+
+    // Server-side policy gate BEFORE anything is saved/attempted (Phase
+    // L-1: "a normal free-form send must NOT be attempted... do not
+    // silently fail"). The browser never decides this - a direct call to
+    // this endpoint hits the exact same check.
+    const window = await resolveMessagingWindow(serviceSb, conversationId);
+    if (window.state !== "open") {
+      return json(req, {
+        error: "24-hour messaging window closed. Send an approved template, or wait for the customer to message again.",
+        code: "messaging_window_closed",
+        window_state: window.state,
+      }, 409);
+    }
+
+    const cleaned = cleanReply(message);
+    const { data: pendingRow, error: pendingError } = await serviceSb.from("inbox_messages").insert({
+      workspace_id: workspaceId,
+      conversation_id: conversationId,
+      direction: "outbound",
+      sender_type: "staff",
+      message_type: "text",
+      content: cleaned,
+      delivery_status: "sending",
+      staff_sender_id: actorId,
+      staff_sender_name: actorName,
+    }).select("id").single();
+    if (pendingError || !pendingRow) return json(req, { error: "Unable to save this reply" }, 500);
+
+    const provider = isWhatsAppMockMode() ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+    let providerMessageId: string | null = null;
+    let deliveryStatus = "submitted";
+    let warning: string | null = null;
+    try {
+      providerMessageId = await provider.sendText(cred, conversation.wa_id, cleaned);
+    } catch (sendError) {
+      deliveryStatus = "failed";
+      warning = sanitizeIntegrationError(sendError).message;
+    }
+
+    await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, delivery_status: deliveryStatus }).eq("id", pendingRow.id);
+
+    const wasAiEnabled = conversation.ai_enabled;
+    const assignedToSelf = conversation.assigned_staff_id ? {} : { assigned_staff_id: actorId, assigned_staff_name: actorName, assigned_at: nowIso, assigned_by: actorId };
+    await serviceSb.from("inbox_conversations").update({
+      status: "human_handoff",
+      ai_enabled: false,
+      inbox_status: "waiting_client",
+      last_staff_reply_at: nowIso,
+      last_outbound_at: nowIso,
+      ...assignedToSelf,
+    }).eq("id", conversationId);
+
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_staff_reply_sent", conversationId, { delivery_status: deliveryStatus, provider_message_id: providerMessageId });
+    await markHumanTakeover(wasAiEnabled);
+
+    return json(req, { ok: true, delivery_status: deliveryStatus, warning });
+  }
+
+  // action === "reply_template" - the ONLY send path allowed outside the
+  // 24-hour window (and always allowed inside it too - Meta doesn't
+  // forbid a template send just because free-form is also available).
+  const templateId = body.template_id;
+  const rawParameters = Array.isArray(body.parameters) ? body.parameters : [];
+  const parameters = rawParameters.filter((p): p is string => typeof p === "string");
+  if (typeof templateId !== "string" || !templateId) return json(req, { error: "template_id is required" }, 400);
+  if (parameters.length !== rawParameters.length) return json(req, { error: "All template parameters must be strings" }, 400);
 
   const cred = await resolveCredential(serviceSb, conversation.whatsapp_number_id);
   if (!cred) return json(req, { error: "WhatsApp is not connected for this workspace" }, 409);
 
-  const cleaned = cleanReply(message);
-  const { data: pendingRow, error: pendingError } = await serviceSb.from("inbox_messages").insert({
-    workspace_id: workspaceId,
-    conversation_id: conversationId,
-    direction: "outbound",
-    sender_type: "staff",
-    message_type: "text",
-    content: cleaned,
-    delivery_status: "sending",
-    staff_sender_id: actorId,
-    staff_sender_name: actorName,
-  }).select("id").single();
-  if (pendingError || !pendingRow) return json(req, { error: "Unable to save this reply" }, 500);
+  // Verify the template belongs to THIS workspace (never trust a
+  // client-supplied id alone - the same cross-tenant defense every other
+  // dispatcher action in this file already applies to conversation_id).
+  const { data: template } = await serviceSb
+    .from("whatsapp_message_templates")
+    .select("id, name, language, provider_status, components")
+    .eq("id", templateId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+
+  const eligibility = validateTemplateEligibility(
+    template ? { provider_status: template.provider_status, language: template.language, components: template.components } : null,
+    parameters.length,
+  );
+  if (!eligibility.ok) {
+    return json(req, { error: describeTemplateEligibilityError(eligibility.error), code: `template_${eligibility.error.code}` }, 422);
+  }
+
+  const bodyParameters: WhatsAppTemplateParameter[] = parameters.map((text) => ({ type: "text", text }));
+  const provider = isWhatsAppMockMode() ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+  const renderedContent = `[Template: ${template!.name}]` + (parameters.length ? ` ${parameters.join(", ")}` : "");
 
   let providerMessageId: string | null = null;
   let deliveryStatus = "submitted";
   let warning: string | null = null;
   try {
-    providerMessageId = await sendWhatsAppText(cred, conversation.wa_id, cleaned);
+    providerMessageId = await provider.sendTemplate(cred, conversation.wa_id, { name: template!.name, language: template!.language, bodyParameters });
   } catch (sendError) {
     deliveryStatus = "failed";
     warning = sanitizeIntegrationError(sendError).message;
   }
 
-  await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, delivery_status: deliveryStatus }).eq("id", pendingRow.id);
+  await serviceSb.from("inbox_messages").insert({
+    workspace_id: workspaceId,
+    conversation_id: conversationId,
+    provider_message_id: providerMessageId,
+    direction: "outbound",
+    sender_type: "staff",
+    message_type: "template",
+    content: renderedContent,
+    delivery_status: deliveryStatus,
+    staff_sender_id: actorId,
+    staff_sender_name: actorName,
+  });
 
-  const wasAiEnabled = conversation.ai_enabled;
-  const assignedToSelf = conversation.assigned_staff_id ? {} : { assigned_staff_id: actorId, assigned_staff_name: actorName, assigned_at: nowIso, assigned_by: actorId };
+  const wasAiEnabledForTemplate = conversation.ai_enabled;
+  const assignedToSelfForTemplate = conversation.assigned_staff_id ? {} : { assigned_staff_id: actorId, assigned_staff_name: actorName, assigned_at: nowIso, assigned_by: actorId };
   await serviceSb.from("inbox_conversations").update({
     status: "human_handoff",
     ai_enabled: false,
     inbox_status: "waiting_client",
     last_staff_reply_at: nowIso,
     last_outbound_at: nowIso,
-    ...assignedToSelf,
+    ...assignedToSelfForTemplate,
   }).eq("id", conversationId);
 
-  await logActivity(serviceSb, workspaceId, actorId, "inbox_staff_reply_sent", conversationId, { delivery_status: deliveryStatus, provider_message_id: providerMessageId });
-  if (wasAiEnabled) {
-    await emitDomainEvent(serviceSb, {
-      workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
-      payload: { entity_id: conversationId, staff_id: actorId },
-      dedupeKey: `conversation.human_takeover:${conversationId}:${nowIso}`,
-    });
-  }
+  await logActivity(serviceSb, workspaceId, actorId, "inbox_staff_template_sent", conversationId, { template_id: templateId, template_name: template!.name, delivery_status: deliveryStatus, provider_message_id: providerMessageId });
+  await markHumanTakeover(wasAiEnabledForTemplate);
 
   return json(req, { ok: true, delivery_status: deliveryStatus, warning });
 });
