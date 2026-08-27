@@ -11,7 +11,7 @@ import { SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/compo
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { useLead, usePipelineStages } from "@/hooks/useLeads";
-import { useOpportunitiesForLead, useCrmNotes } from "@/hooks/useOpportunities";
+import { useOpportunitiesForLead, useCrmNotes, useCustomerForOpportunity } from "@/hooks/useOpportunities";
 import { QUALIFICATION_STATUSES, qualificationStatusLabel, validateQualificationChange, type QualificationStatus } from "@/lib/qualification";
 import { opportunityStatusLabel } from "@/lib/opportunityLifecycle";
 import { openOpportunityActionLabel, pluralizeLabel } from "@/lib/terminology";
@@ -19,6 +19,8 @@ import {
   addCrmNote, assignLead, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
   moveLeadStage, reopenLead, reopenOpportunity, setLeadQualification,
 } from "@/lib/leads";
+import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
+import { RevenueSection } from "@/components/attribution/RevenueSection";
 
 const LEAD_STATUS_TONE: Record<string, string> = {
   active: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
@@ -32,13 +34,21 @@ const OPPORTUNITY_STATUS_TONE: Record<string, string> = {
   lost: "bg-muted text-muted-foreground",
 };
 
-export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateOpportunity, canCloseOpportunity, opportunityLabel, autoOpenOpportunityForm }: {
+function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRevenue }: { workspaceId: string; opportunityId: string; leadId: string; canRecordRevenue: boolean }) {
+  const { data: customer } = useCustomerForOpportunity(opportunityId);
+  return (
+    <RevenueSection workspaceId={workspaceId} opportunityId={opportunityId} customerId={customer?.id ?? null} leadId={leadId} canRecord={canRecordRevenue} />
+  );
+}
+
+export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, opportunityLabel, autoOpenOpportunityForm }: {
   workspaceId: string;
   leadId: string;
   canEdit: boolean;
   canAssign: boolean;
   canCreateOpportunity: boolean;
   canCloseOpportunity: boolean;
+  canRecordRevenue: boolean;
   opportunityLabel: string;
   autoOpenOpportunityForm?: boolean;
 }) {
@@ -239,6 +249,16 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
           )}
         </section>
 
+        <section>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">Attribution</p>
+          <AttributionSourceSummary
+            workspaceId={workspaceId}
+            targetType="lead"
+            targetId={leadId}
+            fallbackLabel={lead.source === "manual" || lead.source === "referral" ? "Manually entered - no campaign attribution." : "No attribution evidence recorded."}
+          />
+        </section>
+
         {canAssign && (
           <section>
             <p className="mb-1 text-xs font-medium text-muted-foreground">Assigned to</p>
@@ -307,12 +327,14 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
             <p className="text-xs text-muted-foreground">No {opportunityLabel.toLowerCase()} yet. Create one when this lead is ready to progress.</p>
           )}
           {(opportunities || []).map((o) => (
-            <div key={o.id} className="rounded-md border p-2 text-xs">
+            <div key={o.id} className="space-y-2 rounded-md border p-2 text-xs">
               <div className="flex items-center justify-between">
                 <p className="font-medium">{o.title}</p>
                 <Badge variant="secondary" className={OPPORTUNITY_STATUS_TONE[o.status]}>{opportunityStatusLabel(o.status)}</Badge>
               </div>
               {o.estimated_value != null && <p className="text-muted-foreground">Est. value: {o.estimated_value}</p>}
+              {o.actual_value != null && <p className="text-muted-foreground">Actual deal value: {o.actual_value}</p>}
+              <AttributionSourceSummary workspaceId={workspaceId} targetType="opportunity" targetId={o.id} compact fallbackLabel="Inherited from the lead - no direct attribution recorded on this opportunity." />
               {canCloseOpportunity && o.status === "open" && (
                 <div className="mt-1 flex gap-2">
                   <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleMarkWon(o.id)} disabled={busy}><Trophy className="mr-1 h-3 w-3" /> Won</Button>
@@ -321,6 +343,9 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
               )}
               {canCloseOpportunity && o.status !== "open" && (
                 <Button size="sm" variant="outline" className="mt-1 h-7 px-2" onClick={() => handleReopenOpportunity(o.id)} disabled={busy}>Reopen</Button>
+              )}
+              {o.status === "won" && (
+                <WonOpportunityRevenue workspaceId={workspaceId} opportunityId={o.id} leadId={leadId} canRecordRevenue={canRecordRevenue} />
               )}
             </div>
           ))}

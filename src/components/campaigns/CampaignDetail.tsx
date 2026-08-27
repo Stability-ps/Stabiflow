@@ -13,6 +13,7 @@ import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge"
 import { useAuth } from "@/hooks/useAuth";
 import { useAdCampaign, useCampaignActivity } from "@/hooks/useAdCampaign";
 import { useAdCampaignMetrics } from "@/hooks/useAdCampaignMetrics";
+import { useCampaignConversionCounts } from "@/hooks/useAttribution";
 import { getObjectiveOption, DESTINATION_TYPE_LABELS, type DestinationType } from "@/lib/adObjectives";
 import { formatMoney } from "@/lib/adMoney";
 import {
@@ -21,12 +22,13 @@ import {
 } from "@/lib/adCampaigns";
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
-  const { hasPermission } = useAuth();
+  const { hasPermission, currentWorkspaceId } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: campaign, isLoading } = useAdCampaign(campaignId);
   const { data: activity } = useCampaignActivity(campaignId);
   const { data: metrics, isLoading: metricsLoading } = useAdCampaignMetrics(campaignId);
+  const { data: conversionCounts } = useCampaignConversionCounts(currentWorkspaceId, campaignId);
 
   const [issues, setIssues] = useState<ReadinessIssue[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -219,6 +221,17 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         </TabsContent>
 
         <TabsContent value="performance" className="mt-4 space-y-3">
+          {conversionCounts && (
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Conversions</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-4 gap-3 text-center text-sm">
+                <div><p className="text-lg font-semibold">{conversionCounts.conversations}</p><p className="text-xs text-muted-foreground">Conversations</p></div>
+                <div><p className="text-lg font-semibold">{conversionCounts.leads}</p><p className="text-xs text-muted-foreground">Leads</p></div>
+                <div><p className="text-lg font-semibold">{conversionCounts.opportunities}</p><p className="text-xs text-muted-foreground">Opportunities</p></div>
+                <div><p className="text-lg font-semibold">{conversionCounts.customers}</p><p className="text-xs text-muted-foreground">Customers</p></div>
+              </CardContent>
+            </Card>
+          )}
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">Meta insights, synced automatically every 30 minutes while active.</p>
             {hasPermission("campaign.metrics.view") && campaign.external_campaign_id && (

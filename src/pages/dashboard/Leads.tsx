@@ -30,6 +30,7 @@ export default function Leads() {
   const canManagePipelines = roleHasPermission(role, "pipeline.manage");
   const canCreateOpportunity = roleHasPermission(role, "opportunity.create");
   const canCloseOpportunity = roleHasPermission(role, "opportunity.close");
+  const canRecordRevenue = roleHasPermission(role, "revenue.create");
 
   const { data: pipelines, isLoading: pipelinesLoading } = usePipelines(canView ? currentWorkspaceId : null);
   const { data: leads, isLoading: leadsLoading } = useLeads(canView ? currentWorkspaceId : null);
@@ -121,6 +122,7 @@ export default function Leads() {
             canAssign={canAssign}
             canCreateOpportunity={canCreateOpportunity}
             canCloseOpportunity={canCloseOpportunity}
+            canRecordRevenue={canRecordRevenue}
             opportunityLabel={opportunityLabel}
             autoOpenOpportunityForm={autoOpenOpportunityForm}
           />
