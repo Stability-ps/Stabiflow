@@ -27,6 +27,7 @@ import Inbox from "@/pages/dashboard/Inbox";
 import Leads from "@/pages/dashboard/Leads";
 import Analytics from "@/pages/dashboard/Analytics";
 import FlowAI from "@/pages/dashboard/FlowAI";
+import Automations from "@/pages/dashboard/Automations";
 import Integrations from "@/pages/dashboard/Integrations";
 import Settings from "@/pages/dashboard/Settings";
 
@@ -80,6 +81,7 @@ function AppRoutes() {
         <Route path="/leads" element={<Leads />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/flow-ai" element={<FlowAI />} />
+        <Route path="/automations" element={<Automations />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/settings" element={<Settings />} />
       </Route>

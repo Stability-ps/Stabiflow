@@ -90,3 +90,25 @@ describe("roleHasPermission - Flow AI (Phase I)", () => {
     expect(roleHasPermission("support", "view_analytics")).toBe(false);
   });
 });
+
+describe("roleHasPermission - Automation Engine (Phase J)", () => {
+  it("grants automation.view/view_runs to every role, broadly like content.view", () => {
+    for (const role of ["owner", "admin", "manager", "marketing", "sales", "support", "viewer"] as const) {
+      expect(roleHasPermission(role, "automation.view")).toBe(true);
+      expect(roleHasPermission(role, "automation.view_runs")).toBe(true);
+    }
+  });
+
+  it("grants create/edit/enable/delete only manager-and-up, the same cutoff as pipeline.manage", () => {
+    for (const role of ["owner", "admin", "manager"] as const) {
+      expect(roleHasPermission(role, "automation.create")).toBe(true);
+      expect(roleHasPermission(role, "automation.edit")).toBe(true);
+      expect(roleHasPermission(role, "automation.enable")).toBe(true);
+      expect(roleHasPermission(role, "automation.delete")).toBe(true);
+    }
+    for (const role of ["marketing", "sales", "support", "viewer"] as const) {
+      expect(roleHasPermission(role, "automation.create")).toBe(false);
+      expect(roleHasPermission(role, "automation.delete")).toBe(false);
+    }
+  });
+});

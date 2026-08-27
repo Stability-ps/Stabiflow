@@ -96,7 +96,18 @@ export type WorkspacePermission =
   // it does NOT grant visibility into any workspace data - every Flow AI
   // tool independently re-checks the permission the source module already
   // requires (view_analytics, revenue.view, lead.view, etc.).
-  | "flow_ai.use";
+  | "flow_ai.use"
+  // Automation Engine (Phase J) - mirroring
+  // 20260912060000_automation_engine_foundation.sql. view/view_runs are
+  // broad like content.view/campaign.metrics.view (configuration
+  // visibility, not sensitive data); create/edit/enable/delete are
+  // manager-and-up, the same cutoff as pipeline.manage.
+  | "automation.view"
+  | "automation.view_runs"
+  | "automation.create"
+  | "automation.edit"
+  | "automation.enable"
+  | "automation.delete";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -112,6 +123,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
+    "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
@@ -126,6 +138,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
+    "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
@@ -139,6 +152,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
+    "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
@@ -149,6 +163,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "lead.view", "pipeline.view", "opportunity.view",
     "attribution.view", "revenue.view",
     "flow_ai.use",
+    "automation.view", "automation.view_runs",
   ],
   sales: [
     "manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view",
@@ -157,6 +172,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
+    "automation.view", "automation.view_runs",
   ],
   support: [
     "manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage",
@@ -165,8 +181,9 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "opportunity.view",
     "attribution.view", "revenue.view",
     "flow_ai.use",
+    "automation.view", "automation.view_runs",
   ],
-  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "lead.view", "pipeline.view", "opportunity.view", "attribution.view", "revenue.view", "flow_ai.use"],
+  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "lead.view", "pipeline.view", "opportunity.view", "attribution.view", "revenue.view", "flow_ai.use", "automation.view", "automation.view_runs"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {
