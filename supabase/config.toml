@@ -157,15 +157,12 @@ enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
 #
-# Deliberately still the local dev default, NOT https://app.stabiflow.com,
-# even though the production/preview domains are already in
-# additional_redirect_urls below - site_url also drives the links embedded
-# in transactional emails (password reset, magic link), and app.stabiflow.com
-# does not resolve yet (DNS is pending Hostinger records - see the Phase K
-# deployment report). Flip this to "https://app.stabiflow.com" only once
-# that domain is confirmed live, so a reset-password email sent in the
-# interim never contains a dead link.
-site_url = "http://127.0.0.1:3000"
+# https://app.stabiflow.com - the canonical production app domain, DNS
+# verified and HTTPS-healthy as of the Phase K post-DNS verification pass.
+# stabiflow.com/www.stabiflow.com redirect to it at the Vercel domain level
+# (temporary, until a public marketing site exists at the root domain) - see
+# the Phase K deployment report for the full rationale and history.
+site_url = "https://app.stabiflow.com"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs (glob patterns allowed) that auth providers are
