@@ -77,3 +77,16 @@ describe("roleHasPermission - Attribution/Revenue (Phase G)", () => {
     expect(roleHasPermission("viewer", "revenue.create")).toBe(false);
   });
 });
+
+describe("roleHasPermission - Flow AI (Phase I)", () => {
+  it("grants flow_ai.use to every role, broadly like content.view/campaign.view", () => {
+    for (const role of ["owner", "admin", "manager", "marketing", "sales", "support", "viewer"] as const) {
+      expect(roleHasPermission(role, "flow_ai.use")).toBe(true);
+    }
+  });
+
+  it("flow_ai.use does not itself imply revenue/analytics visibility - support has flow_ai.use but lacks view_analytics", () => {
+    expect(roleHasPermission("support", "flow_ai.use")).toBe(true);
+    expect(roleHasPermission("support", "view_analytics")).toBe(false);
+  });
+});
