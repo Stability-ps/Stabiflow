@@ -13,6 +13,8 @@
 // schema or terminology.
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
 import { normalizePhoneNumber } from "../_shared/phone.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
+import type { EventType } from "../_shared/automations/taxonomy.ts";
 
 const VALID_ACTIONS = new Set([
   "check_duplicates",
@@ -117,6 +119,19 @@ Deno.serve(async (req: Request) => {
   const actorName = actorProfile?.full_name?.trim() || "Staff";
   const nowIso = new Date().toISOString();
 
+  // Present only when this call was made BY automations-tick acting on an
+  // automation's behalf (never sent by the browser) - threaded into every
+  // domain event this request causes so loopGuard can see the full
+  // causation chain. See _shared/automations/loopGuard.ts.
+  const automationContext = body._automation_context as { runId: string; automationId: string; correlationId: string; depth: number } | undefined;
+  const workspaceIdStr = workspaceId as string;
+  function emitEvent(eventType: EventType, entityType: string, entityId: string | null, payload: Record<string, unknown>, dedupeKey: string) {
+    return emitDomainEvent(serviceSb, {
+      workspaceId: workspaceIdStr, eventType, entityType, entityId, payload, dedupeKey,
+      causation: automationContext ? { runId: automationContext.runId, automationId: automationContext.automationId, correlationId: automationContext.correlationId, depth: automationContext.depth + 1 } : undefined,
+    });
+  }
+
   // --- read-only ---------------------------------------------------------
 
   if (action === "check_duplicates") {
@@ -176,6 +191,7 @@ Deno.serve(async (req: Request) => {
     await backfillAttribution(serviceSb, "lead_id", lead.id, "conversation_id", conversationId);
     await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, { source: "whatsapp", conversation_id: conversationId });
     await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", lead.id, { conversation_id: conversationId });
+    await emitEvent("lead.created", "lead", lead.id, { entity_id: lead.id, source: "whatsapp", conversation_id: conversationId }, `lead.created:${lead.id}`);
 
     return json(req, { lead, created: true });
   }
@@ -217,6 +233,7 @@ Deno.serve(async (req: Request) => {
     if (leadError || !lead) return json(req, { error: "Unable to create this lead" }, 500);
 
     await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, { source });
+    await emitEvent("lead.created", "lead", lead.id, { entity_id: lead.id, source }, `lead.created:${lead.id}`);
     return json(req, { lead, created: true });
   }
 
@@ -287,6 +304,9 @@ Deno.serve(async (req: Request) => {
     }).eq("id", leadId);
     if (error) return json(req, { error: "Unable to update qualification" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "lead_qualification_changed", "lead", leadId, { qualification_status: qualificationStatus });
+    if (qualificationStatus === "qualified") {
+      await emitEvent("lead.qualified", "lead", leadId, { entity_id: leadId, qualification_status: qualificationStatus }, `lead.qualified:${leadId}:${nowIso}`);
+    }
     return json(req, { ok: true });
   }
 
@@ -307,6 +327,7 @@ Deno.serve(async (req: Request) => {
     const { error } = await serviceSb.from("leads").update({ pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId }).eq("id", leadId);
     if (error) return json(req, { error: "Unable to move this lead" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "lead_stage_changed", "lead", leadId, { pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId });
+    await emitEvent("lead.stage_changed", "lead", leadId, { entity_id: leadId, pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId }, `lead.stage_changed:${leadId}:${pipelineStageId}:${nowIso}`);
     return json(req, { ok: true });
   }
 
@@ -402,6 +423,7 @@ Deno.serve(async (req: Request) => {
     if (error || !opportunity) return json(req, { error: "Unable to create this opportunity" }, 500);
     await backfillAttribution(serviceSb, "opportunity_id", opportunity.id, "lead_id", leadId);
     await logActivity(serviceSb, workspaceId, actorId, "opportunity_created", "opportunity", opportunity.id, { lead_id: leadId });
+    await emitEvent("opportunity.created", "opportunity", opportunity.id, { entity_id: opportunity.id, lead_id: leadId }, `opportunity.created:${opportunity.id}`);
     return json(req, { opportunity });
   }
 
@@ -420,6 +442,7 @@ Deno.serve(async (req: Request) => {
     const { error } = await serviceSb.from("opportunities").update({ pipeline_stage_id: pipelineStageId }).eq("id", opportunityId);
     if (error) return json(req, { error: "Unable to move this opportunity" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "opportunity_stage_changed", "opportunity", opportunityId, { pipeline_stage_id: pipelineStageId });
+    await emitEvent("opportunity.stage_changed", "opportunity", opportunityId, { entity_id: opportunityId, pipeline_stage_id: pipelineStageId }, `opportunity.stage_changed:${opportunityId}:${pipelineStageId}:${nowIso}`);
     return json(req, { ok: true });
   }
 
@@ -439,6 +462,7 @@ Deno.serve(async (req: Request) => {
     }).eq("id", opportunityId);
     if (error) return json(req, { error: "Unable to mark this opportunity won" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "opportunity_won", "opportunity", opportunityId, {});
+    await emitEvent("opportunity.won", "opportunity", opportunityId, { entity_id: opportunityId, lead_id: opportunity.lead_id }, `opportunity.won:${opportunityId}`);
 
     let customer = null;
     if (body.create_customer === true) {
@@ -462,6 +486,7 @@ Deno.serve(async (req: Request) => {
         await serviceSb.from("leads").update({ status: "converted", converted_at: nowIso }).eq("id", opportunity.lead_id);
         await backfillAttribution(serviceSb, "customer_id", createdCustomer.id, "opportunity_id", opportunityId);
         await logActivity(serviceSb, workspaceId, actorId, "customer_created", "customer", createdCustomer.id, { lead_id: opportunity.lead_id, opportunity_id: opportunityId });
+        await emitEvent("customer.created", "customer", createdCustomer.id, { entity_id: createdCustomer.id, lead_id: opportunity.lead_id, opportunity_id: opportunityId }, `customer.created:${createdCustomer.id}`);
       } else if (customerError?.code === "23505") {
         // Idempotent retry: a customer already exists for this opportunity.
         const { data: existingCustomer } = await serviceSb.from("customers").select("*").eq("opportunity_id", opportunityId).maybeSingle();
@@ -488,6 +513,7 @@ Deno.serve(async (req: Request) => {
     }).eq("id", opportunityId);
     if (error) return json(req, { error: "Unable to mark this opportunity lost" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "opportunity_lost", "opportunity", opportunityId, {});
+    await emitEvent("opportunity.lost", "opportunity", opportunityId, { entity_id: opportunityId }, `opportunity.lost:${opportunityId}`);
     return json(req, { ok: true });
   }
 
@@ -538,9 +564,10 @@ Deno.serve(async (req: Request) => {
     };
     insertRow[`${targetType}_id`] = targetId;
 
-    const { error } = await serviceSb.from("attribution_events").insert(insertRow);
-    if (error) return json(req, { error: "Unable to record this override" }, 500);
+    const { data: attributionEvent, error } = await serviceSb.from("attribution_events").insert(insertRow).select("id").single();
+    if (error || !attributionEvent) return json(req, { error: "Unable to record this override" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "attribution_overridden", targetType, targetId, { new_source: newSource, reason });
+    await emitEvent("attribution.created", "attribution_event", attributionEvent.id, { entity_id: attributionEvent.id, target_type: targetType, target_id: targetId, source: newSource }, `attribution.created:${attributionEvent.id}`);
     return json(req, { ok: true });
   }
 

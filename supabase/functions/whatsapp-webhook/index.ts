@@ -25,6 +25,7 @@ import { generateAIReply, mergeExtracted, missingFields, type ConversationHistor
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, sendWhatsAppText, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { recordConversationTouchpoint } from "../_shared/attribution.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
@@ -125,6 +126,14 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
 
   if (isNewConversation) {
     await recordConversationTouchpoint(sb, numberRow.workspace_id, conversation.id, nowIso, event.referral ?? null);
+    await emitDomainEvent(sb, {
+      workspaceId: numberRow.workspace_id,
+      eventType: "conversation.started",
+      entityType: "inbox_conversation",
+      entityId: conversation.id,
+      payload: { entity_id: conversation.id, wa_id: event.waId },
+      dedupeKey: `conversation.started:${conversation.id}`,
+    });
   }
 
   let mime = event.mime;
@@ -153,7 +162,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   }
 
   const inboundContent = event.text || (event.kind === "image" ? "[Image attached]" : event.kind === "document" ? "[Document attached]" : "[Unsupported message]");
-  const { error: inboundError } = await sb.from("inbox_messages").insert({
+  const { data: inboundMessage, error: inboundError } = await sb.from("inbox_messages").insert({
     workspace_id: numberRow.workspace_id,
     conversation_id: conversation.id,
     provider_message_id: event.messageId,
@@ -167,12 +176,21 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     media_sha256: sha256,
     media_size_bytes: size,
     media_storage_path: storagePath,
-  });
+  }).select("id").maybeSingle();
   if (inboundError && inboundError.code !== "23505") {
     console.error("whatsapp-webhook: inbound insert failed", inboundError.message);
     return;
   }
   if (inboundError?.code === "23505") return; // exact duplicate delivery, already recorded
+
+  await emitDomainEvent(sb, {
+    workspaceId: numberRow.workspace_id,
+    eventType: "message.received",
+    entityType: "inbox_conversation",
+    entityId: conversation.id,
+    payload: { entity_id: conversation.id, message_id: inboundMessage?.id ?? null, kind: event.kind },
+    dedupeKey: `message.received:${event.messageId}`,
+  });
 
   if (!cred) return; // no connected/working credential - leave for staff, cannot auto-reply
   if (!conversation.ai_enabled || conversation.status === "human_handoff") return; // human control is active - AI stays silent

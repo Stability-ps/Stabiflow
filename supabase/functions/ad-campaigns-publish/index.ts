@@ -24,6 +24,7 @@ import { loadReadinessInput, CAMPAIGN_COLUMNS } from "../_shared/adCampaignLoade
 import { claimCampaignForPublish, executeCampaignPublish, REAL_META_PROVIDER, type MetaAdsProvider, type PublishStep } from "../_shared/adPublishExecution.ts";
 import * as mockMetaProvider from "../_shared/ad-providers/metaMarketingApiMock.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 const MOCK_PROVIDER: MetaAdsProvider = mockMetaProvider;
 
@@ -158,6 +159,20 @@ Deno.serve(async (req: Request) => {
     target_id: campaignId,
     metadata: { outcome: result.outcome, steps: result.steps.map((s) => ({ step: s.step, status: s.status })) },
   });
+
+  // Taxonomy has no campaign.publish_failed - a failed publish is only
+  // ever visible via workspace_activity_log/run polling, never a domain
+  // event; automations trigger on genuinely successful publishes only.
+  if (result.outcome === "success") {
+    await emitDomainEvent(serviceSb, {
+      workspaceId: existing.workspace_id,
+      eventType: "campaign.published",
+      entityType: "ad_campaign",
+      entityId: campaignId,
+      payload: { entity_id: campaignId, operation_id: operation.id },
+      dedupeKey: `campaign.published:${operation.id}`,
+    });
+  }
 
   const { data: finalCampaign } = await serviceSb.from("ad_campaigns").select("id, status, external_campaign_id, provider_state, last_publish_error").eq("id", campaignId).maybeSingle();
 

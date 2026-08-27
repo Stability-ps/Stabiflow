@@ -17,6 +17,7 @@
 import { updateObjectStatus } from "../_shared/ad-providers/metaMarketingApi.ts";
 import { sanitizeAdErrorForStorage } from "../_shared/ad-providers/metaAdsErrorClassifier.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -96,6 +97,19 @@ Deno.serve(async (req: Request) => {
       target_type: "ad_campaign",
       target_id: campaignId,
       metadata: {},
+    });
+
+    // Taxonomy (approved Phase J) has no campaign.resumed - a resume
+    // returns the campaign to the same "actively delivering at Meta"
+    // state that a fresh publish reaches, so it reuses campaign.published;
+    // a pause is the only state with its own distinct event type.
+    await emitDomainEvent(serviceSb, {
+      workspaceId: campaign.workspace_id,
+      eventType: action === "pause" ? "campaign.paused" : "campaign.published",
+      entityType: "ad_campaign",
+      entityId: campaignId,
+      payload: { entity_id: campaignId },
+      dedupeKey: `campaign.${action === "pause" ? "paused" : "published"}:${campaignId}:${nowIso}`,
     });
 
     return json(req, { ok: true, status: newStatus });

@@ -1,5 +1,5 @@
 import {
-  BarChart3, FileText, Inbox, LayoutDashboard, Megaphone, Palette, Plug, Settings, Sparkles, Users, type LucideIcon,
+  BarChart3, FileText, Inbox, LayoutDashboard, Megaphone, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
 } from "lucide-react";
 
 export type NavItem = { label: string; path: string; icon: LucideIcon };
@@ -16,6 +16,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Leads", path: "/leads", icon: Users },
   { label: "Analytics", path: "/analytics", icon: BarChart3 },
   { label: "Flow AI", path: "/flow-ai", icon: Sparkles },
+  { label: "Automations", path: "/automations", icon: Workflow },
   { label: "Integrations", path: "/integrations", icon: Plug },
   { label: "Settings", path: "/settings", icon: Settings },
 ];
