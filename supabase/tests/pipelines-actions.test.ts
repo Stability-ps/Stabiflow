@@ -1,7 +1,13 @@
 // Phase E. Proves the pipelines-actions edge function dispatcher against
-// the REAL deployed function: idempotent default-pipeline creation, stage
-// CRUD/reorder/activation, single-default/single-won-stage invariants, and
-// the cross-workspace defense on every action.
+// the REAL deployed function: stage CRUD/reorder/activation,
+// single-default/single-won-stage invariants, and the cross-workspace
+// defense on every action.
+//
+// ensure_default_pipeline's own atomic-bootstrap/idempotency/concurrency
+// coverage lives in default-pipeline-lifecycle.test.ts (pre-Phase-H fix) -
+// since create_workspace() now creates the default pipeline atomically,
+// every workspace createTestTenant() produces already has one, which is
+// exactly what that file proves end to end.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
 import { seedPipeline } from "./leadsHelpers";
@@ -28,35 +34,6 @@ describe("Pipeline configuration actions (release blocker)", () => {
   afterAll(async () => {
     await cleanupTenant(workspace);
     await cleanupTenant(otherWorkspace);
-  });
-
-  it("ensure_default_pipeline is idempotent - a second call returns the SAME pipeline, not a new one", async () => {
-    const first = await callAction(ownerToken, { workspace_id: workspace.workspaceId, action: "ensure_default_pipeline" });
-    expect(first.status).toBe(200);
-    expect(first.body.created).toBe(true);
-
-    const second = await callAction(ownerToken, { workspace_id: workspace.workspaceId, action: "ensure_default_pipeline" });
-    expect(second.status).toBe(200);
-    expect(second.body.created).toBe(false);
-    expect(second.body.pipeline_id).toBe(first.body.pipeline_id);
-
-    const { data: defaults } = await admin.from("pipelines").select("id").eq("workspace_id", workspace.workspaceId).eq("is_default", true);
-    expect(defaults).toHaveLength(1);
-  });
-
-  it("REGRESSION: concurrent ensure_default_pipeline calls never produce two default pipelines", async () => {
-    const freshWorkspace = await createTestTenant("pipelines-actions-race");
-    const { data: session } = await freshWorkspace.client.auth.getSession();
-    const token = session.session!.access_token;
-
-    const results = await Promise.all(Array.from({ length: 4 }, () => callAction(token, { workspace_id: freshWorkspace.workspaceId, action: "ensure_default_pipeline" })));
-    results.forEach((r) => expect(r.status).toBe(200));
-    const pipelineIds = new Set(results.map((r) => r.body.pipeline_id));
-    expect(pipelineIds.size).toBe(1);
-
-    const { data: defaults } = await admin.from("pipelines").select("id").eq("workspace_id", freshWorkspace.workspaceId).eq("is_default", true);
-    expect(defaults).toHaveLength(1);
-    await cleanupTenant(freshWorkspace);
   });
 
   it("create_pipeline, rename_pipeline, add_stage, rename_stage all work end to end", async () => {
