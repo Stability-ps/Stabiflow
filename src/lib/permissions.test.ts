@@ -52,3 +52,28 @@ describe("roleHasPermission - Leads/Pipelines/Opportunities (Phase E)", () => {
     expect(roleHasPermission(undefined, "opportunity.view")).toBe(false);
   });
 });
+
+describe("roleHasPermission - Attribution/Revenue (Phase G)", () => {
+  it("grants attribution.view broadly, like content.view/campaign.view, but attribution.manage only manager-and-up", () => {
+    for (const role of ["owner", "admin", "manager", "marketing", "sales", "support", "viewer"] as const) {
+      expect(roleHasPermission(role, "attribution.view")).toBe(true);
+    }
+    expect(roleHasPermission("owner", "attribution.manage")).toBe(true);
+    expect(roleHasPermission("admin", "attribution.manage")).toBe(true);
+    expect(roleHasPermission("manager", "attribution.manage")).toBe(true);
+    expect(roleHasPermission("marketing", "attribution.manage")).toBe(false);
+    expect(roleHasPermission("sales", "attribution.manage")).toBe(false);
+    expect(roleHasPermission("support", "attribution.manage")).toBe(false);
+    expect(roleHasPermission("viewer", "attribution.manage")).toBe(false);
+  });
+
+  it("grants revenue.view broadly, but revenue.create/edit only to roles that close deals (owner/admin/manager/sales)", () => {
+    for (const role of ["owner", "admin", "manager", "marketing", "sales", "support", "viewer"] as const) {
+      expect(roleHasPermission(role, "revenue.view")).toBe(true);
+    }
+    expect(roleHasPermission("owner", "revenue.create")).toBe(true);
+    expect(roleHasPermission("sales", "revenue.create")).toBe(true);
+    expect(roleHasPermission("marketing", "revenue.create")).toBe(false);
+    expect(roleHasPermission("viewer", "revenue.create")).toBe(false);
+  });
+});
