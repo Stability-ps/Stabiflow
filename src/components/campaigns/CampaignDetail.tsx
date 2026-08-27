@@ -13,13 +13,21 @@ import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge"
 import { useAuth } from "@/hooks/useAuth";
 import { useAdCampaign, useCampaignActivity } from "@/hooks/useAdCampaign";
 import { useAdCampaignMetrics } from "@/hooks/useAdCampaignMetrics";
-import { useCampaignConversionCounts } from "@/hooks/useAttribution";
+import { useSingleCampaignPerformance } from "@/hooks/useAnalytics";
+import { DEFAULT_ATTRIBUTION_MODEL, computeRoas, formatMoneyByCurrency, formatRoas } from "@/lib/analytics";
 import { getObjectiveOption, DESTINATION_TYPE_LABELS, type DestinationType } from "@/lib/adObjectives";
 import { formatMoney } from "@/lib/adMoney";
 import {
   checkCampaignReadiness, newPublishIdempotencyKey, pauseCampaign, publishCampaign, refreshCampaignMetrics,
   resumeCampaign, type ReadinessIssue,
 } from "@/lib/adCampaigns";
+
+// All-time window for this widget - matches the Phase G conversions card's
+// original semantics (every real touchpoint this campaign ever produced,
+// not scoped to a date picker Campaign Detail doesn't have). Uses the SAME
+// get_campaign_performance read model /analytics uses (just filtered to
+// one campaign_id client-side) so the two surfaces can never disagree.
+const ALL_TIME_RANGE = { from: new Date(0), to: new Date(Date.now() + 86_400_000) };
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { hasPermission, currentWorkspaceId } = useAuth();
@@ -28,7 +36,8 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { data: campaign, isLoading } = useAdCampaign(campaignId);
   const { data: activity } = useCampaignActivity(campaignId);
   const { data: metrics, isLoading: metricsLoading } = useAdCampaignMetrics(campaignId);
-  const { data: conversionCounts } = useCampaignConversionCounts(currentWorkspaceId, campaignId);
+  const { data: performance } = useSingleCampaignPerformance(currentWorkspaceId, campaignId, ALL_TIME_RANGE, DEFAULT_ATTRIBUTION_MODEL);
+  const canSeeRevenue = hasPermission("revenue.view");
 
   const [issues, setIssues] = useState<ReadinessIssue[] | null>(null);
   const [checking, setChecking] = useState(false);
@@ -221,15 +230,21 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         </TabsContent>
 
         <TabsContent value="performance" className="mt-4 space-y-3">
-          {conversionCounts && (
+          {performance && (
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Conversions</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm">Conversions (all time, last-touch attribution)</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-4 gap-3 text-center text-sm">
-                <div><p className="text-lg font-semibold">{conversionCounts.conversations}</p><p className="text-xs text-muted-foreground">Conversations</p></div>
-                <div><p className="text-lg font-semibold">{conversionCounts.leads}</p><p className="text-xs text-muted-foreground">Leads</p></div>
-                <div><p className="text-lg font-semibold">{conversionCounts.opportunities}</p><p className="text-xs text-muted-foreground">Opportunities</p></div>
-                <div><p className="text-lg font-semibold">{conversionCounts.customers}</p><p className="text-xs text-muted-foreground">Customers</p></div>
+                <div><p className="text-lg font-semibold">{performance.conversations}</p><p className="text-xs text-muted-foreground">Conversations</p></div>
+                <div><p className="text-lg font-semibold">{performance.leads}</p><p className="text-xs text-muted-foreground">Leads</p></div>
+                <div><p className="text-lg font-semibold">{performance.opportunities}</p><p className="text-xs text-muted-foreground">Opportunities</p></div>
+                <div><p className="text-lg font-semibold">{performance.customers}</p><p className="text-xs text-muted-foreground">Customers</p></div>
               </CardContent>
+              {canSeeRevenue && (
+                <CardContent className="grid grid-cols-2 gap-3 border-t pt-3 text-center text-sm">
+                  <div><p className="text-lg font-semibold">{formatMoneyByCurrency(performance.revenue, "—")}</p><p className="text-xs text-muted-foreground">Attributed revenue</p></div>
+                  <div><p className="text-lg font-semibold">{formatRoas(computeRoas(performance.spend_minor, performance.currency, performance.revenue))}</p><p className="text-xs text-muted-foreground">ROAS</p></div>
+                </CardContent>
+              )}
             </Card>
           )}
           <div className="flex items-center justify-between">

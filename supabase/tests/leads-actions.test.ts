@@ -82,11 +82,18 @@ describe("Leads/Opportunities staff actions (release blocker)", () => {
   });
 
   it("REGRESSION: a lead created (manual or from a conversation) lands in the workspace's default pipeline's first active stage automatically - otherwise nothing in the UI could ever put it on a pipeline board", async () => {
-    const pipeline = await seedPipeline(workspace.workspaceId, { isDefault: true, stageNames: ["Intake", "Working"] });
+    // The workspace already has its bootstrap-created default pipeline
+    // (create_workspace() - see default-pipeline-lifecycle.test.ts for the
+    // atomic-bootstrap/defensive-placement coverage this fix added) -
+    // read that one back rather than seeding a second, which would now
+    // violate the one-default-per-workspace unique index.
+    const { data: defaultPipeline } = await admin.from("pipelines").select("id").eq("workspace_id", workspace.workspaceId).eq("is_default", true).single();
+    const { data: firstStage } = await admin.from("pipeline_stages").select("id").eq("pipeline_id", defaultPipeline!.id).eq("is_active", true).order("sort_order", { ascending: true }).limit(1).single();
+
     const result = await callAction(ownerToken, { workspace_id: workspace.workspaceId, action: "create_manual", contact_name: "Auto-placed Lead", source: "manual" });
     expect(result.status).toBe(200);
-    expect(result.body.lead.pipeline_id).toBe(pipeline.pipelineId);
-    expect(result.body.lead.pipeline_stage_id).toBe(pipeline.stages[0].id);
+    expect(result.body.lead.pipeline_id).toBe(defaultPipeline!.id);
+    expect(result.body.lead.pipeline_stage_id).toBe(firstStage!.id);
   });
 
   it("set_qualification rejects not_qualified with no reason, and accepts it with one", async () => {

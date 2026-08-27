@@ -69,28 +69,12 @@ export function useAttributionNames(workspaceId: string | null, campaignId: stri
   });
 }
 
-export type CampaignConversionCounts = {
-  conversations: number;
-  leads: number;
-  opportunities: number;
-  customers: number;
-};
-
-export function useCampaignConversionCounts(workspaceId: string | null, campaignId: string | null) {
-  return useQuery({
-    queryKey: ["campaign-conversion-counts", workspaceId, campaignId],
-    queryFn: async (): Promise<CampaignConversionCounts> => {
-      const { data, error } = await supabase.rpc("get_campaign_conversion_counts", {
-        p_workspace_id: workspaceId as string,
-        p_campaign_id: campaignId as string,
-      });
-      if (error) throw new Error(error.message);
-      const row = (Array.isArray(data) ? data[0] : data) as CampaignConversionCounts | undefined;
-      return row || { conversations: 0, leads: 0, opportunities: 0, customers: 0 };
-    },
-    enabled: !!workspaceId && !!campaignId,
-  });
-}
+// get_campaign_conversion_counts() (the underlying SQL function) is kept
+// for the Phase G integration test that calls it directly - but Campaign
+// Detail now reads conversions via useSingleCampaignPerformance
+// (src/hooks/useAnalytics.ts), the same read model /analytics uses, so the
+// two surfaces can never disagree. This hook wrapper had no remaining
+// caller and was removed rather than left as dead code.
 
 export type RevenueEventRow = {
   id: string;

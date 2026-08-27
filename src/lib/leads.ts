@@ -136,9 +136,13 @@ function runPipelinesAction<T>(workspaceId: string, action: string, params: Reco
   return invoke<T>("pipelines-actions", { workspace_id: workspaceId, action, ...params });
 }
 
-export function ensureDefaultPipeline(workspaceId: string) {
-  return runPipelinesAction<{ pipeline_id: string; created: boolean }>(workspaceId, "ensure_default_pipeline");
-}
+// No client caller remains: every workspace's default pipeline is now
+// created atomically by create_workspace() itself
+// (20260906060000_default_pipeline_lifecycle_fix.sql), so the frontend
+// never needs to trigger this. The ensure_default_pipeline action itself
+// is kept server-side (pipelines-actions) as a defensive/recovery
+// mechanism - reachable directly via the API if ever needed, deliberately
+// not wired into the UI.
 
 export function createPipeline(workspaceId: string, name: string) {
   return runPipelinesAction<{ pipeline: unknown }>(workspaceId, "create_pipeline", { name });

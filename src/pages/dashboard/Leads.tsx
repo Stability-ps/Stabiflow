@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { Settings2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,7 +9,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { usePipelines, useLeads } from "@/hooks/useLeads";
 import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
-import { ensureDefaultPipeline } from "@/lib/leads";
 import { LeadList, type LeadListFilter } from "@/pages/dashboard/leads/LeadList";
 import { LeadBoard } from "@/pages/dashboard/leads/LeadBoard";
 import { LeadDetail } from "@/pages/dashboard/leads/LeadDetail";
@@ -18,7 +16,6 @@ import { PipelineSettings } from "@/pages/dashboard/leads/PipelineSettings";
 import { NewLeadDialog } from "@/pages/dashboard/leads/NewLeadDialog";
 
 export default function Leads() {
-  const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
   const { currentWorkspaceId, currentMembership } = useAuth();
@@ -52,15 +49,12 @@ export default function Leads() {
     navigate(location.pathname, { replace: true, state: null });
   }, [location.state, location.pathname, navigate]);
 
-  useEffect(() => {
-    if (!currentWorkspaceId || !canView || pipelinesLoading) return;
-    if ((pipelines || []).length === 0) {
-      ensureDefaultPipeline(currentWorkspaceId).then(() => {
-        queryClient.invalidateQueries({ queryKey: ["pipelines", currentWorkspaceId] });
-      }).catch(() => {});
-    }
-  }, [currentWorkspaceId, canView, pipelinesLoading, pipelines, queryClient]);
-
+  // Every workspace's default pipeline is now created atomically by
+  // create_workspace() itself (see 20260906060000_default_pipeline_lifecycle_fix.sql)
+  // - a workspace reaching this page with zero pipelines should no longer
+  // happen. No frontend call creates one; correctness never depends on
+  // visiting this page. (The server-side ensure_default_pipeline action
+  // still exists as a defensive/recovery mechanism - see pipelines-actions.)
   useEffect(() => {
     if (!selectedPipelineId && pipelines?.length) {
       setSelectedPipelineId(pipelines.find((p) => p.is_default)?.id || pipelines[0].id);

@@ -19,8 +19,6 @@ const VALID_ACTIONS = new Set([
   "set_stage_flags",
 ]);
 
-const DEFAULT_STAGE_NAMES = ["New", "Qualified", "Proposal", "Won"];
-
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, targetId: string | null, metadata: Record<string, unknown> = {}) {
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: "pipeline", target_id: targetId, metadata });
 }
@@ -54,39 +52,20 @@ Deno.serve(async (req: Request) => {
   if (action === "ensure_default_pipeline") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "pipeline.view"))) return json(req, { error: "Forbidden" }, 403);
 
-    const { data: existingDefault } = await serviceSb.from("pipelines").select("id").eq("workspace_id", workspaceId).eq("is_default", true).maybeSingle();
-    if (existingDefault) return json(req, { pipeline_id: existingDefault.id, created: false });
+    // Delegates to the one authoritative, idempotent, concurrency-safe
+    // definition (public.ensure_default_pipeline(), 20260906060000) -
+    // kept here purely as a defensive/recovery mechanism now that
+    // create_workspace() bootstraps every new workspace's default
+    // pipeline atomically and leads-actions defensively guarantees one
+    // before placing a new lead. Never a second definition of "what a
+    // default pipeline looks like."
+    const { data, error } = await serviceSb.rpc("ensure_default_pipeline", { p_workspace_id: workspaceId, p_created_by: actorId }).single();
+    if (error || !data) return json(req, { error: "Unable to create the default pipeline" }, 500);
 
-    const { data: pipeline, error: pipelineError } = await serviceSb
-      .from("pipelines")
-      .insert({ workspace_id: workspaceId, name: "Default pipeline", is_default: true, created_by: actorId })
-      .select("id")
-      .single();
-
-    if (pipelineError) {
-      // Idempotent race guard: another request already created the default
-      // between our check and our insert - the unique partial index
-      // rejected ours, so treat that as success and return theirs.
-      if (pipelineError.code === "23505") {
-        const { data: raceWinner } = await serviceSb.from("pipelines").select("id").eq("workspace_id", workspaceId).eq("is_default", true).maybeSingle();
-        if (raceWinner) return json(req, { pipeline_id: raceWinner.id, created: false });
-      }
-      return json(req, { error: "Unable to create the default pipeline" }, 500);
+    if (data.created) {
+      await logActivity(serviceSb, workspaceId, actorId, "pipeline_created", data.pipeline_id, { name: "Default pipeline", default: true });
     }
-
-    const { error: stagesError } = await serviceSb.from("pipeline_stages").insert(
-      DEFAULT_STAGE_NAMES.map((name, index) => ({
-        workspace_id: workspaceId,
-        pipeline_id: pipeline.id,
-        name,
-        sort_order: index,
-        is_won_stage: name === "Won",
-      })),
-    );
-    if (stagesError) return json(req, { error: "Unable to create the default pipeline's stages" }, 500);
-
-    await logActivity(serviceSb, workspaceId, actorId, "pipeline_created", pipeline.id, { name: "Default pipeline", default: true });
-    return json(req, { pipeline_id: pipeline.id, created: true });
+    return json(req, { pipeline_id: data.pipeline_id, created: data.created });
   }
 
   if (action === "create_pipeline") {
