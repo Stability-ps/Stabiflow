@@ -119,7 +119,7 @@ export default function Operator() {
                 </div>
                 <div>
                   <p className="font-medium">Members</p>
-                  <p className="text-muted-foreground">{detail.data.members.length}</p>
+                  <p className="text-muted-foreground">{(detail.data.members ?? []).length}</p>
                 </div>
                 <div>
                   <p className="font-medium">Flow AI usage (last 100 events)</p>
@@ -129,9 +129,9 @@ export default function Operator() {
 
               <div>
                 <p className="mb-1 text-sm font-medium">Integrations</p>
-                {detail.data.integrations.length === 0 && <p className="text-sm text-muted-foreground">None connected.</p>}
+                {(detail.data.integrations ?? []).length === 0 && <p className="text-sm text-muted-foreground">None connected.</p>}
                 <div className="flex flex-wrap gap-2">
-                  {detail.data.integrations.map((i) => (
+                  {(detail.data.integrations ?? []).map((i) => (
                     <Badge key={i.provider} variant="outline">{i.provider}: {i.status}{i.last_health_check_status ? ` (${i.last_health_check_status})` : ""}</Badge>
                   ))}
                 </div>
@@ -139,8 +139,8 @@ export default function Operator() {
 
               <div>
                 <p className="mb-1 text-sm font-medium">Recent failed automation runs</p>
-                {detail.data.recentFailedAutomationRuns.length === 0 && <p className="text-sm text-muted-foreground">None.</p>}
-                {detail.data.recentFailedAutomationRuns.map((r) => (
+                {(detail.data.recentFailedAutomationRuns ?? []).length === 0 && <p className="text-sm text-muted-foreground">None.</p>}
+                {(detail.data.recentFailedAutomationRuns ?? []).map((r) => (
                   <p key={r.id} className="text-xs text-muted-foreground">{r.status} - {new Date(r.created_at).toLocaleString()}</p>
                 ))}
               </div>

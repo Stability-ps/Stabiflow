@@ -72,7 +72,12 @@ Deno.serve(async (req: Request) => {
   ] = await Promise.all([
     sb.from("workspaces").select("id, name, slug, created_at").eq("id", workspaceId).maybeSingle(),
     sb.from("workspace_settings").select("timezone, business_description, website, currency, industry, contact_email, contact_phone, created_at").eq("workspace_id", workspaceId).maybeSingle(),
-    sb.from("workspace_members").select("user_id, role, joined_at, profiles:profiles(full_name)").eq("workspace_id", workspaceId),
+    // workspace_members has two FKs to profiles (user_id, invited_by) -
+    // the embed must be disambiguated or PostgREST errors this query to
+    // data:null, which was silently dropping every member row from the
+    // export (members.csv came back empty even when a workspace had
+    // members) instead of surfacing an error.
+    sb.from("workspace_members").select("user_id, role, joined_at, profiles:profiles!workspace_members_user_id_fkey(full_name)").eq("workspace_id", workspaceId),
     sb.from("inbox_conversations").select("id, wa_id, phone_number, display_name, status, inbox_status, priority_level, created_at").eq("workspace_id", workspaceId),
     sb.from("inbox_messages").select("id, conversation_id, direction, sender_type, message_type, content, delivery_status, created_at").eq("workspace_id", workspaceId),
     sb.from("leads").select("id, name, email, phone, source, status, created_at").eq("workspace_id", workspaceId),

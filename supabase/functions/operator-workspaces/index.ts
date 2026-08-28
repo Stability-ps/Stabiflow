@@ -73,7 +73,12 @@ Deno.serve(async (req: Request) => {
     const [{ data: workspace }, { data: billing }, { data: members }, { data: integrations }, { data: aiUsage }, { data: failedRuns }] = await Promise.all([
       serviceSb.from("workspaces").select("id, name, slug, created_at").eq("id", workspaceId).maybeSingle(),
       serviceSb.from("workspace_billing").select("plan, status, trial_ends_at, limits").eq("workspace_id", workspaceId).maybeSingle(),
-      serviceSb.from("workspace_members").select("user_id, role, joined_at, profiles(full_name)").eq("workspace_id", workspaceId),
+      // workspace_members has two FKs to profiles (user_id, invited_by) -
+      // the embed must be disambiguated or PostgREST errors and this
+      // query silently returns data:null (confirmed the hard way: this
+      // crashed the operator console's workspace detail view with
+      // "Cannot read properties of null" on the very first real lookup).
+      serviceSb.from("workspace_members").select("user_id, role, joined_at, profiles!workspace_members_user_id_fkey(full_name)").eq("workspace_id", workspaceId),
       serviceSb.from("workspace_integrations").select("provider, status, last_health_check_status, last_health_check_at").eq("workspace_id", workspaceId),
       serviceSb.from("ai_usage_events").select("total_tokens, estimated_cost, status, created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(100),
       serviceSb.from("automation_runs").select("id, automation_id, status, error, created_at").eq("workspace_id", workspaceId).in("status", ["failed", "blocked_permission"]).order("created_at", { ascending: false }).limit(20),
