@@ -2,12 +2,19 @@ import { supabase } from "@/integrations/supabase/client";
 
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
+  // Some structured error bodies (workspaceSuspendedBody, shared by every
+  // suspension-gated function) put a machine code in `error` and the
+  // human text in `message` - prefer `message` when present so a
+  // suspended-workspace action never surfaces a raw code like
+  // "workspace_suspended" instead of a real sentence.
   if (error) {
-    const message = (data as { error?: string } | null)?.error || error.message || `${name} failed`;
+    const body = data as { error?: string; message?: string } | null;
+    const message = body?.message || body?.error || error.message || `${name} failed`;
     throw new Error(message);
   }
   if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
-    throw new Error((data as { error: string }).error);
+    const typed = data as { error: string; message?: string };
+    throw new Error(typed.message || typed.error);
   }
   return data as T;
 }

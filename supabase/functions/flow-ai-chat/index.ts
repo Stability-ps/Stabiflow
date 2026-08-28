@@ -24,6 +24,7 @@ import { type FlowAiInputItem, streamFlowAiResponse } from "../_shared/flowAi/op
 import {
   checkPlatformCeiling, checkWorkspaceQuota, getPlatformTokenUsageSince, getWorkspaceTokenUsageSince, recordUsageEvent,
 } from "../_shared/flowAi/usage.ts";
+import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 
 const DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT_FALLBACK = 500_000;
 
@@ -113,6 +114,11 @@ Deno.serve(async (req: Request) => {
   // permission revoked mid-thread must take effect immediately.
   if (!(await hasWorkspacePermission(callerClient, workspaceId, "flow_ai.use"))) {
     return new Response(JSON.stringify({ error: "Not authorized to use Flow AI in this workspace" }), { status: 403, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
+  }
+
+  const statusGate = await assertWorkspaceActive(serviceClient, workspaceId);
+  if (!statusGate.allowed) {
+    return new Response(JSON.stringify(workspaceSuspendedBody(statusGate.status)), { status: 403, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
   }
 
   const model = envVar("OPENAI_FLOW_AI_MODEL");

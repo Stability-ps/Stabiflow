@@ -73,8 +73,12 @@ export function useSendFlowAiMessage(workspaceId: string | null) {
         });
 
         if (!res.ok || !res.body) {
-          const problem = await res.json().catch(() => ({}) as { error?: string });
-          throw new Error(problem.error || `Flow AI request failed (${res.status})`);
+          // workspaceSuspendedBody() (and similar structured error bodies)
+          // put the human-legible text in `message`, and a machine code in
+          // `error` - prefer message so the UI never shows a raw code like
+          // "workspace_suspended" instead of a real sentence.
+          const problem = await res.json().catch(() => ({}) as { error?: string; message?: string });
+          throw new Error(problem.message || problem.error || `Flow AI request failed (${res.status})`);
         }
 
         const reader = res.body.getReader();

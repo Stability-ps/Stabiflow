@@ -26,6 +26,7 @@ import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppS
 import { isWhatsAppMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
 import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
+import { assertWorkspaceActive } from "../_shared/workspaceStatus.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { recordConversationTouchpoint } from "../_shared/attribution.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
@@ -66,6 +67,28 @@ async function resolveCredential(sb: AnySupabaseClient, numberRow: NumberRow): P
 async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential, workspaceId: string, conversationId: string, waId: string, body: string, senderType: "ai" | "system" | "staff" = "ai") {
   const cleaned = cleanReply(body);
   if (!cleaned) return;
+
+  // Launch-completion: a suspended/cancelled workspace's AI auto-reply
+  // path is blocked exactly like a closed messaging window - hand off to
+  // a human, record what would have been said with a distinct
+  // never-sent status, never a fabricated success. Checked before the
+  // window (a suspended workspace shouldn't burn a webhook round-trip
+  // computing window state it won't act on either way).
+  const statusGate = await assertWorkspaceActive(sb, workspaceId);
+  if (!statusGate.allowed) {
+    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversationId);
+    await sb.from("inbox_messages").insert({
+      workspace_id: workspaceId,
+      conversation_id: conversationId,
+      provider_message_id: null,
+      direction: "outbound",
+      sender_type: senderType,
+      message_type: "text",
+      content: cleaned,
+      delivery_status: "blocked_workspace_suspended",
+    });
+    return;
+  }
 
   const window = await resolveMessagingWindow(sb, conversationId);
   if (window.state !== "open") {

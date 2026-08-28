@@ -12,6 +12,7 @@ export function deliveryLabel(status: string | null): string {
   if (!status) return "";
   if (status === "saved_local") return "Saved in StabiFlow";
   if (status === "blocked_window_closed") return "Not sent - messaging window closed";
+  if (status === "blocked_workspace_suspended") return "Not sent - workspace suspended";
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
@@ -21,7 +22,7 @@ export function deliveryTone(status: string | null): DeliveryTone {
   const value = (status || "").toLowerCase();
   if (value === "read" || value === "delivered") return "healthy";
   if (value === "saved_local" || value === "sending" || value === "submitted" || value === "queued") return "attention";
-  if (value === "failed" || value === "error" || value === "undeliverable" || value === "rejected" || value === "blocked_window_closed") return "error";
+  if (value === "failed" || value === "error" || value === "undeliverable" || value === "rejected" || value === "blocked_window_closed" || value === "blocked_workspace_suspended") return "error";
   return "neutral";
 }
 

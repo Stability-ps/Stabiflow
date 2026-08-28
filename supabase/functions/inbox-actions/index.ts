@@ -16,6 +16,7 @@ import type { WhatsAppSendCredential, WhatsAppTemplateParameter } from "../_shar
 import { isWhatsAppMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
 import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
+import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 import { describeTemplateEligibilityError, validateTemplateEligibility } from "../_shared/inbox/templateValidation.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
@@ -185,6 +186,12 @@ Deno.serve(async (req: Request) => {
     const message = typeof body.message === "string" ? body.message.trim() : "";
     if (!message || message.length > 1000) return json(req, { error: "Message must be between 1 and 1000 characters" }, 400);
 
+    // Launch-completion: a suspended/cancelled workspace cannot send a
+    // provider-mutating message even via a direct call to this endpoint -
+    // reads (assign/mark_read/add_note etc. above) are unaffected.
+    const statusGate = await assertWorkspaceActive(serviceSb, workspaceId);
+    if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
+
     const cred = await resolveCredential(serviceSb, conversation.whatsapp_number_id);
     if (!cred) return json(req, { error: "WhatsApp is not connected for this workspace" }, 409);
 
@@ -253,6 +260,9 @@ Deno.serve(async (req: Request) => {
   const parameters = rawParameters.filter((p): p is string => typeof p === "string");
   if (typeof templateId !== "string" || !templateId) return json(req, { error: "template_id is required" }, 400);
   if (parameters.length !== rawParameters.length) return json(req, { error: "All template parameters must be strings" }, 400);
+
+  const templateStatusGate = await assertWorkspaceActive(serviceSb, workspaceId);
+  if (!templateStatusGate.allowed) return json(req, workspaceSuspendedBody(templateStatusGate.status), 403);
 
   const cred = await resolveCredential(serviceSb, conversation.whatsapp_number_id);
   if (!cred) return json(req, { error: "WhatsApp is not connected for this workspace" }, 409);

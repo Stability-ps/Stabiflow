@@ -30,6 +30,10 @@ import FlowAI from "@/pages/dashboard/FlowAI";
 import Automations from "@/pages/dashboard/Automations";
 import Integrations from "@/pages/dashboard/Integrations";
 import Settings from "@/pages/dashboard/Settings";
+import Privacy from "@/pages/legal/Privacy";
+import Terms from "@/pages/legal/Terms";
+import DataDeletion from "@/pages/legal/DataDeletion";
+import Operator from "@/pages/operator/Operator";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +58,9 @@ function AppRoutes() {
         }
       />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      <Route path="/legal/privacy" element={<Privacy />} />
+      <Route path="/legal/terms" element={<Terms />} />
+      <Route path="/legal/data-deletion" element={<DataDeletion />} />
       <Route
         element={
           <RequireAuth>
@@ -84,6 +91,7 @@ function AppRoutes() {
         <Route path="/automations" element={<Automations />} />
         <Route path="/integrations" element={<Integrations />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/operator" element={<Operator />} />
       </Route>
     </Routes>
   );

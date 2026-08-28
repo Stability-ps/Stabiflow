@@ -102,3 +102,17 @@ describe("deliveryLabel/deliveryTone for a window-blocked message", () => {
     expect(deliveryTone("blocked_window_closed")).toBe("error");
   });
 });
+
+describe("deliveryLabel/deliveryTone for a workspace-suspended blocked message", () => {
+  it("labels blocked_workspace_suspended clearly instead of a raw status string", () => {
+    expect(deliveryLabel("blocked_workspace_suspended")).toBe("Not sent - workspace suspended");
+  });
+
+  it("classifies blocked_workspace_suspended as an error tone, never healthy/neutral", () => {
+    expect(deliveryTone("blocked_workspace_suspended")).toBe("error");
+  });
+
+  it("distinguishes blocked_workspace_suspended from blocked_window_closed in label text", () => {
+    expect(deliveryLabel("blocked_workspace_suspended")).not.toBe(deliveryLabel("blocked_window_closed"));
+  });
+});

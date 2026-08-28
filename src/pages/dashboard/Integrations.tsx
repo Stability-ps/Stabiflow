@@ -36,13 +36,21 @@ function relativeTime(iso: string | null): string {
   return `${Math.round(hours / 24)} day(s) ago`;
 }
 
-function ConnectedIntegrationCard({ provider, integration, resourceCounts, onManage }: {
+function ConnectedIntegrationCard({ provider, integration, resourceCounts, onManage, canReconnect, reconnecting, onReconnect }: {
   provider: IntegrationProvider;
   integration: WorkspaceIntegrationRow;
   resourceCounts: Array<{ label: string; count: number }>;
   onManage: () => void;
+  canReconnect: boolean;
+  reconnecting: boolean;
+  onReconnect: () => void;
 }) {
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
+  // reauthorization_required/error both need the same fix (re-run OAuth) -
+  // the OAuth callback upserts on (workspace_id, provider), so reconnecting
+  // an already-connected integration replaces the token in place without
+  // losing existing Page/number selections.
+  const needsReconnect = status.tone === "error";
   return (
     <Card>
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
@@ -57,9 +65,23 @@ function ConnectedIntegrationCard({ provider, integration, resourceCounts, onMan
         </div>
         <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
       </CardHeader>
-      <CardContent className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">Last checked: {relativeTime(integration.last_health_check_at)}</p>
-        <Button size="sm" variant="outline" onClick={onManage}>Manage</Button>
+      <CardContent className="space-y-3">
+        {status.remediation && (
+          <p className={status.tone === "error" ? "text-sm text-red-700 dark:text-red-400" : "text-sm text-amber-700 dark:text-amber-400"}>
+            {status.remediation}
+          </p>
+        )}
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">Last checked: {relativeTime(integration.last_health_check_at)}</p>
+          <div className="flex gap-2">
+            {needsReconnect && (
+              <Button size="sm" onClick={onReconnect} disabled={!canReconnect || reconnecting}>
+                {reconnecting ? "Reconnecting..." : "Reconnect"}
+              </Button>
+            )}
+            <Button size="sm" variant="outline" onClick={onManage}>Manage</Button>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -196,10 +218,26 @@ export default function Integrations() {
           <h2 className="mb-3 text-lg font-medium">Connected</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             {metaIntegration && (
-              <ConnectedIntegrationCard provider="meta" integration={metaIntegration} resourceCounts={metaCounts} onManage={() => setManagingProvider("meta")} />
+              <ConnectedIntegrationCard
+                provider="meta"
+                integration={metaIntegration}
+                resourceCounts={metaCounts}
+                onManage={() => setManagingProvider("meta")}
+                canReconnect={canConnect}
+                reconnecting={connectingProvider === "meta"}
+                onReconnect={() => handleConnect("meta")}
+              />
             )}
             {whatsappIntegration && (
-              <ConnectedIntegrationCard provider="whatsapp" integration={whatsappIntegration} resourceCounts={whatsappCounts} onManage={() => setManagingProvider("whatsapp")} />
+              <ConnectedIntegrationCard
+                provider="whatsapp"
+                integration={whatsappIntegration}
+                resourceCounts={whatsappCounts}
+                onManage={() => setManagingProvider("whatsapp")}
+                canReconnect={canConnect}
+                reconnecting={connectingProvider === "whatsapp"}
+                onReconnect={() => handleConnect("whatsapp")}
+              />
             )}
           </div>
           {metaIntegration && metaCounts.every((c) => c.count === 0) && (
