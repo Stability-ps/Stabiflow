@@ -12,6 +12,19 @@ import { useFlowAiConversations, useFlowAiMessages, useSendFlowAiMessage } from 
 // actions in its own words; it has NO ability to change anything - see
 // supabase/functions/_shared/flowAi/systemPrompt.ts for the exact boundary
 // stated to the model itself.
+
+// Each prompt maps cleanly to a real tool in
+// supabase/functions/_shared/flowAi/tools.ts (get_campaign_performance,
+// get_lead_source_breakdown, get_analytics_kpis, get_whatsapp_analytics,
+// list_opportunities) - never advertise a capability Flow AI doesn't have.
+const STARTER_PROMPTS = [
+  "How are my campaigns performing?",
+  "Which leads need attention?",
+  "What's my WhatsApp conversion rate?",
+  "Summarize my open opportunities",
+  "What should I focus on today?",
+];
+
 export default function FlowAI() {
   const { currentWorkspaceId, hasPermission } = useAuth();
   const canUse = hasPermission("flow_ai.use");
@@ -40,13 +53,15 @@ export default function FlowAI() {
     return <EmptyState icon={Sparkles} title="Flow AI" description="You don't have permission to use Flow AI in this workspace. Ask a workspace owner or admin." />;
   }
 
-  const handleSend = async () => {
-    const message = draft.trim();
+  const sendMessage = async (message: string) => {
     if (!message || isStreaming) return;
     setDraft("");
     const resolvedId = await send(selectedConversationId, message);
     if (resolvedId && resolvedId !== selectedConversationId) setSelectedConversationId(resolvedId);
   };
+
+  const handleSend = () => sendMessage(draft.trim());
+  const handleStarterPrompt = (prompt: string) => sendMessage(prompt);
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
@@ -74,11 +89,20 @@ export default function FlowAI() {
       <div className="flex flex-1 flex-col">
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pb-4">
           {!selectedConversationId && (messagesQuery.data ?? []).length === 0 && !streamingText && (
-            <EmptyState
-              icon={Sparkles}
-              title="Ask Flow AI about your workspace"
-              description="Try: “How did our campaigns perform this month?”, “Summarize our open opportunities”, or “What's our WhatsApp conversion rate?” Flow AI can only read and recommend - it never changes anything."
-            />
+            <div className="space-y-4">
+              <EmptyState
+                icon={Sparkles}
+                title="Ask Flow AI about your workspace"
+                description="Flow AI can analyze your workspace data and recommend what to do next - it never changes anything on its own."
+              />
+              <div className="flex flex-wrap justify-center gap-2">
+                {STARTER_PROMPTS.map((prompt) => (
+                  <Button key={prompt} variant="outline" size="sm" disabled={isStreaming} onClick={() => void handleStarterPrompt(prompt)}>
+                    {prompt}
+                  </Button>
+                ))}
+              </div>
+            </div>
           )}
           {(messagesQuery.data ?? [])
             .filter((m) => m.role === "user" || m.role === "assistant")

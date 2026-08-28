@@ -101,7 +101,7 @@ export default function Overview() {
           <EmptyState
             icon={Sparkles}
             title="No recommendations yet"
-            description="Flow AI needs campaign and conversion data before it can suggest anything - recommendations always require your approval before anything changes."
+            description="Flow AI needs campaign and conversion data before it can suggest anything - it only analyzes and recommends, it never changes anything on its own."
             action={<Button size="sm" variant="outline" onClick={() => navigate("/flow-ai")}>Try Flow AI</Button>}
           />
         </CardContent>
