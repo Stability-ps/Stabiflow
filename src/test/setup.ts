@@ -15,3 +15,12 @@ Object.defineProperty(window, "matchMedia", {
 });
 
 window.scrollTo = () => {};
+
+// Radix primitives (e.g. Checkbox) call ResizeObserver, which jsdom does
+// not implement.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+window.ResizeObserver = window.ResizeObserver ?? (ResizeObserverStub as unknown as typeof ResizeObserver);
