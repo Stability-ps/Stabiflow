@@ -95,7 +95,13 @@ export async function generateCreativeCopy(cred: CreativeStudioCredential, input
       store: false,
       instructions: buildInstructions(),
       input: [{ role: "user", content: [{ type: "input_text", text: buildInputText(input) }] }],
-      text: { verbosity: "low", format: { type: "json_schema", name: "stabiflow_creative_variants", strict: true, schema: RESPONSE_SCHEMA } },
+      // "low" verbosity is rejected by gpt-4o-mini (the model
+      // OPENAI_FLOW_AI_MODEL is actually configured to) - confirmed live
+      // via a real OpenAI 400 during browser verification:
+      // "Unsupported value: 'low' is not supported with the 'gpt-4o-mini'
+      // model. Supported values are: 'medium'." "medium" is the only
+      // value this model accepts.
+      text: { verbosity: "medium", format: { type: "json_schema", name: "stabiflow_creative_variants", strict: true, schema: RESPONSE_SCHEMA } },
     }),
   });
   const raw = await response.text();
