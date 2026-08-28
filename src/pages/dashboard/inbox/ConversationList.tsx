@@ -76,7 +76,16 @@ export function ConversationList({ conversations, unreadIds, selectedId, onSelec
 
       <div className="flex-1 overflow-y-auto">
         {filtered.length === 0 ? (
-          <EmptyState icon={InboxIcon} title="No conversations" description="Nothing matches this filter yet." className="border-none" />
+          conversations.length === 0 ? (
+            <EmptyState
+              icon={InboxIcon}
+              title="Waiting for your first conversation"
+              description="WhatsApp is connected. As soon as a customer messages your number, it will show up here."
+              className="border-none"
+            />
+          ) : (
+            <EmptyState icon={InboxIcon} title="No conversations" description="Nothing matches this filter yet." className="border-none" />
+          )
         ) : (
           filtered.map((c) => {
             const unread = unreadIds.has(c.id);

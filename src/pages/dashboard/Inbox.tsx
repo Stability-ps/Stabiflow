@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Inbox as InboxIcon, MessageCircle } from "lucide-react";
 import { EmptyState } from "@/components/EmptyState";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { useWorkspaceIntegrations } from "@/hooks/useIntegrations";
@@ -9,6 +11,7 @@ import { ConversationList, type InboxFilter } from "@/pages/dashboard/inbox/Conv
 import { ConversationDetail } from "@/pages/dashboard/inbox/ConversationDetail";
 
 export default function Inbox() {
+  const navigate = useNavigate();
   const { currentWorkspaceId, currentMembership } = useAuth();
   const role = currentMembership?.role;
   const canView = roleHasPermission(role, "inbox.view");
@@ -46,8 +49,9 @@ export default function Inbox() {
     return (
       <EmptyState
         icon={InboxIcon}
-        title="No integrations connected"
+        title="No WhatsApp number connected"
         description="Connect a WhatsApp Business number under Integrations to start receiving conversations here."
+        action={<Button variant="outline" onClick={() => navigate("/integrations")}>Go to Integrations</Button>}
       />
     );
   }
