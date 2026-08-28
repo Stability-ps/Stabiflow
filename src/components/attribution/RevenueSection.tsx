@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRevenueEventsForOpportunity } from "@/hooks/useAttribution";
+import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { recordRevenue } from "@/lib/attribution";
 
 const EVENT_TYPES = ["sale", "payment", "contract_value", "adjustment", "refund"] as const;
@@ -29,9 +30,13 @@ export function RevenueSection({ workspaceId, opportunityId, customerId, leadId,
 }) {
   const queryClient = useQueryClient();
   const { data: events } = useRevenueEventsForOpportunity(workspaceId, opportunityId);
+  const workspaceCurrency = useWorkspaceCurrency(workspaceId);
   const [showForm, setShowForm] = useState(false);
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
+  // Defaults to the workspace's own configured currency, not a hardcoded
+  // value - re-synced whenever the form is opened (never while it's
+  // already open, so it never clobbers something the user already typed).
+  const [currency, setCurrency] = useState(workspaceCurrency);
   const [eventType, setEventType] = useState<(typeof EVENT_TYPES)[number]>("sale");
   const [reference, setReference] = useState("");
   const [busy, setBusy] = useState(false);
@@ -62,7 +67,20 @@ export function RevenueSection({ workspaceId, opportunityId, customerId, leadId,
     <div className="space-y-2 rounded-md border p-2">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">Revenue</p>
-        {canRecord && <Button size="sm" variant="ghost" onClick={() => setShowForm((v) => !v)}>Record revenue</Button>}
+        {canRecord && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setShowForm((v) => {
+                if (!v) setCurrency(workspaceCurrency); // re-sync only when OPENING, never while already open
+                return !v;
+              });
+            }}
+          >
+            Record revenue
+          </Button>
+        )}
       </div>
       {(events || []).length === 0 && !showForm && <p className="text-xs text-muted-foreground">No revenue recorded yet.</p>}
       {(events || []).map((e) => (
