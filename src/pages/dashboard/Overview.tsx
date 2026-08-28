@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3, DollarSign, MessageSquare, Sparkles, TrendingUp, Users, Wallet,
 } from "lucide-react";
@@ -7,8 +8,10 @@ import { useWorkspaceActivity } from "@/hooks/useWorkspaceActivity";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { useAnalyticsKpis } from "@/hooks/useAnalytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/layout/MetricCard";
 import { EmptyState } from "@/components/EmptyState";
+import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { computeRoas, formatMoneyByCurrency, formatRoas, summarizeCurrency } from "@/lib/analytics";
 import { resolveDateRangePreset } from "@/lib/analyticsDate";
 
@@ -17,6 +20,7 @@ import { resolveDateRangePreset } from "@/lib/analyticsDate";
 // full reporting surface. Never a second, independently-computed set of
 // formulas that could quietly disagree with /analytics.
 export default function Overview() {
+  const navigate = useNavigate();
   const { currentMembership, currentWorkspaceId, hasPermission } = useAuth();
   const activityQuery = useWorkspaceActivity(currentWorkspaceId);
   const timezone = useWorkspaceTimezone(currentWorkspaceId);
@@ -63,18 +67,30 @@ export default function Overview() {
         )}
       </div>
 
+      <OnboardingChecklist workspaceId={currentWorkspaceId} />
+
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
-            <EmptyState icon={BarChart3} title="No campaign data yet" description="Connect Meta and launch a campaign to see performance here." />
+            <EmptyState
+              icon={BarChart3}
+              title="No campaign data yet"
+              description="Connect Meta and launch a campaign to see performance here."
+              action={<Button size="sm" onClick={() => navigate("/campaigns/new")}>Create a campaign</Button>}
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
-            <EmptyState icon={MessageSquare} title="No conversations yet" description="Connect WhatsApp to start receiving conversations here." />
+            <EmptyState
+              icon={MessageSquare}
+              title="No conversations yet"
+              description="Connect WhatsApp to start receiving conversations here."
+              action={<Button size="sm" onClick={() => navigate("/integrations")}>Connect WhatsApp</Button>}
+            />
           </CardContent>
         </Card>
       </div>
@@ -86,6 +102,7 @@ export default function Overview() {
             icon={Sparkles}
             title="No recommendations yet"
             description="Flow AI needs campaign and conversion data before it can suggest anything - recommendations always require your approval before anything changes."
+            action={<Button size="sm" variant="outline" onClick={() => navigate("/flow-ai")}>Try Flow AI</Button>}
           />
         </CardContent>
       </Card>
