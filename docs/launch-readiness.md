@@ -50,6 +50,10 @@ otherwise.
 
 ### App Review submission checklist (prepared, not submitted)
 
+The full per-permission submission package (feature, user journey,
+screens, reviewer instructions, and what breaks without each scope) is in
+`docs/launch-readiness/meta-app-review-package.md`. Summary sequence:
+
 1. Verify the Meta Business Manager account tied to the StabiFlow Meta App
    (Business Verification - separate from App Review, required before
    `ads_management` works for real ad spend).
