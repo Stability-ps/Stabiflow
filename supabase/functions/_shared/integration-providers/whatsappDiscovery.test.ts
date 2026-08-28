@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { parseBusinessesResponse, parseOwnedWabasResponse, parseWabaPhoneNumbersResponse } from "./whatsappDiscovery.ts";
+import { parseBusinessesResponse, parseMessageTemplatesResponse, parseOwnedWabasResponse, parseWabaPhoneNumbersResponse } from "./whatsappDiscovery.ts";
 
 Deno.test("parseBusinessesResponse normalizes id/name and handles an empty result", () => {
   assertEquals(parseBusinessesResponse({ data: [{ id: "biz-1", name: "Acapolite Consulting" }] }), [{ id: "biz-1", name: "Acapolite Consulting" }]);
@@ -28,4 +28,39 @@ Deno.test("parseWabaPhoneNumbersResponse stamps every number with the WABA id it
 
 Deno.test("parseWabaPhoneNumbersResponse handles an empty result (WABA exists, no numbers yet)", () => {
   assertEquals(parseWabaPhoneNumbersResponse({}, "waba-1"), []);
+});
+
+Deno.test("parseMessageTemplatesResponse stamps every template with the WABA id it came from and preserves components verbatim", () => {
+  const result = parseMessageTemplatesResponse(
+    {
+      data: [
+        {
+          id: "tpl-1",
+          name: "order_update",
+          language: "en_US",
+          category: "UTILITY",
+          status: "APPROVED",
+          components: [{ type: "BODY", text: "Your order {{1}} has shipped." }],
+        },
+        { id: "tpl-2", name: "no_components_yet" },
+      ],
+    },
+    "waba-1",
+  );
+  assertEquals(result, [
+    {
+      wabaId: "waba-1",
+      providerTemplateId: "tpl-1",
+      name: "order_update",
+      language: "en_US",
+      category: "UTILITY",
+      status: "APPROVED",
+      components: [{ type: "BODY", text: "Your order {{1}} has shipped." }],
+    },
+    { wabaId: "waba-1", providerTemplateId: "tpl-2", name: "no_components_yet", language: "", category: null, status: "UNKNOWN", components: [] },
+  ]);
+});
+
+Deno.test("parseMessageTemplatesResponse handles an empty result", () => {
+  assertEquals(parseMessageTemplatesResponse({}, "waba-1"), []);
 });

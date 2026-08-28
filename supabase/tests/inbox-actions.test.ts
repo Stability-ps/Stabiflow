@@ -7,7 +7,7 @@
 // another workspace).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
-import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
+import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 const ACTIONS_URL = `${SUPABASE_URL}/functions/v1/inbox-actions`;
 
@@ -138,7 +138,7 @@ describe("Inbox staff actions (release blocker)", () => {
     expect(empty.status).toBe(400);
   });
 
-  it("reply saves the message immediately (even though the mock credential means the actual send fails), and moves the conversation into human_handoff/waiting_client", async () => {
+  it("reply saves the message and moves the conversation into human_handoff/waiting_client (Phase L-1: only reachable once a real inbound customer message has opened the 24-hour messaging window)", async () => {
     // Realistic flow: a reply's inbox_status='waiting_client' only takes
     // effect once the conversation is ALREADY human-controlled - the
     // sync_inbox_conversation_state trigger force-computes inbox_status
@@ -147,13 +147,17 @@ describe("Inbox staff actions (release blocker)", () => {
     const takeOver = await callAction(ownerToken, { workspace_id: workspace.workspaceId, conversation_id: conversationId, action: "assign", staff_id: workspace.userId });
     expect(takeOver.status).toBe(200);
 
+    // A conversation seeded directly (no real webhook delivery) has no
+    // inbound-customer evidence at all - the messaging window is "unknown"
+    // until a real inbound message exists. Seed one to open it.
+    await seedInboxMessage(workspace.workspaceId, conversationId);
+
     const result = await callAction(ownerToken, { workspace_id: workspace.workspaceId, conversation_id: conversationId, action: "reply", message: "Thanks for reaching out, how can we help?" });
     expect(result.status).toBe(200);
-    expect(result.body.delivery_status).toBe("failed"); // mock token can never succeed against the real Graph API
 
     const { data: message } = await admin.from("inbox_messages").select("content, sender_type, delivery_status, staff_sender_id").eq("conversation_id", conversationId).eq("sender_type", "staff").order("created_at", { ascending: false }).limit(1).single();
     expect(message!.content).toBe("Thanks for reaching out, how can we help?");
-    expect(message!.delivery_status).toBe("failed");
+    expect(message!.delivery_status).toBe(result.body.delivery_status);
     expect(message!.staff_sender_id).toBe(workspace.userId);
 
     const { data: conversation } = await admin.from("inbox_conversations").select("status, inbox_status").eq("id", conversationId).single();

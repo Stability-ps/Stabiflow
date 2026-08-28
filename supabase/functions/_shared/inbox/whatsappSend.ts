@@ -30,6 +30,41 @@ export async function sendWhatsAppText(cred: WhatsAppSendCredential, to: string,
   return String(data?.messages?.[0]?.id || "") || null;
 }
 
+// Phase L-1: the ONLY way to message a customer outside the 24-hour
+// window. Sends Meta's real template-message shape (POST .../messages
+// with type=template) - the caller (whatsappTemplateSend.ts) has already
+// resolved which template, verified it's APPROVED and belongs to this
+// workspace, and validated the parameter count before this is ever
+// called; this function's only job is the wire call.
+export type WhatsAppTemplateParameter = { type: "text"; text: string };
+
+export async function sendWhatsAppTemplate(
+  cred: WhatsAppSendCredential,
+  to: string,
+  template: { name: string; language: string; bodyParameters: WhatsAppTemplateParameter[] },
+): Promise<string | null> {
+  const components = template.bodyParameters.length > 0 ? [{ type: "body", parameters: template.bodyParameters }] : [];
+  let response: Response;
+  try {
+    response = await fetch(`${graphApiBaseUrl(cred.apiVersion)}/${cred.phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cred.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "template",
+        template: { name: template.name, language: { code: template.language }, components },
+      }),
+    });
+  } catch (error) {
+    classifyIntegrationNetworkError(error);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data?.error) classifyMetaGraphError(response.status, data);
+  return String(data?.messages?.[0]?.id || "") || null;
+}
+
 export type DownloadedMedia = { bytes: Uint8Array; mime: string; size: number; sha256: string | null };
 
 export async function downloadWhatsAppMedia(cred: WhatsAppSendCredential, mediaId: string): Promise<DownloadedMedia> {

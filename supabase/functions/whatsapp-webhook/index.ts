@@ -22,7 +22,10 @@ import { applyStatusUpdate, incomingStatuses } from "../_shared/inbox/whatsappSt
 import { normalizePhone, parseInboundMessageEvents, type InboundMessageEvent } from "../_shared/inbox/webhookMessageParser.ts";
 import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
 import { generateAIReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
-import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, sendWhatsAppText, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
+import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
+import { isWhatsAppMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
+import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
+import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { recordConversationTouchpoint } from "../_shared/attribution.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
@@ -44,13 +47,52 @@ async function resolveCredential(sb: AnySupabaseClient, numberRow: NumberRow): P
   return { token, phoneNumberId: numberRow.phone_number_id, apiVersion: envVar("INTEGRATIONS_META_GRAPH_API_VERSION") };
 }
 
+// The ONE place whatsapp-webhook attempts a free-form send - every AI/
+// system auto-reply in this file funnels through here, so the messaging-
+// window gate only needs to live in one place to cover all of them
+// (Phase L-1: "centralize outbound policy"). In today's call graph this
+// check is structurally always "open" (storeOutbound only ever runs in
+// direct response to the customer message that JUST reopened the window -
+// see messagingWindow.ts's header comment), but it stays here anyway as
+// the deterministic, future-safe seam: no path through this function can
+// ever send free-form text without going through the same policy a
+// delayed retry or a future trigger would also have to pass.
+//
+// When the window is NOT open, this deliberately does NOT send anything
+// and does NOT insert a fake "sent" message - it hands the conversation to
+// a human (the only thing that CAN act here: neither a free-form message
+// nor an explanatory system message is deliverable outside the window)
+// and records why, visibly, as an internal note - never a silent no-op.
 async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential, workspaceId: string, conversationId: string, waId: string, body: string, senderType: "ai" | "system" | "staff" = "ai") {
   const cleaned = cleanReply(body);
   if (!cleaned) return;
+
+  const window = await resolveMessagingWindow(sb, conversationId);
+  if (window.state !== "open") {
+    // Hand off to a human (nothing - not even an explanatory system
+    // message - is deliverable outside the window), and record what the
+    // AI would have said directly in the message thread with a status
+    // that unambiguously means "never sent" - visible exactly where staff
+    // are already looking, never a silent drop.
+    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversationId);
+    await sb.from("inbox_messages").insert({
+      workspace_id: workspaceId,
+      conversation_id: conversationId,
+      provider_message_id: null,
+      direction: "outbound",
+      sender_type: senderType,
+      message_type: "text",
+      content: cleaned,
+      delivery_status: "blocked_window_closed",
+    });
+    return;
+  }
+
+  const provider = isWhatsAppMockMode() ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
   let providerMessageId: string | null = null;
   let deliveryStatus = "submitted";
   try {
-    providerMessageId = await sendWhatsAppText(cred, waId, cleaned);
+    providerMessageId = await provider.sendText(cred, waId, cleaned);
   } catch (error) {
     console.error("whatsapp-webhook: send failed", sanitizeIntegrationError(error).message);
     deliveryStatus = "failed";

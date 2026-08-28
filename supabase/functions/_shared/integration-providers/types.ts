@@ -66,3 +66,13 @@ export type DiscoveredWabaPhoneNumber = {
   qualityRating: string | null;
   platformStatus: string | null;
 };
+
+export type DiscoveredWabaTemplate = {
+  wabaId: string;
+  providerTemplateId: string;
+  name: string;
+  language: string;
+  category: string | null;
+  status: string;
+  components: unknown[];
+};
