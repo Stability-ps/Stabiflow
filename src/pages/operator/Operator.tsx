@@ -123,7 +123,7 @@ export default function Operator() {
                 </div>
                 <div>
                   <p className="font-medium">Flow AI usage (last 100 events)</p>
-                  <p className="text-muted-foreground">{detail.data.aiUsageSummary.totalTokens} tokens - ${detail.data.aiUsageSummary.totalCost.toFixed(2)}</p>
+                  <p className="text-muted-foreground">{detail.data.aiUsageSummary.totalTokens} tokens - {new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(detail.data.aiUsageSummary.totalCost)}</p>
                 </div>
               </div>
 

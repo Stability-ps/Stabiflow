@@ -25,6 +25,7 @@ import { discoverAndStoreMetaResources, discoverAndStoreWhatsAppResources } from
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken } from "../_shared/integration-providers/metaOAuth.ts";
 import { isOauthStateValid } from "../_shared/integration-providers/oauthState.ts";
+import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
 import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -87,7 +88,16 @@ Deno.serve(async (req: Request) => {
     return redirectToApp(appOrigin, { integration_error: "forbidden" });
   }
 
-  const mockMode = (Deno.env.get("INTEGRATIONS_META_MOCK_MODE") || "").trim().toLowerCase() === "true";
+  // Defense-in-depth, independent of integrations-oauth-start's own block:
+  // a real Meta redirect never carries the test-harness header (browsers
+  // can't attach custom headers to a navigation), so this can only ever
+  // resolve true for a genuine production request while the mock flag is
+  // still on for the test suite's benefit - see testHarness.ts.
+  if (isBlockedMockRequest(req)) {
+    return redirectToApp(appOrigin, { integration_error: "meta_not_enabled" });
+  }
+
+  const mockMode = resolveMockMode(req);
 
   try {
     let accessToken: string;

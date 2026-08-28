@@ -11,6 +11,7 @@ import { MediaPreview } from "@/components/content/MediaPreview";
 import { EmptyState } from "@/components/EmptyState";
 import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { useAdCampaign, useCampaignActivity } from "@/hooks/useAdCampaign";
 import { useAdCampaignMetrics } from "@/hooks/useAdCampaignMetrics";
 import { useSingleCampaignPerformance } from "@/hooks/useAnalytics";
@@ -31,6 +32,7 @@ const ALL_TIME_RANGE = { from: new Date(0), to: new Date(Date.now() + 86_400_000
 
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { hasPermission, currentWorkspaceId } = useAuth();
+  const workspaceCurrency = useWorkspaceCurrency(currentWorkspaceId);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: campaign, isLoading } = useAdCampaign(campaignId);
@@ -241,7 +243,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
               </CardContent>
               {canSeeRevenue && (
                 <CardContent className="grid grid-cols-2 gap-3 border-t pt-3 text-center text-sm">
-                  <div><p className="text-lg font-semibold">{formatMoneyByCurrency(performance.revenue, "—")}</p><p className="text-xs text-muted-foreground">Attributed revenue</p></div>
+                  <div><p className="text-lg font-semibold">{formatMoneyByCurrency(performance.revenue, workspaceCurrency)}</p><p className="text-xs text-muted-foreground">Attributed revenue</p></div>
                   <div><p className="text-lg font-semibold">{formatRoas(computeRoas(performance.spend_minor, performance.currency, performance.revenue))}</p><p className="text-xs text-muted-foreground">ROAS</p></div>
                 </CardContent>
               )}

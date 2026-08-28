@@ -206,17 +206,26 @@ export function WorkspaceTab() {
 
         <div className="space-y-1.5">
           <Label htmlFor="ws-description">Business description</Label>
-          <Textarea id="ws-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!canEdit} maxLength={2000} rows={3} />
+          <Textarea
+            id="ws-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={!canEdit}
+            maxLength={2000}
+            rows={3}
+            placeholder="e.g. We help small businesses run WhatsApp-first marketing campaigns."
+          />
+          <p className="text-xs text-muted-foreground">May be used to give StabiFlow's AI features more context about your business.</p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="ws-website">Website</Label>
-            <Input id="ws-website" value={website} onChange={(e) => setWebsite(e.target.value)} disabled={!canEdit} placeholder="https://" />
+            <Input id="ws-website" value={website} onChange={(e) => setWebsite(e.target.value)} disabled={!canEdit} placeholder="https://acme.co.za" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ws-industry">Industry</Label>
-            <Input id="ws-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} disabled={!canEdit} />
+            <Input id="ws-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} disabled={!canEdit} placeholder="e.g. Marketing Agency" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ws-timezone">Timezone</Label>
@@ -228,11 +237,11 @@ export function WorkspaceTab() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ws-contact-email">Contact email</Label>
-            <Input id="ws-contact-email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} disabled={!canEdit} />
+            <Input id="ws-contact-email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} disabled={!canEdit} placeholder="hello@acme.co.za" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ws-contact-phone">Contact phone</Label>
-            <Input id="ws-contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} />
+            <Input id="ws-contact-phone" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} disabled={!canEdit} placeholder="+27 82 000 0000" />
           </div>
         </div>
 

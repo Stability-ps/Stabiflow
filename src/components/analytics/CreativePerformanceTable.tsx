@@ -5,7 +5,7 @@ import { MediaPreview } from "@/components/content/MediaPreview";
 import type { CreativePerformanceRow } from "@/hooks/useAnalytics";
 import { formatMoneyByCurrency } from "@/lib/analytics";
 
-export function CreativePerformanceTable({ rows, canSeeRevenue }: { rows: CreativePerformanceRow[]; canSeeRevenue: boolean }) {
+export function CreativePerformanceTable({ rows, canSeeRevenue, workspaceCurrency }: { rows: CreativePerformanceRow[]; canSeeRevenue: boolean; workspaceCurrency: string }) {
   return (
     <Card>
       <CardHeader><CardTitle className="text-base">Creative performance</CardTitle></CardHeader>
@@ -39,7 +39,7 @@ export function CreativePerformanceTable({ rows, canSeeRevenue }: { rows: Creati
                   <td className="p-3">{r.conversations}</td>
                   <td className="p-3">{r.leads}</td>
                   <td className="p-3">{r.customers}</td>
-                  {canSeeRevenue && <td className="p-3">{formatMoneyByCurrency(r.revenue, "—")}</td>}
+                  {canSeeRevenue && <td className="p-3">{formatMoneyByCurrency(r.revenue, workspaceCurrency)}</td>}
                 </tr>
               ))}
             </tbody>

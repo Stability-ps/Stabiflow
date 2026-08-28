@@ -10,9 +10,13 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-3 py-4">
+        {/* BrandLogo's "full" variant is already the complete icon+wordmark
+            lockup - rendering the standalone icon next to it duplicated
+            the mark. Show exactly one brand presentation at a time: the
+            full lockup when expanded, the icon alone when collapsed. */}
         <NavLink to="/" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-          <BrandLogo variant="icon" className="h-7 w-7 shrink-0" />
-          <BrandLogo variant="full" className="h-5 w-auto group-data-[collapsible=icon]:hidden" />
+          <BrandLogo variant="icon" className="hidden h-7 w-7 shrink-0 group-data-[collapsible=icon]:block" />
+          <BrandLogo variant="full" className="h-7 w-auto group-data-[collapsible=icon]:hidden" />
         </NavLink>
       </SidebarHeader>
       <SidebarContent>

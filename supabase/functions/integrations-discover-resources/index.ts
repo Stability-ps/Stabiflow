@@ -4,11 +4,12 @@
 // and an admin wants StabiFlow to see it without reconnecting entirely.
 import { discoverAndStoreMetaResources, discoverAndStoreWhatsAppResources } from "../_shared/integration-providers/discoverAndStore.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
+    return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-stabiflow-test-harness", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
   }
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
@@ -42,7 +43,15 @@ Deno.serve(async (req: Request) => {
   const { data: tokenValue, error: tokenError } = await serviceSb.rpc("get_workspace_integration_secret", { p_integration_id: integration.id });
   if (tokenError || !tokenValue) return json(req, { error: "Stored credential is unavailable - try reconnecting" }, 409);
 
-  const mockMode = (Deno.env.get("INTEGRATIONS_META_MOCK_MODE") || "").trim().toLowerCase() === "true";
+  // Same production/test boundary as integrations-oauth-start/-callback -
+  // see testHarness.ts. A real production caller refreshing an
+  // already-connected integration must never silently receive fabricated
+  // resources either.
+  if (isBlockedMockRequest(req)) {
+    return json(req, { error: "meta_not_enabled", message: "Meta production connection is not enabled yet. Contact support to enable it." }, 403);
+  }
+
+  const mockMode = resolveMockMode(req);
   const cred = { token: tokenValue, apiVersion: envVar("INTEGRATIONS_META_GRAPH_API_VERSION") };
 
   try {

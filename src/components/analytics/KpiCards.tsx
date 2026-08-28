@@ -9,10 +9,10 @@ function Delta({ value }: { value: number | null }) {
   return <span className={`ml-1.5 text-xs font-medium ${positive ? "text-emerald-600" : "text-red-600"}`}>{positive ? "+" : ""}{value.toFixed(0)}%</span>;
 }
 
-function Kpi({ label, value, previousValue, isMoney }: { label: string; value: number | MoneyByCurrency | null; previousValue?: number | null; isMoney?: boolean }) {
+function Kpi({ label, value, previousValue, isMoney, workspaceCurrency }: { label: string; value: number | MoneyByCurrency | null; previousValue?: number | null; isMoney?: boolean; workspaceCurrency?: string }) {
   let display: string;
   if (isMoney) {
-    display = formatMoneyByCurrency(value as MoneyByCurrency, "$0.00");
+    display = formatMoneyByCurrency(value as MoneyByCurrency, workspaceCurrency as string);
   } else if (value === null) {
     display = "—";
   } else {
@@ -49,17 +49,17 @@ function CostKpi({ label, spend, count }: { label: string; spend: MoneyByCurrenc
   );
 }
 
-export function KpiCards({ kpis, previous, canSeeRevenue }: { kpis: AnalyticsKpis; previous?: AnalyticsKpis; canSeeRevenue: boolean }) {
+export function KpiCards({ kpis, previous, canSeeRevenue, workspaceCurrency }: { kpis: AnalyticsKpis; previous?: AnalyticsKpis; canSeeRevenue: boolean; workspaceCurrency: string }) {
   return (
     <div className="space-y-3">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Ad Spend" value={kpis.spend} isMoney />
+        <Kpi label="Ad Spend" value={kpis.spend} isMoney workspaceCurrency={workspaceCurrency} />
         <Kpi label="Conversations" value={kpis.conversations} previousValue={previous?.conversations} />
         <Kpi label="Leads" value={kpis.leads} previousValue={previous?.leads} />
         <Kpi label="Qualified Leads" value={kpis.qualified_leads} previousValue={previous?.qualified_leads} />
         <Kpi label="Opportunities" value={kpis.opportunities} previousValue={previous?.opportunities} />
         <Kpi label="Customers" value={kpis.customers} previousValue={previous?.customers} />
-        {canSeeRevenue && <Kpi label="Recorded Revenue" value={kpis.revenue_total} isMoney />}
+        {canSeeRevenue && <Kpi label="Recorded Revenue" value={kpis.revenue_total} isMoney workspaceCurrency={workspaceCurrency} />}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

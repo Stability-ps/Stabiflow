@@ -10,10 +10,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { useAutomations, type AutomationRow } from "@/hooks/useAutomations";
 import { setAutomationStatus, deleteAutomation, EVENT_TYPE_LABELS } from "@/lib/automations";
-import { AutomationBuilderDialog } from "@/pages/dashboard/automations/AutomationBuilderDialog";
+import { AutomationBuilderDialog, type AutomationTemplate } from "@/pages/dashboard/automations/AutomationBuilderDialog";
 import { AutomationRunsSheet } from "@/pages/dashboard/automations/AutomationRunsSheet";
 
 const STATUS_LABEL: Record<AutomationRow["status"], string> = { draft: "Draft", enabled: "Enabled", disabled: "Disabled" };
+
+// Starter examples for the empty state - every trigger/action pair here is
+// a real type in supabase/functions/_shared/automations/taxonomy.ts, never
+// invented. "Opportunity won -> Create customer" was deliberately left out:
+// there is no create_customer action type (customer creation happens
+// automatically elsewhere, not via an automation).
+const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  { name: "New conversation creates a lead", triggerEventType: "conversation.started", actionType: "create_lead" },
+  { name: "Qualified leads notify the team", triggerEventType: "lead.qualified", actionType: "create_notification" },
+  { name: "Published content notifies the team", triggerEventType: "content.published", actionType: "create_notification" },
+];
 
 export default function Automations() {
   const { currentWorkspaceId, currentMembership } = useAuth();
@@ -29,6 +40,7 @@ export default function Automations() {
 
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<AutomationRow | null>(null);
+  const [pendingTemplate, setPendingTemplate] = useState<AutomationTemplate | null>(null);
   const [runsAutomation, setRunsAutomation] = useState<AutomationRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -76,7 +88,7 @@ export default function Automations() {
           <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
         </div>
         {canCreate && (
-          <Button size="sm" onClick={() => { setEditingAutomation(null); setBuilderOpen(true); }}>
+          <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
             <Plus className="mr-1.5 h-3.5 w-3.5" /> New automation
           </Button>
         )}
@@ -86,8 +98,31 @@ export default function Automations() {
         <EmptyState
           icon={Workflow}
           title="No automations yet"
-          description="Automations react to real events in StabiFlow - a new lead, a stage change, a published post - and run deterministic actions through the same dispatchers the rest of the app uses."
-          action={canCreate ? <Button size="sm" onClick={() => { setEditingAutomation(null); setBuilderOpen(true); }}><Plus className="mr-1.5 h-3.5 w-3.5" /> New automation</Button> : undefined}
+          description="Automations save your team time by reacting to things that happen in StabiFlow - a new conversation, a lead getting qualified, a post going live - and automatically taking the next step, using the exact same rules and permissions a staff member would."
+          action={
+            canCreate ? (
+              <div className="flex flex-col items-center gap-3">
+                <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> New automation
+                </Button>
+                <div>
+                  <p className="mb-1.5 text-xs text-muted-foreground">Or start from an example:</p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {AUTOMATION_TEMPLATES.map((tpl) => (
+                      <Button
+                        key={tpl.name}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { setEditingAutomation(null); setPendingTemplate(tpl); setBuilderOpen(true); }}
+                      >
+                        {tpl.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : undefined
+          }
         />
       ) : (
         <div className="overflow-hidden rounded-lg border">
@@ -135,6 +170,7 @@ export default function Automations() {
       <AutomationBuilderDialog
         workspaceId={currentWorkspaceId}
         automation={editingAutomation}
+        template={pendingTemplate}
         open={builderOpen}
         onClose={() => setBuilderOpen(false)}
         onSaved={() => { setBuilderOpen(false); refetch(); }}

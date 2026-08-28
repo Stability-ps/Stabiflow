@@ -33,9 +33,16 @@ function stringifyValue(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-export function AutomationBuilderDialog({ workspaceId, automation, open, onClose, onSaved }: {
+// A minimal starter-example pre-fill for the empty-state "Use template"
+// buttons - reuses the exact same builder fields a user would fill in by
+// hand, never a new persistence mechanism. Only trigger/action TYPES real
+// automations already support (see taxonomy.ts).
+export type AutomationTemplate = { name: string; triggerEventType: AutomationEventType; actionType: AutomationActionType };
+
+export function AutomationBuilderDialog({ workspaceId, automation, template, open, onClose, onSaved }: {
   workspaceId: string;
   automation: AutomationRow | null; // null = creating a new automation
+  template?: AutomationTemplate | null;
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -58,6 +65,12 @@ export function AutomationBuilderDialog({ workspaceId, automation, open, onClose
       setName(automation.name);
       setTriggerEventType(automation.trigger_event_type);
       setIdleTimeoutMinutes(String(automation.idle_timeout_minutes ?? 60));
+    } else if (template) {
+      setName(template.name);
+      setTriggerEventType(template.triggerEventType);
+      setIdleTimeoutMinutes("60");
+      setConditions([]);
+      setActions([{ action_type: template.actionType, action_config: {} }]);
     } else {
       setName("");
       setTriggerEventType("lead.created");
@@ -65,7 +78,7 @@ export function AutomationBuilderDialog({ workspaceId, automation, open, onClose
       setConditions([]);
       setActions([{ action_type: "create_notification", action_config: {} }]);
     }
-  }, [open, automation]);
+  }, [open, automation, template]);
 
   useEffect(() => {
     if (!isEditing) return;
