@@ -132,6 +132,26 @@ data-retention policy for WhatsApp messages/leads/revenue records
 (currently: forever, since nothing purges anything - a real number needs
 choosing and documenting, even if generous).
 
+## Attribution / campaign remaining limitations (audited, production-completion pass)
+
+- **Per-creative conversion-count UI**: already fully built -
+  `src/components/analytics/CreativePerformanceTable.tsx`, wired into
+  Analytics, shows conversations/leads/customers/revenue per creative
+  using existing `attribution_events.creative_id` data. Not a gap.
+- **`campaign_entry_tokens`**: confirmed via full-codebase grep to have
+  zero consumers anywhere in `src/` or `supabase/functions/` - it exists
+  only in generated Supabase types, referenced by no frontend or edge
+  function code. No website/QR/landing-page entry point exists to
+  consume it. Left as documented scaffolding, not wired up, per explicit
+  instruction not to connect it merely because the table exists.
+- **Live Click-to-WhatsApp attribution verification**: `webhookMessageParser.ts`'s
+  referral-payload parsing is mock-tested only - genuinely cannot be
+  verified against a real referral payload until a real Meta ad produces
+  one, which requires Meta App Review approval first (see
+  `docs/launch-readiness/meta-app-review-package.md`). This is an
+  external blocker, not an engineering gap - do not claim live
+  verification has happened until it has.
+
 ## Everything else from the Phase K audit
 
 The full P0-P3 list from the Phase K production-readiness audit (billing,
