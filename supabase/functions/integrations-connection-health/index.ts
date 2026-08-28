@@ -13,6 +13,7 @@
 import { checkMetaAdAccountHealth, checkMetaInstagramHealth, checkMetaPageHealth, checkMetaTokenHealth } from "../_shared/integration-providers/metaDiscovery.ts";
 import { checkWhatsAppNumberHealth } from "../_shared/integration-providers/whatsappDiscovery.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import { summarizeStatus } from "../_shared/integration-providers/connectionHealthStatus.ts";
 import type { IntegrationErrorCategory } from "../_shared/integration-providers/types.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 
@@ -26,16 +27,6 @@ async function checkResource(fn: () => Promise<unknown>, type: string, id: strin
     const sanitized = sanitizeIntegrationError(error);
     return { type, id, label, healthy: false, category: sanitized.category, message: sanitized.message };
   }
-}
-
-// Maps the resource-level results into the user-facing status vocabulary
-// from instruction #8 and stores it in the existing free-text
-// last_health_check_status column (instruction #16: reuse, don't add a
-// new enum).
-function summarizeStatus(tokenHealthy: boolean, allHealthy: boolean): { status: string; message: string } {
-  if (!tokenHealthy) return { status: "reauthorization_required", message: "Your authorization has expired or was revoked. Reconnect to restore access." };
-  if (allHealthy) return { status: "healthy", message: "All connected resources are healthy." };
-  return { status: "needs_attention", message: "One or more connected resources need attention." };
 }
 
 Deno.serve(async (req: Request) => {
@@ -84,6 +75,7 @@ Deno.serve(async (req: Request) => {
   const cred = { token: tokenValue, apiVersion: envVar("INTEGRATIONS_META_GRAPH_API_VERSION") };
   const resources: ResourceHealth[] = [];
   let tokenHealthy: boolean;
+  let emptyMessage: string | null = null;
 
   if (provider === "meta") {
     const tokenHealth = await checkResource(() => checkMetaTokenHealth(cred), "token", integration.id, "Meta access token");
@@ -106,6 +98,12 @@ Deno.serve(async (req: Request) => {
     const { data: numbers } = await serviceSb.from("workspace_whatsapp_numbers").select("id, phone_number_id, display_phone_number").eq("workspace_id", workspaceId).eq("is_active", true);
     if (!numbers || numbers.length === 0) {
       tokenHealthy = true; // nothing to check against yet - not itself a token failure
+      // A connected WhatsApp integration with zero selected numbers has
+      // nothing usable - reporting "healthy" here would be a vacuous truth
+      // (an empty resources array trivially satisfies "every resource is
+      // healthy"). Surface it as a distinct, actionable state instead of
+      // letting it silently read as fully healthy.
+      emptyMessage = "No WhatsApp phone numbers found. Refresh resources or connect a number in your WhatsApp Business Account.";
     } else {
       for (const num of numbers) {
         resources.push(await checkResource(() => checkWhatsAppNumberHealth(cred, num.phone_number_id), "whatsapp_number", num.id, num.display_phone_number || num.phone_number_id));
@@ -115,7 +113,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const allHealthy = resources.every((r) => r.healthy);
-  const { status, message } = summarizeStatus(tokenHealthy, allHealthy);
+  const { status, message } = summarizeStatus(tokenHealthy, allHealthy, emptyMessage);
 
   await serviceSb
     .from("workspace_integrations")
