@@ -9,7 +9,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
-import { startIntegrationConnect, type IntegrationProvider } from "@/lib/integrations";
+import { IntegrationInvokeError, startIntegrationConnect, type IntegrationProvider } from "@/lib/integrations";
 import { useAllFacebookPages, useAllInstagramAccounts, useAllMetaAdAccounts, useAllWhatsAppNumbers, useWorkspaceIntegrations, type WorkspaceIntegrationRow } from "@/hooks/useIntegrations";
 import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
 import { MetaManagePanel } from "./integrations/MetaManagePanel";
@@ -25,6 +25,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   authorization_failure: "The provider rejected the connection. Try again.",
   meta_not_enabled: "Meta production connection is not enabled yet. Contact support to enable it.",
 };
+
+function resolveConnectErrorMessage(error: unknown): string {
+  if (error instanceof IntegrationInvokeError && error.code && ERROR_MESSAGES[error.code]) {
+    return ERROR_MESSAGES[error.code];
+  }
+  return "Unable to start integration connection. Please try again.";
+}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "never";
@@ -184,7 +191,7 @@ export default function Integrations() {
       const { url } = await startIntegrationConnect(currentWorkspaceId, provider);
       window.location.href = url;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to start connection");
+      toast.error(resolveConnectErrorMessage(error));
       setConnectingProvider(null);
     }
   };

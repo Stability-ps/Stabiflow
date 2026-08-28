@@ -1,13 +1,70 @@
 import { supabase } from "@/integrations/supabase/client";
 
+type ErrorPayload = { error?: unknown; code?: unknown; error_code?: unknown };
+
+function pickErrorCode(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const { error, code, error_code: errorCode } = payload as ErrorPayload;
+  if (typeof error === "string" && error.trim().length > 0) return error.trim();
+  if (typeof code === "string" && code.trim().length > 0) return code.trim();
+  if (typeof errorCode === "string" && errorCode.trim().length > 0) return errorCode.trim();
+  return null;
+}
+
+async function readErrorPayloadFromContext(error: unknown): Promise<unknown> {
+  const context = (error as { context?: unknown } | null)?.context;
+  if (!context || typeof context !== "object") return null;
+
+  const maybeResponse = context as { json?: () => Promise<unknown>; text?: () => Promise<string>; clone?: () => unknown };
+  const responseWithClone = typeof maybeResponse.clone === "function" ? (maybeResponse.clone() as { json?: () => Promise<unknown>; text?: () => Promise<string> }) : maybeResponse;
+
+  if (typeof responseWithClone.json === "function") {
+    try {
+      return await responseWithClone.json();
+    } catch {
+      // Ignore malformed/empty JSON responses and try text fallback.
+    }
+  }
+
+  if (typeof responseWithClone.text === "function") {
+    try {
+      const text = await responseWithClone.text();
+      if (!text) return null;
+      return JSON.parse(text) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export class IntegrationInvokeError extends Error {
+  code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = "IntegrationInvokeError";
+    this.code = code;
+  }
+}
+
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
-    const message = (data as { error?: string } | null)?.error || error.message || `${name} failed`;
-    throw new Error(message);
+    const contextPayload = await readErrorPayloadFromContext(error);
+    const errorCode = pickErrorCode(data) || pickErrorCode(contextPayload);
+    if (errorCode) {
+      throw new IntegrationInvokeError(errorCode, errorCode);
+    }
+    throw new IntegrationInvokeError(`${name} failed`);
   }
   if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
-    throw new Error((data as { error: string }).error);
+    const errorCode = pickErrorCode(data);
+    if (errorCode) {
+      throw new IntegrationInvokeError(errorCode, errorCode);
+    }
+    throw new IntegrationInvokeError(`${name} failed`);
   }
   return data as T;
 }
