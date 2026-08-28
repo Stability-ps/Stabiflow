@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthLayout } from "@/components/layout/AuthLayout";
+import { Checkbox } from "@/components/ui/checkbox";
 
 export default function Signup() {
   const { user, loading } = useAuth();
@@ -17,6 +18,7 @@ export default function Signup() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -24,6 +26,7 @@ export default function Signup() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!agreedToTerms) return;
     setSubmitting(true);
     const { error } = await supabase.auth.signUp({
       email,
@@ -74,7 +77,16 @@ export default function Signup() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <div className="flex items-start gap-2">
+              <Checkbox id="agreeToTerms" checked={agreedToTerms} onCheckedChange={(checked) => setAgreedToTerms(checked === true)} className="mt-0.5" />
+              <Label htmlFor="agreeToTerms" className="text-xs font-normal leading-snug text-muted-foreground">
+                I agree to the{" "}
+                <Link to="/legal/terms" target="_blank" rel="noreferrer" className="text-foreground underline">Terms of Service</Link>{" "}
+                and{" "}
+                <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="text-foreground underline">Privacy Policy</Link>.
+              </Label>
+            </div>
+            <Button type="submit" className="w-full" disabled={submitting || !agreedToTerms}>
               {submitting ? "Creating account..." : "Create account"}
             </Button>
           </form>

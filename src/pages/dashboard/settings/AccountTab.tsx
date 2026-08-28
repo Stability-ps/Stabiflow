@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,32 +41,46 @@ export function AccountTab() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Your account</CardTitle>
-        <CardDescription>These details are yours across every workspace you belong to.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Avatar className="h-16 w-16">
-            <AvatarFallback className="text-lg">{initials(profile?.full_name, user?.email)}</AvatarFallback>
-          </Avatar>
-          <div>
-            <p className="text-sm font-medium">{user?.email}</p>
-            <p className="text-xs text-muted-foreground">Signed in</p>
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Your account</CardTitle>
+          <CardDescription>These details are yours across every workspace you belong to.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Avatar className="h-16 w-16">
+              <AvatarFallback className="text-lg">{initials(profile?.full_name, user?.email)}</AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="text-sm font-medium">{user?.email}</p>
+              <p className="text-xs text-muted-foreground">Signed in</p>
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-1.5 max-w-sm">
-          <Label htmlFor="full-name">Full name</Label>
-          <Input id="full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Jane Dlamini" />
-        </div>
+          <div className="space-y-1.5 max-w-sm">
+            <Label htmlFor="full-name">Full name</Label>
+            <Input id="full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Jane Dlamini" />
+          </div>
 
-        <div className="flex gap-2">
-          <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
-          <Button variant="outline" onClick={() => signOut()}>Sign out</Button>
-        </div>
-      </CardContent>
-    </Card>
+          <div className="flex gap-2">
+            <Button onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+            <Button variant="outline" onClick={() => signOut()}>Sign out</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Legal</CardTitle>
+          <CardDescription>How StabiFlow handles data, and your rights.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-4 text-sm">
+          <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="underline">Privacy Policy</Link>
+          <Link to="/legal/terms" target="_blank" rel="noreferrer" className="underline">Terms of Service</Link>
+          <Link to="/legal/data-deletion" target="_blank" rel="noreferrer" className="underline">Data Deletion</Link>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
