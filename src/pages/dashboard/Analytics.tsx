@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
+import { markAnalyticsVisited } from "@/hooks/useOnboardingStatus";
 import { EmptyState } from "@/components/EmptyState";
 import { AnalyticsControls } from "@/components/analytics/AnalyticsControls";
 import { KpiCards } from "@/components/analytics/KpiCards";
@@ -20,6 +21,10 @@ import { previousComparisonRange, resolveDateRangePreset, type DateRangePreset }
 export default function Analytics() {
   const { currentWorkspaceId, hasPermission } = useAuth();
   const timezone = useWorkspaceTimezone(currentWorkspaceId);
+
+  useEffect(() => {
+    if (currentWorkspaceId) markAnalyticsVisited(currentWorkspaceId);
+  }, [currentWorkspaceId]);
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
 
