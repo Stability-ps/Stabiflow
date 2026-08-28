@@ -6,14 +6,18 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceActivity } from "@/hooks/useWorkspaceActivity";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
-import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { useAnalyticsKpis } from "@/hooks/useAnalytics";
+import { useWorkspaceIntegrations } from "@/hooks/useIntegrations";
+import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
+import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/layout/MetricCard";
 import { EmptyState } from "@/components/EmptyState";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { computeOnboardingItems, onboardingProgress } from "@/lib/onboarding";
 import { computeRoas, formatMoneyByCurrency, formatRoas, summarizeCurrency } from "@/lib/analytics";
+import { formatActivityAction } from "@/lib/activityPresentation";
 import { resolveDateRangePreset } from "@/lib/analyticsDate";
 
 // Same authoritative analytics read model /analytics uses (get_analytics_kpis)
@@ -34,9 +38,66 @@ export default function Overview() {
   const kpisQuery = useAnalyticsKpis(canView ? currentWorkspaceId : null, range);
   const kpis = kpisQuery.data;
 
+  // Reused exactly as CampaignsList/Inbox already check connection state -
+  // no second, independently-derived notion of "connected".
+  const integrationsQuery = useWorkspaceIntegrations(currentWorkspaceId);
+  const integrations = integrationsQuery.data || [];
+  const metaConnected = integrations.some((i) => i.provider === "meta" && i.status === "connected");
+  const whatsappConnected = integrations.some((i) => i.provider === "whatsapp" && i.status === "connected");
+
+  const onboardingStatusQuery = useOnboardingStatus(currentWorkspaceId);
+  const onboardingComplete = useMemo(() => {
+    if (!onboardingStatusQuery.data) return false;
+    const items = computeOnboardingItems(onboardingStatusQuery.data);
+    const { completed, total } = onboardingProgress(items);
+    return completed === total;
+  }, [onboardingStatusQuery.data]);
+
   const spendTotal = kpis ? summarizeCurrency(kpis.spend) : null;
   const revenueTotal = kpis ? summarizeCurrency(kpis.revenue_attributed) : null;
   const roas = kpis && spendTotal?.kind === "single" ? computeRoas(spendTotal.amountMinor, spendTotal.currency, kpis.revenue_attributed) : null;
+
+  // "Established" = the workspace has genuinely started using StabiFlow
+  // (real conversations/leads/customers/spend/revenue), independent of
+  // whether every onboarding checklist item happens to be ticked. A
+  // workspace with real activity should lead with its KPIs even if, say,
+  // nobody's tried Flow AI yet; a brand-new workspace should lead with
+  // "what to do next" even if onboarding is technically incomplete for
+  // an unrelated reason.
+  const hasRealActivity = !!kpis && (
+    kpis.conversations > 0 ||
+    kpis.qualified_leads > 0 ||
+    kpis.customers > 0 ||
+    spendTotal?.kind === "single" ||
+    revenueTotal?.kind === "single"
+  );
+  const showOnboardingFirst = !onboardingComplete && !hasRealActivity;
+
+  const kpiGrid = (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {kpis ? (
+        <>
+          <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage="No campaign data yet" value={formatMoneyByCurrency(kpis.spend, workspaceCurrency)} />
+          <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="No conversations yet" value={String(kpis.conversations)} />
+          <MetricCard icon={Users} label="Qualified leads (30d)" emptyMessage="No leads yet" value={String(kpis.qualified_leads)} />
+          <MetricCard icon={DollarSign} label="Customers (30d)" emptyMessage="No customers yet" value={String(kpis.customers)} />
+          {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No revenue recorded yet" value={revenueTotal ? formatMoneyByCurrency(kpis.revenue_attributed, workspaceCurrency) : undefined} />}
+          {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="Not enough data yet" value={roas ? formatRoas(roas) : undefined} />}
+        </>
+      ) : (
+        <>
+          <MetricCard icon={Wallet} label="Campaign spend" emptyMessage={canView ? "Loading..." : "No campaign data yet"} />
+          <MetricCard icon={MessageSquare} label="Conversations" emptyMessage="No conversations yet" />
+          <MetricCard icon={Users} label="Qualified leads" emptyMessage="No leads yet" />
+          <MetricCard icon={DollarSign} label="Customers" emptyMessage="No customers yet" />
+          <MetricCard icon={TrendingUp} label="Revenue" emptyMessage="No revenue recorded yet" />
+          <MetricCard icon={BarChart3} label="ROAS" emptyMessage="Not enough data yet" />
+        </>
+      )}
+    </div>
+  );
+
+  const onboardingBlock = <OnboardingChecklist workspaceId={currentWorkspaceId} />;
 
   return (
     <div className="space-y-6">
@@ -47,52 +108,51 @@ export default function Overview() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {kpis ? (
-          <>
-            <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage="No campaign data yet" value={formatMoneyByCurrency(kpis.spend, workspaceCurrency)} />
-            <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="No conversations yet" value={String(kpis.conversations)} />
-            <MetricCard icon={Users} label="Qualified leads (30d)" emptyMessage="No leads yet" value={String(kpis.qualified_leads)} />
-            <MetricCard icon={DollarSign} label="Customers (30d)" emptyMessage="No customers yet" value={String(kpis.customers)} />
-            {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No revenue recorded yet" value={revenueTotal ? formatMoneyByCurrency(kpis.revenue_attributed, workspaceCurrency) : undefined} />}
-            {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="Not enough data yet" value={roas ? formatRoas(roas) : undefined} />}
-          </>
-        ) : (
-          <>
-            <MetricCard icon={Wallet} label="Campaign spend" emptyMessage={canView ? "Loading..." : "No campaign data yet"} />
-            <MetricCard icon={MessageSquare} label="Conversations" emptyMessage="No conversations yet" />
-            <MetricCard icon={Users} label="Qualified leads" emptyMessage="No leads yet" />
-            <MetricCard icon={DollarSign} label="Customers" emptyMessage="No customers yet" />
-            <MetricCard icon={TrendingUp} label="Revenue" emptyMessage="No revenue recorded yet" />
-            <MetricCard icon={BarChart3} label="ROAS" emptyMessage="Not enough data yet" />
-          </>
-        )}
-      </div>
+      {showOnboardingFirst && onboardingBlock}
 
-      <OnboardingChecklist workspaceId={currentWorkspaceId} />
+      {kpiGrid}
+
+      {!showOnboardingFirst && onboardingBlock}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
-            <EmptyState
-              icon={BarChart3}
-              title="No campaign data yet"
-              description="Connect Meta and launch a campaign to see performance here."
-              action={<Button size="sm" onClick={() => navigate("/campaigns/new")}>Create a campaign</Button>}
-            />
+            {!metaConnected ? (
+              <EmptyState
+                icon={BarChart3}
+                title="No campaign data yet"
+                description="Connect your Meta account to launch and track campaigns."
+                action={<Button size="sm" onClick={() => navigate("/integrations")}>Go to Integrations</Button>}
+              />
+            ) : (
+              <EmptyState
+                icon={BarChart3}
+                title="No campaign data yet"
+                description="Launch a campaign to see performance here."
+                action={<Button size="sm" onClick={() => navigate("/campaigns/new")}>Create a campaign</Button>}
+              />
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
-            <EmptyState
-              icon={MessageSquare}
-              title="No conversations yet"
-              description="Connect WhatsApp to start receiving conversations here."
-              action={<Button size="sm" onClick={() => navigate("/integrations")}>Connect WhatsApp</Button>}
-            />
+            {!whatsappConnected ? (
+              <EmptyState
+                icon={MessageSquare}
+                title="No conversations yet"
+                description="Connect WhatsApp to start receiving conversations here."
+                action={<Button size="sm" onClick={() => navigate("/integrations")}>Connect WhatsApp</Button>}
+              />
+            ) : (
+              <EmptyState
+                icon={MessageSquare}
+                title="Waiting for your first conversation"
+                description="StabiFlow is connected and ready - new WhatsApp messages will appear here automatically."
+              />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -103,7 +163,7 @@ export default function Overview() {
           <EmptyState
             icon={Sparkles}
             title="No recommendations yet"
-            description="Flow AI needs campaign and conversion data before it can suggest anything - recommendations always require your approval before anything changes."
+            description="Flow AI needs campaign and conversion data before it can suggest anything - it reads your workspace data and recommends actions, but never changes anything on its own."
             action={<Button size="sm" variant="outline" onClick={() => navigate("/flow-ai")}>Try Flow AI</Button>}
           />
         </CardContent>
@@ -122,7 +182,7 @@ export default function Overview() {
             <ul className="space-y-2">
               {activityQuery.data.map((row) => (
                 <li key={row.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
-                  <span>{row.action.replace(/_/g, " ")}</span>
+                  <span>{formatActivityAction(row.action)}</span>
                   <span className="text-xs text-muted-foreground">{new Date(row.created_at).toLocaleString()}</span>
                 </li>
               ))}
