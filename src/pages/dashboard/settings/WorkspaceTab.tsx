@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceProfile } from "@/hooks/useWorkspaceProfile";
 import { workspaceRoleRank } from "@/lib/workspaceRoles";
@@ -15,12 +19,15 @@ import { slugify } from "@/lib/slug";
 import {
   getWorkspaceLogoUrl, isWorkspaceSlugAvailable, updateWorkspaceIdentity, updateWorkspaceProfile, uploadWorkspaceLogo,
 } from "@/lib/workspaceProfile";
+import { deleteWorkspace, exportWorkspaceData } from "@/lib/workspaceLifecycle";
 
 export function WorkspaceTab() {
   const { currentWorkspaceId, currentMembership, refreshMemberships } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data, isLoading } = useWorkspaceProfile(currentWorkspaceId);
   const canEdit = workspaceRoleRank(currentMembership?.role) >= workspaceRoleRank("admin");
+  const isOwner = workspaceRoleRank(currentMembership?.role) >= workspaceRoleRank("owner");
 
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -36,6 +43,10 @@ export function WorkspaceTab() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slugCheckToken = useRef(0);
 
@@ -113,9 +124,41 @@ export function WorkspaceTab() {
     }
   };
 
+  const handleExport = async () => {
+    if (!currentWorkspaceId || !data) return;
+    setExporting(true);
+    try {
+      await exportWorkspaceData(currentWorkspaceId, data.workspace.slug);
+      toast.success("Export downloaded");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to export workspace data");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!currentWorkspaceId) return;
+    setDeleting(true);
+    try {
+      await deleteWorkspace(currentWorkspaceId, deleteConfirmText.trim());
+      setDeleteDialogOpen(false);
+      await refreshMemberships(); // picks the next remaining workspace, or null if none are left
+      toast.success("Workspace deleted");
+      navigate("/", { replace: true }); // RequireWorkspace sends us to /create-workspace if none remain
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete workspace");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (isLoading || !data) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
 
+  const deleteConfirmMatches = deleteConfirmText.trim() === data.workspace.name || deleteConfirmText.trim() === data.workspace.slug;
+
   return (
+    <div className="space-y-6">
     <Card>
       <CardHeader>
         <CardTitle>Workspace profile</CardTitle>
@@ -200,5 +243,63 @@ export function WorkspaceTab() {
         )}
       </CardContent>
     </Card>
+
+    {isOwner && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Data export</CardTitle>
+          <CardDescription>Download a ZIP of your workspace profile, members, conversations, leads, opportunities, customers, attribution, revenue, content, campaigns, automations, and AI conversation history as CSV/JSON files. Never includes provider tokens or other secrets.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {exporting ? "Preparing export..." : "Export workspace data"}
+          </Button>
+        </CardContent>
+      </Card>
+    )}
+
+    {isOwner && (
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle className="text-destructive">Danger zone</CardTitle>
+          <CardDescription>
+            Permanently delete this workspace and everything in it - content, campaigns, conversations, leads, pipelines, opportunities,
+            customers, attribution, revenue, automations, integrations, and uploaded files. This cannot be undone. Export your data first if you want a copy.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="destructive" onClick={() => setDeleteDialogOpen(true)}>Delete workspace</Button>
+        </CardContent>
+      </Card>
+    )}
+
+    <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setDeleteConfirmText(""); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete "{data.workspace.name}"?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This permanently deletes this workspace's content, campaigns, conversations, leads, pipelines, opportunities, customers,
+            attribution, revenue, automations, connected integrations, and uploaded files. This cannot be undone.
+            Type the workspace name (<strong>{data.workspace.name}</strong>) or its URL slug (<strong>{data.workspace.slug}</strong>) to confirm.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-1.5">
+          <Label htmlFor="ws-delete-confirm" className="sr-only">Confirm workspace name or slug</Label>
+          <Input id="ws-delete-confirm" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder={data.workspace.name} autoComplete="off" />
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => { e.preventDefault(); handleDelete(); }}
+            disabled={!deleteConfirmMatches || deleting}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {deleting ? "Deleting..." : "Delete workspace permanently"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </div>
   );
 }
