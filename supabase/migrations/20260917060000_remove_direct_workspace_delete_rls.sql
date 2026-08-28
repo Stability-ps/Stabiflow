@@ -1,0 +1,23 @@
+-- Launch-completion, security fix (production-hardening audit). The
+-- workspaces_delete_owner RLS policy (20260824060300_workspace_core_rls.sql)
+-- predates the workspace-delete edge function built in this launch-
+-- completion pass and lets any workspace owner issue a raw
+-- `DELETE FROM workspaces WHERE id = ...` directly through the normal
+-- authenticated client SDK - completely bypassing the audited deletion
+-- flow: no Vault secret cleanup (orphaned tokens in vault.secrets
+-- forever), no Storage object cleanup (orphaned files in content-media/
+-- workspace-assets/inbox-media forever), no platform_deletion_log audit
+-- record, no name-confirmation safety check. The cascade FKs would still
+-- correctly wipe every tenant-owned DB row, so this was never a
+-- cross-tenant data leak - but it silently defeats the entire point of
+-- building a safe, audited deletion flow, since the unsafe path remained
+-- equally reachable the whole time. Confirmed via grep that no frontend
+-- code anywhere calls .from("workspaces").delete() directly - the new
+-- Settings UI (src/lib/workspaceLifecycle.ts) already calls the
+-- workspace-delete edge function exclusively, so removing this policy
+-- breaks nothing legitimate.
+--
+-- Workspace deletion is now exclusively a service-role operation,
+-- performed only by the workspace-delete edge function after its own
+-- permission check (workspace.delete, owner-only) and cleanup sequence.
+drop policy if exists "workspaces_delete_owner" on public.workspaces;

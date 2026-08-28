@@ -81,6 +81,20 @@ describe("Workspace data export + deletion (release blocker)", () => {
     expect(wrong.status).toBe(400);
   });
 
+  it("REGRESSION: the owner cannot bypass the audited deletion flow with a raw client-side DELETE against workspaces - only the workspace-delete edge function may remove a workspace row", async () => {
+    // workspaces_delete_owner (the pre-existing RLS policy this asserted
+    // against) was removed in 20260917060000_remove_direct_workspace_delete_rls.sql
+    // specifically because it let an owner skip Vault/Storage cleanup and
+    // the platform_deletion_log audit trail entirely. A PostgREST DELETE
+    // matching zero rows (no policy grants access) returns no error and
+    // an empty data array, not a thrown error - so the only reliable
+    // proof is that the row still exists afterward.
+    const { error } = await ownerTenant.client.from("workspaces").delete().eq("id", ownerTenant.workspaceId);
+    void error;
+    const { data: stillExists } = await admin.from("workspaces").select("id").eq("id", ownerTenant.workspaceId).maybeSingle();
+    expect(stillExists?.id).toBe(ownerTenant.workspaceId);
+  });
+
   it("export never contains the raw provider secret value, even when the workspace has a real connected integration", async () => {
     const integrationId = await seedWorkspaceIntegration(ownerTenant.workspaceId, "whatsapp");
     await admin.rpc("set_workspace_integration_secret", { p_integration_id: integrationId, p_secret: SECRET_VALUE });
