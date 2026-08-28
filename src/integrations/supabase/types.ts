@@ -2854,6 +2854,7 @@ export type Database = {
           created_at: string
           full_name: string | null
           id: string
+          is_platform_operator: boolean
           updated_at: string
         }
         Insert: {
@@ -2861,6 +2862,7 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id: string
+          is_platform_operator?: boolean
           updated_at?: string
         }
         Update: {
@@ -2868,9 +2870,52 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          is_platform_operator?: boolean
           updated_at?: string
         }
         Relationships: []
+      }
+      platform_operator_actions: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          operator_user_id: string
+          reason: string
+          workspace_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          operator_user_id: string
+          reason: string
+          workspace_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          operator_user_id?: string
+          reason?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_operator_actions_operator_user_id_fkey"
+            columns: ["operator_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_operator_actions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       revenue_events: {
         Row: {
@@ -3079,6 +3124,8 @@ export type Database = {
           id: string
           limits: Json
           plan: string
+          status: string
+          trial_ends_at: string | null
           updated_at: string
           workspace_id: string
         }
@@ -3087,6 +3134,8 @@ export type Database = {
           id?: string
           limits?: Json
           plan?: string
+          status?: string
+          trial_ends_at?: string | null
           updated_at?: string
           workspace_id: string
         }
@@ -3095,6 +3144,8 @@ export type Database = {
           id?: string
           limits?: Json
           plan?: string
+          status?: string
+          trial_ends_at?: string | null
           updated_at?: string
           workspace_id?: string
         }
