@@ -87,9 +87,10 @@ function ConnectedIntegrationCard({ provider, integration, resourceCounts, onMan
   );
 }
 
-function AvailableIntegrationCard({ provider, description, canConnect, onConnect, connecting }: {
+function AvailableIntegrationCard({ provider, description, unlocks, canConnect, onConnect, connecting }: {
   provider: IntegrationProvider;
   description: string;
+  unlocks: string[];
   canConnect: boolean;
   onConnect: () => void;
   connecting: boolean;
@@ -107,7 +108,15 @@ function AvailableIntegrationCard({ provider, description, canConnect, onConnect
         </CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
+        <ul className="space-y-1 text-xs text-muted-foreground">
+          {unlocks.map((item) => (
+            <li key={item} className="flex items-start gap-1.5">
+              <span aria-hidden="true" className="mt-0.5">·</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
         <Button size="sm" onClick={onConnect} disabled={!canConnect || connecting}>
           {connecting ? "Connecting..." : "Connect"}
         </Button>
@@ -254,7 +263,14 @@ export default function Integrations() {
           {!metaIntegration && (
             <AvailableIntegrationCard
               provider="meta"
-              description="Facebook Pages, Instagram accounts, and Meta Ad Accounts."
+              description="Connect to publish content, run campaigns, and track advertising performance."
+              unlocks={[
+                "Facebook Pages and Instagram accounts",
+                "Meta Ad Accounts",
+                "Content publishing to Facebook and Instagram",
+                "Campaigns - build, publish, and manage ads",
+                "Advertising performance and spend tracking",
+              ]}
               canConnect={canConnect}
               connecting={connectingProvider === "meta"}
               onConnect={() => handleConnect("meta")}
@@ -263,7 +279,13 @@ export default function Integrations() {
           {!whatsappIntegration && (
             <AvailableIntegrationCard
               provider="whatsapp"
-              description="WhatsApp Business Account and phone numbers."
+              description="Connect to receive and reply to customer conversations."
+              unlocks={[
+                "Customer conversations in the Inbox",
+                "AI-assisted replies, with human takeover any time",
+                "Turn conversations into leads automatically",
+                "Approved-template messaging outside the 24-hour window",
+              ]}
               canConnect={canConnect}
               connecting={connectingProvider === "whatsapp"}
               onConnect={() => handleConnect("whatsapp")}
