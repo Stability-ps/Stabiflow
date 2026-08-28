@@ -98,8 +98,24 @@ describe("Platform operator authorization + workspace suspension (release blocke
   });
 
   it("suspension cannot be bypassed by a direct table update from the workspace owner (protected by the workspace_billing_protect_status trigger)", async () => {
+    // Must actually change the status value for the trigger's `is
+    // distinct from` check to fire - suspend it first via the operator
+    // path (the only legitimate writer), THEN attempt the client-side
+    // bypass, so this genuinely exercises the trigger rather than a
+    // same-value no-op update that never reaches the exception branch.
+    const { data: session } = await operatorUser.client.auth.getSession();
+    const opToken = session.session!.access_token;
+    const suspend = await callOperator(opToken, { action: "suspend_workspace", workspace_id: workspace.workspaceId, reason: "trigger-bypass test setup" });
+    expect(suspend.status).toBe(200);
+
     const { error } = await workspace.client.from("workspace_billing").update({ status: "active" }).eq("workspace_id", workspace.workspaceId);
     expect(error).toBeTruthy();
+
+    const { data: after } = await admin.from("workspace_billing").select("status").eq("workspace_id", workspace.workspaceId).single();
+    expect(after!.status).toBe("suspended");
+
+    const unsuspend = await callOperator(opToken, { action: "unsuspend_workspace", workspace_id: workspace.workspaceId, reason: "trigger-bypass test cleanup" });
+    expect(unsuspend.status).toBe(200);
   });
 
   it("suspending a workspace blocks Flow AI for THAT workspace only - reads and other workspaces remain unaffected", async () => {
