@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { useLead, usePipelineStages } from "@/hooks/useLeads";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/leads";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
 import { RevenueSection } from "@/components/attribution/RevenueSection";
+import { CustomerDetail } from "@/pages/dashboard/leads/CustomerDetail";
 
 const LEAD_STATUS_TONE: Record<string, string> = {
   active: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
@@ -34,10 +35,15 @@ const OPPORTUNITY_STATUS_TONE: Record<string, string> = {
   lost: "bg-muted text-muted-foreground",
 };
 
-function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRevenue }: { workspaceId: string; opportunityId: string; leadId: string; canRecordRevenue: boolean }) {
+function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRevenue, onViewCustomer }: { workspaceId: string; opportunityId: string; leadId: string; canRecordRevenue: boolean; onViewCustomer: (customerId: string) => void }) {
   const { data: customer } = useCustomerForOpportunity(opportunityId);
   return (
-    <RevenueSection workspaceId={workspaceId} opportunityId={opportunityId} customerId={customer?.id ?? null} leadId={leadId} canRecord={canRecordRevenue} />
+    <div className="space-y-1">
+      {customer && (
+        <Button size="sm" variant="ghost" className="h-6 px-1 text-[11px]" onClick={() => onViewCustomer(customer.id)}>View customer: {customer.name}</Button>
+      )}
+      <RevenueSection workspaceId={workspaceId} opportunityId={opportunityId} customerId={customer?.id ?? null} leadId={leadId} canRecord={canRecordRevenue} />
+    </div>
   );
 }
 
@@ -67,6 +73,7 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
   const [showLostDialog, setShowLostDialog] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [newOpportunityTitle, setNewOpportunityTitle] = useState("");
+  const [customerSheetId, setCustomerSheetId] = useState<string | null>(null);
   const [showOpportunityForm, setShowOpportunityForm] = useState(!!autoOpenOpportunityForm);
 
   const invalidate = () => {
@@ -345,7 +352,7 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
                 <Button size="sm" variant="outline" className="mt-1 h-7 px-2" onClick={() => handleReopenOpportunity(o.id)} disabled={busy}>Reopen</Button>
               )}
               {o.status === "won" && (
-                <WonOpportunityRevenue workspaceId={workspaceId} opportunityId={o.id} leadId={leadId} canRecordRevenue={canRecordRevenue} />
+                <WonOpportunityRevenue workspaceId={workspaceId} opportunityId={o.id} leadId={leadId} canRecordRevenue={canRecordRevenue} onViewCustomer={setCustomerSheetId} />
               )}
             </div>
           ))}
@@ -378,6 +385,10 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet open={!!customerSheetId} onOpenChange={(v) => { if (!v) setCustomerSheetId(null); }}>
+        {customerSheetId && <CustomerDetail workspaceId={workspaceId} customerId={customerSheetId} canRecordRevenue={canRecordRevenue} />}
+      </Sheet>
     </SheetContent>
   );
 }

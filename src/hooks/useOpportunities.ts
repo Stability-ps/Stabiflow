@@ -81,13 +81,50 @@ export function useOpportunities(workspaceId: string | null) {
   return query;
 }
 
+export type CustomerRow = {
+  id: string;
+  lead_id: string | null;
+  opportunity_id: string | null;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  company_name: string | null;
+  customer_since: string;
+};
+
+const CUSTOMER_COLUMNS = "id, lead_id, opportunity_id, name, phone, email, company_name, customer_since";
+
 export function useCustomerForOpportunity(opportunityId: string | null) {
   return useQuery({
     queryKey: ["customer", "opportunity", opportunityId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("customers").select("id, name, phone, email, company_name, customer_since").eq("opportunity_id", opportunityId as string).maybeSingle();
+    queryFn: async (): Promise<CustomerRow | null> => {
+      const { data, error } = await supabase.from("customers").select(CUSTOMER_COLUMNS).eq("opportunity_id", opportunityId as string).maybeSingle();
       if (error) throw new Error(error.message);
-      return data;
+      return data as CustomerRow | null;
+    },
+    enabled: !!opportunityId,
+  });
+}
+
+export function useCustomer(customerId: string | null) {
+  return useQuery({
+    queryKey: ["customer", customerId],
+    queryFn: async (): Promise<CustomerRow | null> => {
+      const { data, error } = await supabase.from("customers").select(CUSTOMER_COLUMNS).eq("id", customerId as string).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as CustomerRow | null;
+    },
+    enabled: !!customerId,
+  });
+}
+
+export function useOpportunity(opportunityId: string | null) {
+  return useQuery({
+    queryKey: ["opportunity", opportunityId],
+    queryFn: async (): Promise<OpportunityRow | null> => {
+      const { data, error } = await supabase.from("opportunities").select(OPPORTUNITY_COLUMNS).eq("id", opportunityId as string).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as OpportunityRow | null;
     },
     enabled: !!opportunityId,
   });
