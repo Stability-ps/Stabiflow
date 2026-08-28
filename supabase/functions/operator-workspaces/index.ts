@@ -53,7 +53,12 @@ Deno.serve(async (req: Request) => {
   if (typeof action !== "string" || !VALID_ACTIONS.has(action)) return json(req, { error: "Unknown action" }, 400);
 
   if (action === "search_workspaces") {
-    const query = typeof body.query === "string" ? body.query.trim() : "";
+    // Strip characters meaningful to PostgREST's own filter grammar
+    // (",", "(", ")") before interpolating into .or() - otherwise a
+    // caller could inject additional filter clauses of their own
+    // choosing rather than just widening their ilike match.
+    const rawQuery = typeof body.query === "string" ? body.query.trim() : "";
+    const query = rawQuery.replace(/[,()]/g, "");
     let q = serviceSb.from("workspaces").select("id, name, slug, created_at").order("created_at", { ascending: false }).limit(25);
     if (query) q = q.or(`name.ilike.%${query}%,slug.ilike.%${query}%`);
     const { data, error } = await q;
