@@ -6,6 +6,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceActivity } from "@/hooks/useWorkspaceActivity";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
+import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { useAnalyticsKpis } from "@/hooks/useAnalytics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export default function Overview() {
   const { currentMembership, currentWorkspaceId, hasPermission } = useAuth();
   const activityQuery = useWorkspaceActivity(currentWorkspaceId);
   const timezone = useWorkspaceTimezone(currentWorkspaceId);
+  const workspaceCurrency = useWorkspaceCurrency(currentWorkspaceId);
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
 
@@ -48,11 +50,11 @@ export default function Overview() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {kpis ? (
           <>
-            <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage="No campaign data yet" value={formatMoneyByCurrency(kpis.spend)} />
+            <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage="No campaign data yet" value={formatMoneyByCurrency(kpis.spend, workspaceCurrency)} />
             <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="No conversations yet" value={String(kpis.conversations)} />
             <MetricCard icon={Users} label="Qualified leads (30d)" emptyMessage="No leads yet" value={String(kpis.qualified_leads)} />
             <MetricCard icon={DollarSign} label="Customers (30d)" emptyMessage="No customers yet" value={String(kpis.customers)} />
-            {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No revenue recorded yet" value={revenueTotal ? formatMoneyByCurrency(kpis.revenue_attributed) : undefined} />}
+            {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No revenue recorded yet" value={revenueTotal ? formatMoneyByCurrency(kpis.revenue_attributed, workspaceCurrency) : undefined} />}
             {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="Not enough data yet" value={roas ? formatRoas(roas) : undefined} />}
           </>
         ) : (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
+import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { markAnalyticsVisited } from "@/hooks/useOnboardingStatus";
 import { EmptyState } from "@/components/EmptyState";
 import { AnalyticsControls } from "@/components/analytics/AnalyticsControls";
@@ -21,6 +22,7 @@ import { previousComparisonRange, resolveDateRangePreset, type DateRangePreset }
 export default function Analytics() {
   const { currentWorkspaceId, hasPermission } = useAuth();
   const timezone = useWorkspaceTimezone(currentWorkspaceId);
+  const workspaceCurrency = useWorkspaceCurrency(currentWorkspaceId);
 
   useEffect(() => {
     if (currentWorkspaceId) markAnalyticsVisited(currentWorkspaceId);
@@ -85,16 +87,17 @@ export default function Analytics() {
         <EmptyState icon={BarChart3} title="Unable to load analytics" description="Something went wrong loading analytics for this workspace. Try again shortly." />
       ) : kpisQuery.data ? (
         <>
-          <KpiCards kpis={kpisQuery.data} previous={previousKpisQuery.data} canSeeRevenue={canSeeRevenue} />
+          <KpiCards kpis={kpisQuery.data} previous={previousKpisQuery.data} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
           <FunnelSection kpis={kpisQuery.data} />
-          {canSeeRevenue && <RevenueAnalyticsSection kpis={kpisQuery.data} />}
+          {canSeeRevenue && <RevenueAnalyticsSection kpis={kpisQuery.data} workspaceCurrency={workspaceCurrency} />}
           <CampaignPerformanceTable
             rows={campaignsQuery.data || []}
             canSeeRevenue={canSeeRevenue}
             attributionModel={attributionModel}
             preset={preset}
+            workspaceCurrency={workspaceCurrency}
           />
-          <CreativePerformanceTable rows={creativesQuery.data || []} canSeeRevenue={canSeeRevenue} />
+          <CreativePerformanceTable rows={creativesQuery.data || []} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
           <div className="grid gap-4 lg:grid-cols-2">
             <SourceBreakdownSection rows={sourcesQuery.data || []} />
             {whatsappQuery.data && <WhatsAppAnalyticsSection data={whatsappQuery.data} />}

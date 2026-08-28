@@ -43,11 +43,12 @@ function downloadCsv(rows: CampaignPerformanceRow[], canSeeRevenue: boolean, att
   URL.revokeObjectURL(url);
 }
 
-export function CampaignPerformanceTable({ rows, canSeeRevenue, attributionModel, preset }: {
+export function CampaignPerformanceTable({ rows, canSeeRevenue, attributionModel, preset, workspaceCurrency }: {
   rows: CampaignPerformanceRow[];
   canSeeRevenue: boolean;
   attributionModel: AttributionModel;
   preset: DateRangePreset;
+  workspaceCurrency: string;
 }) {
   return (
     <Card>
@@ -95,7 +96,7 @@ export function CampaignPerformanceTable({ rows, canSeeRevenue, attributionModel
                     <td className="p-3">{r.opportunities}</td>
                     <td className="p-3">{r.customers}</td>
                     <td className="p-3">{costPerLead === null ? "—" : formatMoney(costPerLead, r.currency)}</td>
-                    {canSeeRevenue && <td className="p-3">{formatMoneyByCurrency(r.revenue, "—")}</td>}
+                    {canSeeRevenue && <td className="p-3">{formatMoneyByCurrency(r.revenue, workspaceCurrency)}</td>}
                     {canSeeRevenue && <td className="p-3">{formatRoas(roas)}</td>}
                   </tr>
                 );

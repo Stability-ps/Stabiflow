@@ -40,13 +40,69 @@ describe("summarizeCurrency / formatCurrencyTotal", () => {
     expect(result.kind).toBe("mixed");
   });
   it("formats a mixed-currency total as an explicit mixed state, not a number", () => {
-    const text = formatCurrencyTotal({ kind: "mixed", currencies: ["USD", "ZAR"] });
+    const text = formatCurrencyTotal({ kind: "mixed", currencies: ["USD", "ZAR"] }, "USD");
     expect(text).toMatch(/mixed/i);
     expect(text).toMatch(/USD/);
     expect(text).toMatch(/ZAR/);
   });
+
+  // Currency-correctness regression suite (post-launch UI polish): a
+  // workspace configured in ZAR must never see a hardcoded "$0.00" for a
+  // genuinely empty money value, and real per-row currency data (e.g. a
+  // Meta ad account billed in USD) must never be silently relabeled into
+  // the workspace's own currency - formatting and conversion are
+  // different concepts, and this suite proves both halves independently.
+  describe("workspace-currency correctness", () => {
+    it("an empty total (no data at all) formats as a real ZERO in the WORKSPACE's currency, never a hardcoded $0.00", () => {
+      const zar = formatMoneyByCurrency([], "ZAR");
+      expect(zar).not.toMatch(/^\$/); // never a bare dollar sign for a ZAR workspace
+      expect(zar).toMatch(/R|ZAR/);
+      expect(zar).toMatch(/0/);
+    });
+
+    it("USD workspace: an empty total formats as a real zero in USD", () => {
+      const usd = formatMoneyByCurrency([], "USD");
+      expect(usd).toMatch(/\$|USD/);
+      expect(usd).toMatch(/0/);
+    });
+
+    it("a third currency (GBP) works the same way - not a fragile two-currency special case", () => {
+      const gbp = formatMoneyByCurrency([], "GBP");
+      expect(gbp).toMatch(/£|GBP/);
+      expect(gbp).toMatch(/0/);
+    });
+
+    it("REGRESSION: real single-currency data is NEVER relabeled into the workspace's currency - a USD-denominated ad account's spend stays USD even in a ZAR workspace", () => {
+      const text = formatMoneyByCurrency([{ currency: "USD", amount_minor: 150000 }], "ZAR");
+      expect(text).toMatch(/1[.,\s]?500/); // the real amount
+      expect(text).toMatch(/\$|USD/); // the REAL provider currency
+      expect(text).not.toMatch(/R\s?1[.,\s]?500/); // never silently shown as ZAR
+    });
+
+    it("REGRESSION: real ZAR-denominated data stays ZAR even when passed a different workspace currency as the empty-fallback (never reachable in practice, but proves single-currency data always wins over the fallback param)", () => {
+      const text = formatMoneyByCurrency([{ currency: "ZAR", amount_minor: 125000 }], "USD");
+      expect(text).toMatch(/R|ZAR/);
+      expect(text).not.toMatch(/^\$/);
+    });
+
+    it("mixed-currency safeguard is unaffected by the workspace-currency parameter - still reports mixed, never sums or picks one arbitrarily", () => {
+      const text = formatMoneyByCurrency([{ currency: "USD", amount_minor: 100 }, { currency: "ZAR", amount_minor: 200 }], "ZAR");
+      expect(text).toMatch(/mixed/i);
+      expect(text).toMatch(/USD/);
+      expect(text).toMatch(/ZAR/);
+    });
+
+    it("simulates workspace switching: the same empty total formats differently per workspace, with no stale state carried between calls", () => {
+      const zar = formatMoneyByCurrency([], "ZAR");
+      const usd = formatMoneyByCurrency([], "USD");
+      const zarAgain = formatMoneyByCurrency([], "ZAR");
+      expect(zar).toBe(zarAgain); // pure function - switching back gives the identical result, nothing cached/stale
+      expect(zar).not.toBe(usd);
+    });
+  });
+
   it("formatMoneyByCurrency renders a single-currency total using real currency formatting (locale-independent check - Intl.NumberFormat's exact glyphs vary by runtime locale)", () => {
-    const text = formatMoneyByCurrency([{ currency: "USD", amount_minor: 150000 }]);
+    const text = formatMoneyByCurrency([{ currency: "USD", amount_minor: 150000 }], "ZAR");
     expect(text).toMatch(/1[.,\s]?500/); // the amount, in whatever grouping/decimal glyphs this runtime's default locale uses
     expect(text).toMatch(/\$|USD/);
   });

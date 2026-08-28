@@ -55,14 +55,19 @@ export function summarizeCurrency(rows: MoneyByCurrency): CurrencyTotal {
   return { kind: "mixed", currencies: rows.map((r) => r.currency) };
 }
 
-export function formatCurrencyTotal(total: CurrencyTotal, emptyLabel = "$0.00"): string {
-  if (total.kind === "empty") return emptyLabel;
+// workspaceCurrency is required, not defaulted - an "empty" total has no
+// real per-row currency to preserve (there's no data at all), so the only
+// currency-correct thing to show for it is the WORKSPACE's own configured
+// currency, never a hardcoded "$0.00" that silently assumes USD for every
+// tenant regardless of what they actually configured in Settings.
+export function formatCurrencyTotal(total: CurrencyTotal, workspaceCurrency: string): string {
+  if (total.kind === "empty") return formatMoney(0, workspaceCurrency);
   if (total.kind === "single") return formatMoney(total.amountMinor, total.currency);
   return `Mixed currencies (${total.currencies.join(", ")})`;
 }
 
-export function formatMoneyByCurrency(rows: MoneyByCurrency, emptyLabel = "$0.00"): string {
-  return formatCurrencyTotal(summarizeCurrency(rows), emptyLabel);
+export function formatMoneyByCurrency(rows: MoneyByCurrency, workspaceCurrency: string): string {
+  return formatCurrencyTotal(summarizeCurrency(rows), workspaceCurrency);
 }
 
 export type RoasResult =
