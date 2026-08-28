@@ -24,6 +24,7 @@ import { loadReadinessInput, CAMPAIGN_COLUMNS } from "../_shared/adCampaignLoade
 import { claimCampaignForPublish, executeCampaignPublish, REAL_META_PROVIDER, type MetaAdsProvider, type PublishStep } from "../_shared/adPublishExecution.ts";
 import * as mockMetaProvider from "../_shared/ad-providers/metaMarketingApiMock.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
 const MOCK_PROVIDER: MetaAdsProvider = mockMetaProvider;
@@ -60,6 +61,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const serviceSb = createServiceClient();
+
+  const statusGate = await assertWorkspaceActive(serviceSb, existing.workspace_id);
+  if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 
   // Idempotent replay: this exact key was already used for a publish
   // attempt on this campaign - return its recorded outcome, never re-run.
