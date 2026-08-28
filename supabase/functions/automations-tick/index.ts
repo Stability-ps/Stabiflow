@@ -61,9 +61,21 @@ type DomainEventRow = {
 
 type AutomationRow = { id: string; workspace_id: string; name: string; status: string; created_by: string };
 
+// Launch-completion: a suspended/cancelled workspace's automations are
+// treated the same as the pre-existing per-workspace kill switch
+// (limits.automations_disabled) - both mean "skip this workspace's
+// automations entirely for this tick," so they share one query/helper
+// rather than the cron worker checking two separate things at each call
+// site. Mirrors the same workspace_billing.status values that
+// _shared/workspaceStatus.ts's assertWorkspaceActive() gates every other
+// costly/mutating entry point on (a separate helper here only because
+// this one query already needed to fetch `limits` too - not a diverging
+// definition of "blocked").
 async function workspaceAutomationsDisabled(sb: ReturnType<typeof createServiceClient>, workspaceId: string): Promise<boolean> {
-  const { data } = await sb.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
-  return (data?.limits as Record<string, unknown> | null)?.automations_disabled === true;
+  const { data } = await sb.from("workspace_billing").select("limits, status").eq("workspace_id", workspaceId).maybeSingle();
+  if ((data?.limits as Record<string, unknown> | null)?.automations_disabled === true) return true;
+  const status = data?.status as string | undefined;
+  return status === "suspended" || status === "cancelled";
 }
 
 // --- Phase A: match new events -> create runs -----------------------------
