@@ -23,6 +23,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   forbidden: "You no longer have permission to connect this workspace.",
   expired_token: "The provider rejected the connection. Try again.",
   authorization_failure: "The provider rejected the connection. Try again.",
+  meta_not_enabled: "Meta production connection is not enabled yet. Contact support to enable it.",
 };
 
 function relativeTime(iso: string | null): string {

@@ -10,8 +10,10 @@
 // start time) that the initiating user still belongs to the workspace
 // with the required permission.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
 import { seedOauthState } from "./integrationHelpers";
+
+const TEST_HARNESS_SECRET = getTestEnv("INTEGRATIONS_TEST_HARNESS_SECRET");
 
 function callbackUrl(params: Record<string, string>) {
   const url = new URL(`${SUPABASE_URL}/functions/v1/integrations-oauth-callback`);
@@ -19,16 +21,22 @@ function callbackUrl(params: Record<string, string>) {
   return url.toString();
 }
 
-async function callCallback(params: Record<string, string>) {
-  const res = await fetch(callbackUrl(params), { method: "GET", redirect: "manual" });
+// x-stabiflow-test-harness proves this call genuinely comes from the
+// automated suite - a real Meta redirect can never carry it (browsers
+// don't attach custom headers to navigations), so without it neither
+// start nor callback will serve mock behavior even with
+// INTEGRATIONS_META_MOCK_MODE=true (production defect fix, see
+// supabase/functions/_shared/integration-providers/testHarness.ts).
+async function callCallback(params: Record<string, string>, harness: string | null = TEST_HARNESS_SECRET) {
+  const res = await fetch(callbackUrl(params), { method: "GET", redirect: "manual", headers: harness ? { "x-stabiflow-test-harness": harness } : {} });
   const location = res.headers.get("location") || "";
   return { status: res.status, location, errorParam: new URL(location, "http://placeholder").searchParams.get("integration_error"), connectedParam: new URL(location, "http://placeholder").searchParams.get("integration_connected") };
 }
 
-async function callStart(token: string, workspaceId: string, provider: "meta" | "whatsapp" = "meta") {
+async function callStart(token: string, workspaceId: string, provider: "meta" | "whatsapp" = "meta", harness: string | null = TEST_HARNESS_SECRET) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/integrations-oauth-start`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(harness ? { "x-stabiflow-test-harness": harness } : {}) },
     body: JSON.stringify({ workspace_id: workspaceId, provider }),
   });
   return { status: res.status, body: await res.json() };
@@ -79,6 +87,14 @@ describe("Integrations OAuth start (release blocker)", () => {
       body: JSON.stringify({ workspace_id: workspace.workspaceId, provider: "google" }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("REGRESSION (production mock-data defect fix): a real caller without the test-harness header is blocked with meta_not_enabled, even though INTEGRATIONS_META_MOCK_MODE is true - it never receives a URL that would fabricate a connection", async () => {
+    const { data: session } = await workspace.client.auth.getSession();
+    const result = await callStart(session.session!.access_token, workspace.workspaceId, "meta", null);
+    expect(result.status).toBe(403);
+    expect(result.body.error).toBe("meta_not_enabled");
+    expect(result.body.url).toBeUndefined();
   });
 });
 
@@ -162,5 +178,21 @@ describe("Integrations OAuth callback security (release blocker)", () => {
     expect(pages!.length).toBeGreaterThan(0);
     // Instruction #5: discovery never auto-activates a resource.
     expect(pages!.every((p) => p.is_active === false)).toBe(true);
+  });
+
+  it("REGRESSION (production mock-data defect fix): a real callback hit (no test-harness header - exactly what a genuine Meta redirect looks like) is blocked with meta_not_enabled, even with a validly-claimed state, rather than fabricating a connection", async () => {
+    const { data: session } = await workspace.client.auth.getSession();
+    const start = await callStart(session.session!.access_token, workspace.workspaceId);
+    const state = new URL(start.body.url).searchParams.get("state")!;
+
+    const result = await callCallback({ code: "mock-code", state }, null);
+    expect(result.errorParam).toBe("meta_not_enabled");
+    expect(result.connectedParam).toBeNull();
+
+    // And the state was still consumed atomically (claimed then blocked),
+    // not left claimable by a later real attempt - single-use holds
+    // regardless of which branch ultimately rejects it.
+    const replay = await callCallback({ code: "mock-code", state });
+    expect(replay.errorParam).toBe("invalid_state");
   });
 });

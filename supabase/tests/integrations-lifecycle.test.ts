@@ -4,9 +4,11 @@
 // discover-resources re-runs discovery using the already-stored (mock)
 // token and never flips is_active on an already-known resource.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
 import { seedFacebookPage } from "./contentHelpers";
 import { seedWorkspaceIntegration } from "./integrationHelpers";
+
+const TEST_HARNESS_SECRET = getTestEnv("INTEGRATIONS_TEST_HARNESS_SECRET");
 
 async function callDisconnect(token: string, workspaceId: string, provider = "meta") {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/integrations-disconnect`, {
@@ -17,10 +19,14 @@ async function callDisconnect(token: string, workspaceId: string, provider = "me
   return { status: res.status, body: await res.json() };
 }
 
-async function callDiscover(token: string, workspaceId: string, provider = "meta") {
+// x-stabiflow-test-harness proves this call genuinely comes from the
+// automated suite - without it, discover-resources refuses to serve mock
+// data even with INTEGRATIONS_META_MOCK_MODE=true (production defect fix,
+// see supabase/functions/_shared/integration-providers/testHarness.ts).
+async function callDiscover(token: string, workspaceId: string, provider = "meta", harness: string | null = TEST_HARNESS_SECRET) {
   const res = await fetch(`${SUPABASE_URL}/functions/v1/integrations-discover-resources`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(harness ? { "x-stabiflow-test-harness": harness } : {}) },
     body: JSON.stringify({ workspace_id: workspaceId, provider }),
   });
   return { status: res.status, body: await res.json() };
@@ -108,5 +114,12 @@ describe("Integrations manual resource refresh (release blocker)", () => {
     const { data: allPages } = await admin.from("workspace_facebook_pages").select("is_active").eq("workspace_id", workspace.workspaceId).neq("id", existingPageId);
     expect(allPages!.length).toBeGreaterThan(0);
     expect(allPages!.every((p) => p.is_active === false)).toBe(true); // newly discovered ones default inactive
+  });
+
+  it("REGRESSION (production mock-data defect fix): a real caller without the test-harness header is blocked with meta_not_enabled, even though INTEGRATIONS_META_MOCK_MODE is true - it never silently receives fabricated resources", async () => {
+    const { data: session } = await workspace.client.auth.getSession();
+    const result = await callDiscover(session.session!.access_token, workspace.workspaceId, "meta", null);
+    expect(result.status).toBe(403);
+    expect(result.body.error).toBe("meta_not_enabled");
   });
 });

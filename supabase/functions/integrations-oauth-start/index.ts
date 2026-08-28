@@ -7,13 +7,14 @@
 // (a query param the callback would otherwise have to trust blindly).
 import { buildMetaAuthorizeUrl, type IntegrationProvider } from "../_shared/integration-providers/metaOAuth.ts";
 import { generateOauthState } from "../_shared/integration-providers/oauthState.ts";
+import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 
 const STATE_TTL_MINUTES = 10;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
+    return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-stabiflow-test-harness", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
   }
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
@@ -38,6 +39,16 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Forbidden" }, 403);
   }
 
+  // INTEGRATIONS_META_MOCK_MODE alone cannot tell "the automated test
+  // suite is calling this" apart from "a real production user clicked
+  // Connect Meta" - both hit the same deployed function. A real request
+  // (no valid test-harness header) is blocked with an explicit message
+  // instead of ever silently fabricating a connection - see
+  // testHarness.ts for the full incident this fixes.
+  if (isBlockedMockRequest(req)) {
+    return json(req, { error: "meta_not_enabled", message: "Meta production connection is not enabled yet. Contact support to enable it." }, 403);
+  }
+
   const serviceSb = createServiceClient();
   const nowIso = new Date().toISOString();
   const expiresAt = new Date(Date.now() + STATE_TTL_MINUTES * 60 * 1000).toISOString();
@@ -52,7 +63,7 @@ Deno.serve(async (req: Request) => {
     .insert({ workspace_id: workspaceId, provider, state, user_id: actorId, expires_at: expiresAt });
   if (insertError) return json(req, { error: "Unable to start connection" }, 500);
 
-  const mockMode = (Deno.env.get("INTEGRATIONS_META_MOCK_MODE") || "").trim().toLowerCase() === "true";
+  const mockMode = resolveMockMode(req);
 
   // Dev-only (instruction #28): with no real Meta App configured, there is
   // no valid client_id to send a real browser to facebook.com's consent
