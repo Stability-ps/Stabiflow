@@ -24,6 +24,8 @@ function buildInvitationLink(token: string) {
   return `${window.location.origin}/accept-invitation?token=${token}`;
 }
 
+type InvitationConfirmation = { email: string; role: WorkspaceRole; expiresAt: string; link: string };
+
 export function MembersTab() {
   const { currentWorkspaceId, currentMembership, user } = useAuth();
   const queryClient = useQueryClient();
@@ -35,8 +37,10 @@ export function MembersTab() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("viewer");
   const [inviting, setInviting] = useState(false);
-  const [invitedLink, setInvitedLink] = useState<string | null>(null);
+  const [invitationConfirmation, setInvitationConfirmation] = useState<InvitationConfirmation | null>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; label: string } | null>(null);
+  const [renderedAt] = useState(() => Date.now());
 
   const grantableRoles = WORKSPACE_ROLES.filter((r) => canGrantRole(callerRole, r));
   const canInvite = grantableRoles.length > 0;
@@ -51,15 +55,22 @@ export function MembersTab() {
     if (!currentWorkspaceId || !user || !inviteEmail.trim()) return;
     setInviting(true);
     try {
-      const token = await inviteMember(currentWorkspaceId, inviteEmail.trim(), inviteRole, user.id);
+      const normalizedEmail = inviteEmail.trim().toLowerCase();
+      const created = await inviteMember(currentWorkspaceId, normalizedEmail, inviteRole, user.id);
       await invalidate();
-      setInvitedLink(buildInvitationLink(token));
+      setInvitationConfirmation({ email: normalizedEmail, role: inviteRole, expiresAt: created.expiresAt, link: buildInvitationLink(created.token) });
       setInviteEmail("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create invitation");
     } finally {
       setInviting(false);
     }
+  };
+
+  const copyInvitationLink = async (link: string) => {
+    await navigator.clipboard.writeText(link);
+    setCopiedLink(link);
+    toast.success("Invitation link copied");
   };
 
   const handleRevoke = async (id: string) => {
@@ -106,29 +117,35 @@ export function MembersTab() {
             <CardDescription>Everyone with access to this workspace.</CardDescription>
           </div>
           {canInvite && (
-            <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) setInvitedLink(null); }}>
+            <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) { setInvitationConfirmation(null); setCopiedLink(null); } }}>
               <DialogTrigger asChild>
                 <Button size="sm"><UserPlus className="mr-2 h-4 w-4" /> Invite member</Button>
               </DialogTrigger>
               <DialogContent className="max-w-sm">
                 <DialogHeader><DialogTitle>Invite a member</DialogTitle></DialogHeader>
-                {invitedLink ? (
+                {invitationConfirmation ? (
                   <div className="space-y-3">
                     <p className="text-sm text-muted-foreground">
                       StabiFlow doesn't send invitation emails yet - copy this link and share it with them directly (WhatsApp, email, etc.).
                     </p>
+                    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 rounded-lg bg-muted/60 p-3 text-sm">
+                      <dt className="text-muted-foreground">Invite created for</dt><dd className="min-w-0 truncate font-medium" title={invitationConfirmation.email}>{invitationConfirmation.email}</dd>
+                      <dt className="text-muted-foreground">Role</dt><dd className="font-medium">{ROLE_LABELS[invitationConfirmation.role]}</dd>
+                      <dt className="text-muted-foreground">Expires</dt><dd className="font-medium">{new Date(invitationConfirmation.expiresAt).toLocaleString()}</dd>
+                    </dl>
+                    <Label htmlFor="created-invitation-link">Invitation link</Label>
                     <div className="flex gap-2">
-                      <Input readOnly value={invitedLink} className="text-xs" />
+                      <Input id="created-invitation-link" readOnly value={invitationConfirmation.link} className="min-w-0 truncate text-xs" title={invitationConfirmation.link} />
                       <Button
                         type="button"
                         variant="outline"
-                        size="icon"
-                        onClick={() => { navigator.clipboard.writeText(invitedLink); toast.success("Link copied"); }}
+                        size="sm"
+                        onClick={() => void copyInvitationLink(invitationConfirmation.link)}
                       >
-                        <Copy className="h-4 w-4" />
+                        <Copy className="mr-2 h-4 w-4" /> {copiedLink === invitationConfirmation.link ? "Copied" : "Copy link"}
                       </Button>
                     </div>
-                    <Button className="w-full" variant="outline" onClick={() => setInvitedLink(null)}>Invite someone else</Button>
+                    <Button className="w-full" variant="outline" onClick={() => { setInvitationConfirmation(null); setCopiedLink(null); }}>Invite someone else</Button>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -137,9 +154,9 @@ export function MembersTab() {
                       <Input id="invite-email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="teammate@company.com" />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Role</Label>
+                      <Label htmlFor="invite-role">Role</Label>
                       <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as WorkspaceRole)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger id="invite-role"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {grantableRoles.map((r) => <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>)}
                         </SelectContent>
@@ -220,12 +237,16 @@ export function MembersTab() {
                       {ROLE_LABELS[inv.role]} · expires {new Date(inv.expires_at).toLocaleDateString()}
                     </p>
                   </div>
+                  <Badge variant={new Date(inv.expires_at).getTime() <= renderedAt ? "destructive" : "secondary"}>
+                    {new Date(inv.expires_at).getTime() <= renderedAt ? "Expired" : "Pending"}
+                  </Badge>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { navigator.clipboard.writeText(buildInvitationLink(inv.token)); toast.success("Link copied"); }}
+                    disabled={new Date(inv.expires_at).getTime() <= renderedAt}
+                    onClick={() => void copyInvitationLink(buildInvitationLink(inv.token))}
                   >
-                    <Copy className="mr-2 h-4 w-4" /> Copy link
+                    <Copy className="mr-2 h-4 w-4" /> {copiedLink === buildInvitationLink(inv.token) ? "Copied" : "Copy link"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleRevoke(inv.id)}>Revoke</Button>
                 </div>

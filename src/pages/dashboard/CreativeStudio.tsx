@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Palette, Sparkles, Copy, Megaphone, Loader2 } from "lucide-react";
+import { Palette, Sparkles, Copy, Megaphone, Loader2, ImageIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,7 +23,7 @@ const TONE_OPTIONS = ["Professional", "Friendly", "Playful", "Bold", "Trustworth
 //  - "Copy" just copies text to the clipboard.
 //  - "Use in new campaign" reuses the EXISTING prefill mechanism
 //    MediaLibraryGrid's "Promote as Campaign" button already uses
-//    (navigate("/campaigns/new", { state: { prefill: ... } })) - no new
+//    (navigate("/app/campaigns/new", { state: { prefill: ... } })) - no new
 //    campaign-creation wiring was added for this feature.
 export default function CreativeStudio() {
   const { currentWorkspaceId, hasPermission } = useAuth();
@@ -38,9 +38,11 @@ export default function CreativeStudio() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [variants, setVariants] = useState<CreativeVariant[] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const selectedAsset = mediaAssets?.find((asset) => asset.id === selectedAssetId) ?? null;
+  const missingBusinessContext = !businessContext.trim();
 
   async function handleGenerate() {
-    if (!currentWorkspaceId || !businessContext.trim()) return;
+    if (!currentWorkspaceId || missingBusinessContext) return;
     setIsGenerating(true);
     setVariants(null);
     try {
@@ -66,7 +68,7 @@ export default function CreativeStudio() {
   }
 
   function handleUseInCampaign(variant: CreativeVariant) {
-    navigate("/campaigns/new", {
+    navigate("/app/campaigns/new", {
       state: { prefill: { sourceContentMediaAssetId: selectedAssetId || undefined, primaryText: variant.primaryText } },
     });
   }
@@ -86,49 +88,79 @@ export default function CreativeStudio() {
             <CardHeader><CardTitle className="text-base">Describe what you're advertising</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium">What is the product or service?</label>
+                <label htmlFor="creative-business-context" className="mb-1 block text-sm font-medium">What is the product or service? <span aria-hidden="true">*</span></label>
                 <Textarea
+                  id="creative-business-context"
                   placeholder="e.g. A weekend baking course for beginners, hosted in Cape Town"
                   value={businessContext}
                   onChange={(e) => setBusinessContext(e.target.value)}
                   rows={3}
                   maxLength={1000}
+                  aria-describedby={missingBusinessContext ? "creative-business-context-help" : undefined}
+                  aria-invalid={missingBusinessContext}
                 />
+                {missingBusinessContext && <p id="creative-business-context-help" className="mt-1.5 text-xs text-muted-foreground">Describe the product or service before generating copy.</p>}
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Target audience (optional)</label>
-                  <Input placeholder="e.g. Young professionals in their 20s-30s" value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={300} />
+                  <label htmlFor="creative-audience" className="mb-1 block text-sm font-medium">Target audience (optional)</label>
+                  <Input id="creative-audience" placeholder="e.g. Young professionals in their 20s-30s" value={audience} onChange={(e) => setAudience(e.target.value)} maxLength={300} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Tone (optional)</label>
+                  <label htmlFor="creative-tone" className="mb-1 block text-sm font-medium">Tone (optional)</label>
                   <Select value={tone} onValueChange={setTone}>
-                    <SelectTrigger><SelectValue placeholder="Any tone" /></SelectTrigger>
+                    <SelectTrigger id="creative-tone"><SelectValue placeholder="Any tone" /></SelectTrigger>
                     <SelectContent>
                       {TONE_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              {mediaAssets && mediaAssets.length > 0 && (
+              {mediaAssets && mediaAssets.length > 0 ? (
                 <div>
                   <label className="mb-1 block text-sm font-medium">Attach a Media Library asset (optional)</label>
-                  <div className="flex flex-wrap gap-2">
+                  {selectedAsset && (
+                    <div className="mb-3 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                      <MediaPreview storagePath={selectedAsset.storage_path} alt={selectedAsset.title} className="h-20 w-20 shrink-0 rounded-md object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-primary">Selected media</p>
+                        <p className="truncate text-sm font-medium" title={selectedAsset.title}>{selectedAsset.title}</p>
+                        <p className="text-xs text-muted-foreground">{selectedAsset.width_px}×{selectedAsset.height_px}px</p>
+                      </div>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedAssetId(null)} aria-label={`Remove ${selectedAsset.title}`}>
+                        <X className="mr-1 h-4 w-4" /> Remove
+                      </Button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
                     {mediaAssets.slice(0, 8).map((asset) => (
                       <button
                         key={asset.id}
                         type="button"
                         onClick={() => setSelectedAssetId(selectedAssetId === asset.id ? null : asset.id)}
-                        className={`h-14 w-14 overflow-hidden rounded-md border-2 ${selectedAssetId === asset.id ? "border-primary" : "border-transparent"}`}
+                        className={`overflow-hidden rounded-lg border-2 p-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedAssetId === asset.id ? "border-primary bg-primary/5" : "border-border"}`}
                         title={asset.title}
+                        aria-pressed={selectedAssetId === asset.id}
+                        aria-label={`${selectedAssetId === asset.id ? "Selected" : "Select"} ${asset.title}`}
                       >
-                        <MediaPreview storagePath={asset.storage_path} alt={asset.title} className="h-full w-full object-cover" />
+                        <MediaPreview storagePath={asset.storage_path} alt="" className="aspect-square w-full rounded object-cover" />
+                        <span className="block truncate px-1 py-1 text-xs">{asset.title}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-              )}
-              <Button onClick={handleGenerate} disabled={!businessContext.trim() || isGenerating}>
+              ) : mediaAssets ? (
+                <div className="rounded-lg border border-dashed p-4">
+                  <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                      <ImageIcon className="mt-0.5 h-5 w-5 text-muted-foreground" />
+                      <div><p className="text-sm font-medium">Your Media Library is empty</p><p className="text-xs text-muted-foreground">Upload media once and reuse it here, in Content, and in Campaigns.</p></div>
+                    </div>
+                    <Button type="button" size="sm" variant="outline" onClick={() => navigate("/app/content/media-library")}>Open Media Library</Button>
+                  </div>
+                </div>
+              ) : null}
+              <Button onClick={handleGenerate} disabled={missingBusinessContext || isGenerating} aria-describedby={missingBusinessContext ? "creative-business-context-help" : undefined}>
                 {isGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                 Generate copy
               </Button>

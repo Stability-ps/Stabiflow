@@ -51,7 +51,7 @@ export default function Inbox() {
         icon={InboxIcon}
         title="No WhatsApp number connected"
         description="Connect a WhatsApp Business number under Integrations to start receiving conversations here."
-        action={<Button variant="outline" onClick={() => navigate("/integrations")}>Go to Integrations</Button>}
+        action={<Button variant="outline" onClick={() => navigate("/app/integrations")}>Go to Integrations</Button>}
       />
     );
   }

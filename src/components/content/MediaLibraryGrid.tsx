@@ -63,7 +63,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="aspect-square animate-pulse rounded-lg bg-muted" />
         ))}
@@ -80,7 +80,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {assets.map((asset) => {
         const variants = asset.content_platform_variants || [];
         return (
@@ -91,7 +91,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
               disabled={!selectable}
               onClick={() => onSelect?.(asset as MediaAssetRow)}
             >
-              <MediaPreview storagePath={asset.storage_path} alt={asset.title} className="aspect-square w-full" />
+              <MediaPreview storagePath={asset.storage_path} alt={asset.title} className="aspect-[4/3] w-full object-cover" />
             </button>
             <div className="space-y-2 p-3">
               <p className="truncate text-sm font-medium" title={asset.title}>{asset.title}</p>
@@ -124,7 +124,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
                   variant="ghost"
                   className="h-7 w-full text-xs"
                   onClick={() =>
-                    navigate("/campaigns/new", {
+                    navigate("/app/campaigns/new", {
                       state: { prefill: { sourceContentMediaAssetId: asset.id, primaryText: asset.default_caption || "" } },
                     })
                   }

@@ -70,7 +70,7 @@ export default function CreateWorkspace() {
     });
     setCurrentWorkspaceId(workspaceId);
     toast.success(`${name.trim()} created`);
-    navigate("/", { replace: true });
+    navigate("/app", { replace: true });
   };
 
   return (

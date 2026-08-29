@@ -22,7 +22,7 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to="/app" replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

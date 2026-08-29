@@ -257,7 +257,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   };
 
   const goToLead = (leadId: string, openOpportunityForm = false) => {
-    navigate("/leads", { state: { selectedLeadId: leadId, openOpportunityForm } });
+    navigate("/app/leads", { state: { selectedLeadId: leadId, openOpportunityForm } });
   };
 
   const handleLinkExisting = async (leadId: string) => {

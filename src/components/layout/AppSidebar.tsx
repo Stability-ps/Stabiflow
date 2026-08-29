@@ -1,12 +1,14 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarHeader,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/layout/BrandLogo";
-import { NAV_ITEMS } from "@/lib/navigation";
+import { isNavItemActive, NAV_ITEMS } from "@/lib/navigation";
 
 export function AppSidebar() {
+  const { pathname } = useLocation();
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-3 py-4">
@@ -14,7 +16,7 @@ export function AppSidebar() {
             lockup - rendering the standalone icon next to it duplicated
             the mark. Show exactly one brand presentation at a time: the
             full lockup when expanded, the icon alone when collapsed. */}
-        <NavLink to="/" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+        <NavLink to="/app" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
           <BrandLogo variant="icon" className="hidden h-7 w-7 shrink-0 group-data-[collapsible=icon]:block" />
           <BrandLogo variant="full" className="h-7 w-auto group-data-[collapsible=icon]:hidden" />
         </NavLink>
@@ -23,22 +25,24 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
+              {NAV_ITEMS.map((item) => {
+                const active = isNavItemActive(item.path, pathname);
+                return (
                 <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton asChild tooltip={item.label}>
+                  <SidebarMenuButton asChild tooltip={item.label} isActive={active}>
                     <NavLink
                       to={item.path}
-                      end={item.path === "/"}
-                      className={({ isActive }) =>
-                        isActive ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium" : ""
-                      }
+                      end={item.path === "/app"}
+                      aria-current={active ? "page" : undefined}
+                      className={active ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium [&_svg]:text-sidebar-accent-foreground" : ""}
                     >
                       <item.icon />
                       <span>{item.label}</span>
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              ))}
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

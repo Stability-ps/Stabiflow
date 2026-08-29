@@ -6,10 +6,11 @@ export default function Privacy() {
       <section>
         <p>
           This Privacy Policy describes what personal information StabiFlow collects and processes when a
-          company ("workspace") uses the product, and how that information is used. StabiFlow is operated from
-          South Africa, and this policy is written with the Protection of Personal Information Act, 2013
-          ("POPIA") as its primary framework. Where StabiFlow serves workspaces or data subjects outside South
-          Africa, additional local requirements may also apply.
+          company ("workspace") uses the product, and how that information is used. StabiFlow is a SaaS
+          platform provided and operated by Acapolite Consulting (Pty) Ltd, from South Africa, and this policy
+          is written with the Protection of Personal Information Act, 2013 ("POPIA") as its primary
+          framework. Where StabiFlow serves workspaces or data subjects outside South Africa, additional local
+          requirements may also apply.
         </p>
       </section>
 

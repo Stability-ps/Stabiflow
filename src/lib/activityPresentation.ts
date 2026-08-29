@@ -10,6 +10,16 @@
 // listed falls back to a humanized version of the raw string (never a
 // raw snake_case leak to a customer-facing surface).
 const ACTIVITY_LABELS: Record<string, string> = {
+  campaign_draft_created: "Campaign created",
+  campaign_edited: "Campaign updated",
+  campaign_published: "Campaign published",
+  content_media_uploaded: "Media uploaded",
+  content_platform_variant_generated: "Media variant generated",
+  content_published: "Content published",
+  meta_connected: "Meta connected",
+  meta_disconnected: "Meta disconnected",
+  whatsapp_connected: "WhatsApp connected",
+  whatsapp_disconnected: "WhatsApp disconnected",
   pipeline_created: "Default pipeline created",
   pipeline_default_changed: "Default pipeline changed",
   pipeline_renamed: "Pipeline renamed",
@@ -79,4 +89,19 @@ function humanizeFallback(action: string): string {
 
 export function formatActivityAction(action: string): string {
   return ACTIVITY_LABELS[action] ?? humanizeFallback(action);
+}
+
+const DASHBOARD_HIDDEN_ACTIONS = new Set([
+  "campaign_connection_health_checked",
+  "campaign_metrics_refreshed",
+  "campaign_publish_attempted",
+  "campaign_publish_failed",
+  "campaign_readiness_checked",
+  "content_series_schedule_recalculated",
+  "integration_resource_collision_skipped",
+  "workspace_data_exported",
+]);
+
+export function isDashboardActivity(action: string): boolean {
+  return !DASHBOARD_HIDDEN_ACTIONS.has(action);
 }

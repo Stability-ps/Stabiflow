@@ -5,9 +5,10 @@ export default function Terms() {
     <LegalLayout title="Terms of Service" effectiveDate="2026-08-28">
       <section>
         <p>
-          These Terms of Service govern access to and use of StabiFlow. StabiFlow is operated from South Africa
-          and these terms are governed by the laws of South Africa. By creating a StabiFlow account, you agree
-          to these terms on behalf of yourself and, where applicable, the workspace you represent.
+          These Terms of Service govern access to and use of StabiFlow. StabiFlow is a SaaS platform provided
+          and operated by Acapolite Consulting (Pty) Ltd, from South Africa, and these terms are governed by
+          the laws of South Africa. By creating a StabiFlow account, you agree to these terms on behalf of
+          yourself and, where applicable, the workspace you represent.
         </p>
       </section>
 

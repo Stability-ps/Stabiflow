@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { OnboardingCounts } from "@/lib/onboarding";
+import { hasCurrentIntegration } from "@/lib/dashboardPresentation";
 
 // One head-only count query per table (no rows transferred, just the
 // count) run in parallel, rather than 13 separate round trips worth of
@@ -60,8 +61,8 @@ export function useOnboardingStatus(workspaceId: string | null) {
       ]);
 
       const integrationRows = integrations.data ?? [];
-      const metaConnected = integrationRows.some((row) => row.provider === "meta" && row.status === "connected");
-      const whatsappConnected = integrationRows.some((row) => row.provider === "whatsapp" && row.status === "connected");
+      const metaConnected = hasCurrentIntegration(integrationRows, "meta");
+      const whatsappConnected = hasCurrentIntegration(integrationRows, "whatsapp");
 
       let analyticsVisited = false;
       try {

@@ -6,19 +6,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthLayout } from "@/components/layout/AuthLayout";
-import { acceptWorkspaceInvitation } from "@/lib/workspaceMembers";
+import { acceptWorkspaceInvitation, WorkspaceInvitationError, type InvitationErrorReason } from "@/lib/workspaceMembers";
 
 // Reached via a link an admin copies from Settings > Members (StabiFlow
 // doesn't send invitation emails yet - see the Members tab). Deliberately
 // NOT wrapped in RequireWorkspace: a user with zero workspaces accepting
 // their very first invitation must be able to reach this page.
 export default function AcceptInvitation() {
-  const { user, loading, addWorkspaceMembership, setCurrentWorkspaceId } = useAuth();
+  const { user, loading, addWorkspaceMembership, setCurrentWorkspaceId, signOut } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const token = searchParams.get("token");
   const [status, setStatus] = useState<"idle" | "accepting" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorReason, setErrorReason] = useState<InvitationErrorReason | null>(null);
 
   useEffect(() => {
     if (loading || !user || !token || status !== "idle") return;
@@ -41,9 +42,10 @@ export default function AcceptInvitation() {
           addWorkspaceMembership({ workspaceId: membershipRow.workspace_id, role: membershipRow.role, workspace: membershipRow.workspace });
         }
         setCurrentWorkspaceId(workspaceId);
-        navigate("/", { replace: true });
+        navigate("/app", { replace: true });
       } catch (error) {
         setStatus("error");
+        setErrorReason(error instanceof WorkspaceInvitationError ? error.reason : "unknown");
         setErrorMessage(error instanceof Error ? error.message : "Unable to accept this invitation");
       }
     })();
@@ -99,7 +101,12 @@ export default function AcceptInvitation() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">{errorMessage}</p>
-            <Button className="w-full" variant="outline" asChild><Link to="/">Go to dashboard</Link></Button>
+            {errorReason === "wrong_email" && (
+              <Button className="w-full" onClick={async () => { await signOut(); navigate(`/login?redirect=${encodeURIComponent(`/accept-invitation?token=${token}`)}`, { replace: true }); }}>
+                Sign out and switch account
+              </Button>
+            )}
+            <Button className="w-full" variant="outline" asChild><Link to="/app">Go to dashboard</Link></Button>
           </CardContent>
         </Card>
       </AuthLayout>

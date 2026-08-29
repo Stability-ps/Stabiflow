@@ -18,17 +18,19 @@ function friendlyRlsError(error: { message: string; code?: string }, fallback: s
   return new Error(error.message);
 }
 
-export async function inviteMember(workspaceId: string, email: string, role: WorkspaceRole, invitedBy: string): Promise<string> {
+export type CreatedInvitation = { token: string; expiresAt: string };
+
+export async function inviteMember(workspaceId: string, email: string, role: WorkspaceRole, invitedBy: string): Promise<CreatedInvitation> {
   const { data, error } = await supabase
     .from("workspace_invitations")
     .insert({ workspace_id: workspaceId, email: email.trim().toLowerCase(), role, invited_by: invitedBy })
-    .select("token")
+    .select("token, expires_at")
     .single();
   if (error) {
     if (error.code === "23505") throw new Error("There's already a pending invitation for this email address.");
     throw friendlyRlsError(error, "You don't have permission to invite someone at that role.");
   }
-  return data.token;
+  return { token: data.token, expiresAt: data.expires_at };
 }
 
 export async function revokeInvitation(invitationId: string) {
@@ -48,6 +50,34 @@ export async function removeMember(memberRowId: string) {
 
 export async function acceptWorkspaceInvitation(token: string): Promise<string> {
   const { data, error } = await supabase.rpc("accept_workspace_invitation", { p_token: token });
-  if (error) throw new Error(error.message);
+  if (error) throw invitationErrorFromMessage(error.message);
   return data as string;
+}
+
+export type InvitationErrorReason = "wrong_email" | "expired" | "unavailable" | "unauthenticated" | "unknown";
+
+export class WorkspaceInvitationError extends Error {
+  readonly reason: InvitationErrorReason;
+
+  constructor(reason: InvitationErrorReason, message: string) {
+    super(message);
+    this.name = "WorkspaceInvitationError";
+    this.reason = reason;
+  }
+}
+
+export function invitationErrorFromMessage(message: string): WorkspaceInvitationError {
+  if (/different email address/i.test(message)) {
+    return new WorkspaceInvitationError("wrong_email", "You are signed in with a different account. Sign in using the email address this invitation was sent to.");
+  }
+  if (/expired/i.test(message)) {
+    return new WorkspaceInvitationError("expired", "This invitation has expired. Ask a workspace admin to create a new invitation.");
+  }
+  if (/not found|already used|no longer valid/i.test(message)) {
+    return new WorkspaceInvitationError("unavailable", "This invitation is no longer available. It may already have been accepted or revoked. Ask a workspace admin for a new link.");
+  }
+  if (/authenticated/i.test(message)) {
+    return new WorkspaceInvitationError("unauthenticated", "Sign in to accept this invitation.");
+  }
+  return new WorkspaceInvitationError("unknown", "We couldn't accept this invitation. Please try again or ask a workspace admin for a new link.");
 }

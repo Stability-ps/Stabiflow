@@ -6,6 +6,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequireWorkspace } from "@/components/RequireWorkspace";
 import { AppLayout } from "@/components/layout/AppLayout";
+import LandingPage from "@/pages/LandingPage";
+import ContactPage from "@/pages/Contact";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -46,6 +48,8 @@ const queryClient = new QueryClient({
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/contact" element={<ContactPage />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -70,28 +74,28 @@ function AppRoutes() {
           </RequireAuth>
         }
       >
-        <Route path="/" element={<Overview />} />
-        <Route path="/content" element={<Content />}>
-          <Route index element={<Navigate to="calendar" replace />} />
+        <Route path="/app" element={<Overview />} />
+        <Route path="/app/content" element={<Content />}>
+          <Route index element={<Navigate to="media-library" replace />} />
           <Route path="calendar" element={<ContentCalendar />} />
           <Route path="scheduled" element={<ContentScheduled />} />
           <Route path="published" element={<ContentPublished />} />
           <Route path="drafts" element={<ContentDrafts />} />
           <Route path="media-library" element={<ContentMediaLibrary />} />
         </Route>
-        <Route path="/campaigns" element={<Campaigns />} />
-        <Route path="/campaigns/new" element={<NewCampaign />} />
-        <Route path="/campaigns/:id/edit" element={<EditCampaign />} />
-        <Route path="/campaigns/:id" element={<CampaignDetailPage />} />
-        <Route path="/creative-studio" element={<CreativeStudio />} />
-        <Route path="/inbox" element={<Inbox />} />
-        <Route path="/leads" element={<Leads />} />
-        <Route path="/analytics" element={<Analytics />} />
-        <Route path="/flow-ai" element={<FlowAI />} />
-        <Route path="/automations" element={<Automations />} />
-        <Route path="/integrations" element={<Integrations />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/operator" element={<Operator />} />
+        <Route path="/app/campaigns" element={<Campaigns />} />
+        <Route path="/app/campaigns/new" element={<NewCampaign />} />
+        <Route path="/app/campaigns/:id/edit" element={<EditCampaign />} />
+        <Route path="/app/campaigns/:id" element={<CampaignDetailPage />} />
+        <Route path="/app/creative-studio" element={<CreativeStudio />} />
+        <Route path="/app/inbox" element={<Inbox />} />
+        <Route path="/app/leads" element={<Leads />} />
+        <Route path="/app/analytics" element={<Analytics />} />
+        <Route path="/app/flow-ai" element={<FlowAI />} />
+        <Route path="/app/automations" element={<Automations />} />
+        <Route path="/app/integrations" element={<Integrations />} />
+        <Route path="/app/settings" element={<Settings />} />
+        <Route path="/app/operator" element={<Operator />} />
       </Route>
     </Routes>
   );

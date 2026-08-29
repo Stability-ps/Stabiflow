@@ -720,7 +720,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
                       </ul>
                     )}
                     {savedCampaignId && (
-                      <Button variant="outline" size="sm" onClick={() => navigate(`/campaigns/${savedCampaignId}`)}>View campaign</Button>
+                      <Button variant="outline" size="sm" onClick={() => navigate(`/app/campaigns/${savedCampaignId}`)}>View campaign</Button>
                     )}
                   </div>
                 )}

@@ -26,7 +26,7 @@ export function CampaignsList() {
         icon={Plug}
         title="No Meta Ad Account connected"
         description="Connect your Meta account in Integrations before creating a campaign."
-        action={<Button variant="outline" onClick={() => navigate("/integrations")}>Go to Integrations</Button>}
+        action={<Button variant="outline" onClick={() => navigate("/app/integrations")}>Go to Integrations</Button>}
       />
     );
   }
@@ -37,7 +37,7 @@ export function CampaignsList() {
         icon={Megaphone}
         title="No campaigns yet"
         description="Create your first Meta campaign."
-        action={hasPermission("campaign.create") ? <Button onClick={() => navigate("/campaigns/new")}><Plus className="mr-2 h-4 w-4" /> New Campaign</Button> : undefined}
+        action={hasPermission("campaign.create") ? <Button onClick={() => navigate("/app/campaigns/new")}><Plus className="mr-2 h-4 w-4" /> New Campaign</Button> : undefined}
       />
     );
   }
@@ -46,7 +46,7 @@ export function CampaignsList() {
     <div className="space-y-4">
       <div className="flex items-center justify-end">
         {hasPermission("campaign.create") && (
-          <Button onClick={() => navigate("/campaigns/new")}><Plus className="mr-2 h-4 w-4" /> New Campaign</Button>
+          <Button onClick={() => navigate("/app/campaigns/new")}><Plus className="mr-2 h-4 w-4" /> New Campaign</Button>
         )}
       </div>
       <div className="space-y-2">

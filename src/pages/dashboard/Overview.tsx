@@ -5,8 +5,9 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceActivity } from "@/hooks/useWorkspaceActivity";
+import { useInboxConversations } from "@/hooks/useInboxConversations";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
-import { useAnalyticsKpis } from "@/hooks/useAnalytics";
+import { useAnalyticsKpis, useCampaignPerformance } from "@/hooks/useAnalytics";
 import { useWorkspaceIntegrations } from "@/hooks/useIntegrations";
 import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
@@ -16,9 +17,10 @@ import { MetricCard } from "@/components/layout/MetricCard";
 import { EmptyState } from "@/components/EmptyState";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
 import { computeOnboardingItems, onboardingProgress } from "@/lib/onboarding";
-import { computeRoas, formatMoneyByCurrency, formatRoas, summarizeCurrency } from "@/lib/analytics";
-import { formatActivityAction } from "@/lib/activityPresentation";
+import { computeRoas, DEFAULT_ATTRIBUTION_MODEL, formatMoneyByCurrency, formatRoas, summarizeCurrency } from "@/lib/analytics";
+import { formatActivityAction, isDashboardActivity } from "@/lib/activityPresentation";
 import { resolveDateRangePreset } from "@/lib/analyticsDate";
+import { dashboardConversationValue, dashboardMoneyValue, hasCurrentIntegration } from "@/lib/dashboardPresentation";
 
 // Same authoritative analytics read model /analytics uses (get_analytics_kpis)
 // - a fixed "last 30 days" window, since the homepage is a glance, not the
@@ -42,8 +44,10 @@ export default function Overview() {
   // no second, independently-derived notion of "connected".
   const integrationsQuery = useWorkspaceIntegrations(currentWorkspaceId);
   const integrations = integrationsQuery.data || [];
-  const metaConnected = integrations.some((i) => i.provider === "meta" && i.status === "connected");
-  const whatsappConnected = integrations.some((i) => i.provider === "whatsapp" && i.status === "connected");
+  const metaConnected = hasCurrentIntegration(integrations, "meta");
+  const whatsappConnected = hasCurrentIntegration(integrations, "whatsapp");
+  const campaignsQuery = useCampaignPerformance(canView ? currentWorkspaceId : null, range, DEFAULT_ATTRIBUTION_MODEL);
+  const conversationsQuery = useInboxConversations(whatsappConnected ? currentWorkspaceId : null);
 
   const onboardingStatusQuery = useOnboardingStatus(currentWorkspaceId);
   const onboardingComplete = useMemo(() => {
@@ -56,6 +60,16 @@ export default function Overview() {
   const spendTotal = kpis ? summarizeCurrency(kpis.spend) : null;
   const revenueTotal = kpis ? summarizeCurrency(kpis.revenue_attributed) : null;
   const roas = kpis && spendTotal?.kind === "single" ? computeRoas(spendTotal.amountMinor, spendTotal.currency, kpis.revenue_attributed) : null;
+  const visibleActivity = useMemo(
+    () => (activityQuery.data ?? []).filter((row) => isDashboardActivity(row.action)).slice(0, 6),
+    [activityQuery.data],
+  );
+
+  const unavailableMessage = !canView
+    ? "You don't have access"
+    : kpisQuery.isError
+      ? "Data unavailable"
+      : "Loading...";
 
   // "Established" = the workspace has genuinely started using StabiFlow
   // (real conversations/leads/customers/spend/revenue), independent of
@@ -77,21 +91,21 @@ export default function Overview() {
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {kpis ? (
         <>
-          <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage="No campaign data yet" value={formatMoneyByCurrency(kpis.spend, workspaceCurrency)} />
-          <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="No conversations yet" value={String(kpis.conversations)} />
+          <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage={metaConnected ? "No data yet" : "Meta not connected"} value={dashboardMoneyValue(kpis.spend, workspaceCurrency)} />
+          <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="WhatsApp not connected" value={dashboardConversationValue(kpis.conversations, whatsappConnected)} />
           <MetricCard icon={Users} label="Qualified leads (30d)" emptyMessage="No leads yet" value={String(kpis.qualified_leads)} />
           <MetricCard icon={DollarSign} label="Customers (30d)" emptyMessage="No customers yet" value={String(kpis.customers)} />
-          {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No revenue recorded yet" value={revenueTotal ? formatMoneyByCurrency(kpis.revenue_attributed, workspaceCurrency) : undefined} />}
-          {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="Not enough data yet" value={roas ? formatRoas(roas) : undefined} />}
+          {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No data yet" value={dashboardMoneyValue(kpis.revenue_attributed, workspaceCurrency)} />}
+          {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="Not enough data yet" value={roas?.status === "ok" || roas?.status === "mixed_currency" ? formatRoas(roas) : undefined} />}
         </>
       ) : (
         <>
-          <MetricCard icon={Wallet} label="Campaign spend" emptyMessage={canView ? "Loading..." : "No campaign data yet"} />
-          <MetricCard icon={MessageSquare} label="Conversations" emptyMessage="No conversations yet" />
-          <MetricCard icon={Users} label="Qualified leads" emptyMessage="No leads yet" />
-          <MetricCard icon={DollarSign} label="Customers" emptyMessage="No customers yet" />
-          <MetricCard icon={TrendingUp} label="Revenue" emptyMessage="No revenue recorded yet" />
-          <MetricCard icon={BarChart3} label="ROAS" emptyMessage="Not enough data yet" />
+          <MetricCard icon={Wallet} label="Campaign spend" emptyMessage={unavailableMessage} />
+          <MetricCard icon={MessageSquare} label="Conversations" emptyMessage={unavailableMessage} />
+          <MetricCard icon={Users} label="Qualified leads" emptyMessage={unavailableMessage} />
+          <MetricCard icon={DollarSign} label="Customers" emptyMessage={unavailableMessage} />
+          {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue" emptyMessage={unavailableMessage} />}
+          {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS" emptyMessage={unavailableMessage} />}
         </>
       )}
     </div>
@@ -114,43 +128,69 @@ export default function Overview() {
 
       {!showOnboardingFirst && onboardingBlock}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
-            {!metaConnected ? (
+            {campaignsQuery.isLoading ? (
+              <div className="h-24 animate-pulse rounded-lg bg-muted" />
+            ) : campaignsQuery.data?.length ? (
+              <ul className="divide-y">
+                {campaignsQuery.data.slice(0, 3).map((campaign) => (
+                  <li key={campaign.campaign_id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                    <span className="min-w-0 truncate font-medium">{campaign.name}</span>
+                    <span className="shrink-0 text-muted-foreground">{formatMoneyByCurrency([{ currency: campaign.currency, amount_minor: campaign.spend_minor }], workspaceCurrency)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : !metaConnected ? (
               <EmptyState
                 icon={BarChart3}
                 title="No campaign data yet"
                 description="Connect your Meta account to launch and track campaigns."
-                action={<Button size="sm" onClick={() => navigate("/integrations")}>Go to Integrations</Button>}
+                action={<Button size="sm" onClick={() => navigate("/app/integrations")}>Go to Integrations</Button>}
+                className="py-8"
               />
             ) : (
               <EmptyState
                 icon={BarChart3}
                 title="No campaign data yet"
-                description="Launch a campaign to see performance here."
-                action={<Button size="sm" onClick={() => navigate("/campaigns/new")}>Create a campaign</Button>}
+                description="Launch your first campaign to see performance here."
+                action={<Button size="sm" onClick={() => navigate("/app/campaigns/new")}>Create a campaign</Button>}
+                className="py-8"
               />
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
+          <CardHeader className="pb-3"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
-            {!whatsappConnected ? (
+            {conversationsQuery.isLoading ? (
+              <div className="h-24 animate-pulse rounded-lg bg-muted" />
+            ) : conversationsQuery.data?.length ? (
+              <ul className="divide-y">
+                {conversationsQuery.data.slice(0, 3).map((conversation) => (
+                  <li key={conversation.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                    <span className="min-w-0 truncate font-medium">{conversation.display_name || conversation.phone_number}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{new Date(conversation.updated_at).toLocaleDateString(undefined, { timeZone: timezone })}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : !whatsappConnected ? (
               <EmptyState
                 icon={MessageSquare}
                 title="No conversations yet"
                 description="Connect WhatsApp to start receiving conversations here."
-                action={<Button size="sm" onClick={() => navigate("/integrations")}>Connect WhatsApp</Button>}
+                action={<Button size="sm" onClick={() => navigate("/app/integrations")}>Connect WhatsApp</Button>}
+                className="py-8"
               />
             ) : (
               <EmptyState
                 icon={MessageSquare}
                 title="Waiting for your first conversation"
-                description="StabiFlow is connected and ready - new WhatsApp messages will appear here automatically."
+                description="StabiFlow is connected and ready — new WhatsApp messages will appear here automatically."
+                className="py-8"
               />
             )}
           </CardContent>
@@ -158,13 +198,14 @@ export default function Overview() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Flow AI recommendations</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Flow AI recommendations</CardTitle></CardHeader>
         <CardContent>
           <EmptyState
             icon={Sparkles}
             title="No recommendations yet"
-            description="Flow AI needs campaign and conversion data before it can suggest anything - it reads your workspace data and recommends actions, but never changes anything on its own."
-            action={<Button size="sm" variant="outline" onClick={() => navigate("/flow-ai")}>Try Flow AI</Button>}
+            description="Flow AI needs campaign and conversion data before it can recommend useful next steps."
+            action={<Button size="sm" variant="outline" onClick={() => navigate("/app/flow-ai")}>Try Flow AI</Button>}
+            className="py-8"
           />
         </CardContent>
       </Card>
@@ -176,14 +217,14 @@ export default function Overview() {
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : activityQuery.isError ? (
             <p className="text-sm text-destructive">Unable to load recent activity.</p>
-          ) : !activityQuery.data?.length ? (
+          ) : !visibleActivity.length ? (
             <EmptyState icon={TrendingUp} title="No activity yet" description="Actions taken in this workspace will show up here." />
           ) : (
             <ul className="space-y-2">
-              {activityQuery.data.map((row) => (
-                <li key={row.id} className="flex items-center justify-between rounded-lg border p-2.5 text-sm">
+              {visibleActivity.map((row) => (
+                <li key={row.id} className="flex flex-col gap-1 rounded-lg border p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span>{formatActivityAction(row.action)}</span>
-                  <span className="text-xs text-muted-foreground">{new Date(row.created_at).toLocaleString()}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{new Date(row.created_at).toLocaleString(undefined, { timeZone: timezone })}</span>
                 </li>
               ))}
             </ul>

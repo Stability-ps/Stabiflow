@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, ChevronDown, ChevronUp, Circle, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Circle, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ function dismissedKey(workspaceId: string) {
 export function OnboardingChecklist({ workspaceId }: { workspaceId: string | null }) {
   const navigate = useNavigate();
   const statusQuery = useOnboardingStatus(workspaceId);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
     if (!workspaceId) return false;
     try {
@@ -47,21 +47,22 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
         <div>
           <CardTitle className="text-base">Get set up ({completed}/{total})</CardTitle>
-          <p className="mt-1 text-sm text-muted-foreground">A few steps to get the most out of StabiFlow - skip anything, come back anytime.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Complete the essentials, then come back whenever you need.</p>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" onClick={() => setExpanded((v) => !v)} aria-label={expanded ? "Collapse" : "Expand"}>
-            {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          <Button variant="outline" size="sm" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+            {expanded ? "Hide steps" : "Continue setup"}
+            <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", expanded && "rotate-180")} />
           </Button>
           <Button variant="ghost" size="icon" onClick={handleDismiss} aria-label="Dismiss">
             <X className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 pt-0">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
         </div>

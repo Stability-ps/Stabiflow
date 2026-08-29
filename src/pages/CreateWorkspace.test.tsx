@@ -3,7 +3,7 @@
 // this is fixed - the actual failure mode is a route-guard race:
 // RequireWorkspace reads memberships/currentWorkspaceId from AuthContext,
 // and if that context still shows zero memberships at the moment the
-// router renders "/", it bounces straight back to /create-workspace
+// router renders "/app", it bounces straight back to /create-workspace
 // regardless of navigate() having fired.
 //
 // The mock below deliberately makes the workspace_members table ALWAYS
@@ -77,7 +77,7 @@ function renderApp() {
         <Routes>
           <Route path="/create-workspace" element={<RequireAuth><CreateWorkspace /></RequireAuth>} />
           <Route
-            path="/"
+            path="/app"
             element={
               <RequireAuth>
                 <AuthStateProbe />

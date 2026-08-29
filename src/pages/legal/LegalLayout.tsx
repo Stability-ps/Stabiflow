@@ -20,6 +20,8 @@ export function LegalLayout({ title, effectiveDate, children }: { title: string;
             <Link to="/legal/privacy" className="hover:text-foreground">Privacy Policy</Link>
             <Link to="/legal/terms" className="hover:text-foreground">Terms of Service</Link>
             <Link to="/legal/data-deletion" className="hover:text-foreground">Data Deletion</Link>
+            <Link to="/contact" className="hover:text-foreground">Contact</Link>
+            <Link to="/login" className="hover:text-foreground">Sign In</Link>
           </nav>
         </div>
       </header>

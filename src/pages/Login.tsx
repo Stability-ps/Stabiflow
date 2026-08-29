@@ -15,7 +15,7 @@ import { AuthLayout } from "@/components/layout/AuthLayout";
 function safeRedirectTarget(searchParams: URLSearchParams): string {
   const redirect = searchParams.get("redirect");
   if (redirect && redirect.startsWith("/") && !redirect.startsWith("//")) return redirect;
-  return "/";
+  return "/app";
 }
 
 export default function Login() {
