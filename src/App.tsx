@@ -45,7 +45,7 @@ const queryClient = new QueryClient({
   },
 });
 
-function AppRoutes() {
+export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
@@ -97,6 +97,11 @@ function AppRoutes() {
         <Route path="/app/settings" element={<Settings />} />
         <Route path="/app/operator" element={<Operator />} />
       </Route>
+      {/* Safety net: any unmatched path (e.g. a stale redirect/bookmark)
+          must never render a blank page - send it to the landing page,
+          which itself sends authenticated users onward. See the
+          integrations-oauth-callback blank-page regression. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }

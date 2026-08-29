@@ -171,3 +171,114 @@ describe("CampaignBuilder regression coverage", () => {
     expect(screen.getByLabelText("Primary text")).not.toHaveClass("bg-white/92");
   });
 });
+
+// Production UX bug: Publish-step readiness issues carried no way to jump
+// to the field that caused them - this covers making each issue
+// actionable without weakening/duplicating server-side readiness.
+async function createDraftAndReachPublish() {
+  completeThroughCreative();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create Draft" }));
+  await waitFor(() => expect(mocks.createCampaignDraft).toHaveBeenCalledTimes(1));
+  await screen.findByRole("heading", { name: "Readiness & publish" });
+}
+
+describe("CampaignBuilder Publish readiness actionability", () => {
+  beforeEach(() => {
+    mocks.mediaState.data = mockAssets;
+    mocks.mediaState.isLoading = false;
+    mocks.mediaState.isError = false;
+    mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-1", creativeId: "creative-1" });
+    mocks.updateCampaignDraft.mockReset().mockResolvedValue(undefined);
+    mocks.publishCampaign.mockReset();
+    mocks.checkCampaignReadiness.mockReset();
+    mocks.markCampaignReadyForReview.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(cleanup);
+
+  it("REGRESSION: a stale start-date readiness issue shows a clean message and an Edit action, and Publish stays disabled", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({
+      ok: true,
+      ready: false,
+      issues: [{ code: "invalid_budget", message: "start date must not be in the past", severity: "error" }],
+    });
+    renderBuilder();
+    await createDraftAndReachPublish();
+
+    expect(await screen.findByText("Start date must not be in the past.")).toBeInTheDocument();
+    expect(screen.queryByText("start date must not be in the past")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit Budget & Schedule" })).toBeInTheDocument();
+  });
+
+  it("clicking the Edit action navigates to Budget & Schedule, focuses Start date, and preserves builder state", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({
+      ok: true,
+      ready: false,
+      issues: [{ code: "invalid_budget", message: "start date must not be in the past", severity: "error" }],
+    });
+    renderBuilder();
+    await createDraftAndReachPublish();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Budget & Schedule" }));
+
+    expect(await screen.findByRole("heading", { name: "Budget and schedule" })).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("id", "campaign-start-date"));
+
+    // builder state (from earlier steps) was not reset by the navigation
+    fireEvent.click(screen.getByRole("button", { name: "1. Goal" }));
+    expect(screen.getByLabelText("Campaign name")).toHaveValue("Launch Q4");
+  });
+
+  it("multiple readiness issues each link to their own correct step", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({
+      ok: true,
+      ready: false,
+      issues: [
+        { code: "invalid_budget", message: "start date must not be in the past", severity: "error" },
+        { code: "missing_cta", message: "a call-to-action is required.", severity: "error" },
+      ],
+    });
+    renderBuilder();
+    await createDraftAndReachPublish();
+
+    expect(await screen.findByRole("button", { name: "Edit Budget & Schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit Creative" })).toBeInTheDocument();
+  });
+
+  it("Re-check reruns readiness without navigating away or publishing, and a corrected date clears the issue", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValueOnce({
+      ok: true,
+      ready: false,
+      issues: [{ code: "invalid_budget", message: "start date must not be in the past", severity: "error" }],
+    });
+    renderBuilder();
+    await createDraftAndReachPublish();
+    expect(await screen.findByText("Start date must not be in the past.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit Budget & Schedule" }));
+    await screen.findByRole("heading", { name: "Budget and schedule" });
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2099-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "7. Publish" }));
+    await screen.findByRole("heading", { name: "Readiness & publish" });
+
+    mocks.checkCampaignReadiness.mockResolvedValueOnce({ ok: true, ready: true, issues: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Re-check" }));
+
+    await waitFor(() => expect(mocks.checkCampaignReadiness).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("Ready to publish.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled();
+    expect(mocks.publishCampaign).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Readiness & publish" })).toBeInTheDocument();
+  });
+
+  it("a passing readiness check enables Publish to Meta", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({ ok: true, ready: true, issues: [] });
+    renderBuilder();
+    await createDraftAndReachPublish();
+
+    expect(await screen.findByText("Ready to publish.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled();
+  });
+});

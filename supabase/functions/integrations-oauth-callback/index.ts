@@ -27,17 +27,10 @@ import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken } from "../_s
 import { isOauthStateValid } from "../_shared/integration-providers/oauthState.ts";
 import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
 import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
+import { redirectToApp } from "./redirectToApp.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
-
-function redirectToApp(appOrigin: string, params: Record<string, string | undefined>): Response {
-  const url = new URL("/integrations", appOrigin);
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined) url.searchParams.set(key, value);
-  }
-  return new Response(null, { status: 302, headers: { Location: url.toString() } });
-}
 
 async function verifyStillAuthorized(serviceSb: AnySupabaseClient, workspaceId: string, userId: string, permission: string): Promise<boolean> {
   const { data: membership } = await serviceSb.from("workspace_members").select("role").eq("workspace_id", workspaceId).eq("user_id", userId).maybeSingle();

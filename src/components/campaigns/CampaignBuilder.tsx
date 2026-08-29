@@ -21,12 +21,15 @@ import {
   checkCampaignReadiness, createCampaignDraft, markCampaignReadyForReview, newPublishIdempotencyKey, publishCampaign,
   updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
 } from "@/lib/adCampaigns";
+import { presentReadinessIssue } from "@/lib/readinessIssuePresentation";
 import {
   CAMPAIGN_BUILDER_STEPS as STEPS,
   issuesForStep,
   validateCampaignBuilder,
   type CampaignBuilderStep,
 } from "@/components/campaigns/campaignBuilderValidation";
+import { CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS } from "@/components/campaigns/campaignBuilderFieldFocus";
+
 
 export type CampaignBuilderPrefill = {
   sourceContentMediaAssetId?: string;
@@ -82,6 +85,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   const [checkingReadiness, setCheckingReadiness] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishResult, setPublishResult] = useState<{ ok: boolean; outcome?: string; steps?: Array<{ step: string; status: string }>; message?: string } | null>(null);
+  const [pendingFocusFieldId, setPendingFocusFieldId] = useState<string | null>(null);
   const idempotencyKeyRef = useRef<string>(newPublishIdempotencyKey());
 
   const selectedAdAccount = adAccounts?.find((a) => a.id === adAccountId) || null;
@@ -243,6 +247,28 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex, savedCampaignId]);
+
+  // Field-level focus for a readiness issue's "Edit <Step>" action - runs
+  // after navigating to the target step, once that step's fields have
+  // actually mounted.
+  useEffect(() => {
+    if (!pendingFocusFieldId) return;
+    const raf = requestAnimationFrame(() => {
+      const element = document.getElementById(pendingFocusFieldId);
+      element?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      element?.focus();
+      setPendingFocusFieldId(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [stepIndex, pendingFocusFieldId]);
+
+  const goToReadinessIssue = (issue: ReadinessIssue) => {
+    const presentation = presentReadinessIssue(issue);
+    if (!presentation.step) return;
+    setStepIndex(STEPS.indexOf(presentation.step));
+    const fieldId = presentation.field ? CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[presentation.field] : undefined;
+    setPendingFocusFieldId(fieldId ?? null);
+  };
 
   const ready = issues !== null && issues.every((i) => i.severity !== "error");
 
@@ -489,7 +515,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         <Card>
           <CardHeader><CardTitle>Creative</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-1.5">
+            <div id="campaign-media-picker" className="space-y-1.5">
               <Label>Media (from your Media Library)</Label>
               {selectedMediaAsset ? (
                 <div className="flex items-center gap-3 rounded-md border border-border bg-card p-3">
@@ -582,8 +608,8 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
               </div>
               {destinationType === "website" && (
                 <div className="space-y-1.5">
-                  <Label>Destination URL</Label>
-                  <Input value={destinationUrl} onChange={(e) => setDestinationUrl(e.target.value)} placeholder="https://" aria-invalid={!!fieldIssue("destinationUrl")} />
+                  <Label htmlFor="campaign-destination-url">Destination URL</Label>
+                  <Input id="campaign-destination-url" value={destinationUrl} onChange={(e) => setDestinationUrl(e.target.value)} placeholder="https://" aria-invalid={!!fieldIssue("destinationUrl")} />
                   <FieldError message={fieldIssue("destinationUrl")?.message} />
                 </div>
               )}
@@ -686,13 +712,23 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
                   <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" /> Ready to publish.</p>
                 )}
                 {issues && issues.length > 0 && (
-                  <ul className="space-y-1">
-                    {issues.map((issue, i) => (
-                      <li key={i} className={`flex items-start gap-2 text-sm ${issue.severity === "error" ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400"}`}>
-                        {issue.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
-                        {issue.message}
-                      </li>
-                    ))}
+                  <ul className="space-y-2">
+                    {issues.map((issue, i) => {
+                      const presentation = presentReadinessIssue(issue);
+                      return (
+                        <li key={i} className={`flex flex-wrap items-start justify-between gap-2 rounded-md border p-2 text-sm ${issue.severity === "error" ? "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400" : "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400"}`}>
+                          <span className="flex items-start gap-2">
+                            {issue.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+                            {presentation.message}
+                          </span>
+                          {presentation.step && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => goToReadinessIssue(issue)}>
+                              Edit {presentation.step}
+                            </Button>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
