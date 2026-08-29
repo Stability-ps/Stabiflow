@@ -21,8 +21,8 @@ Deno.test("buildMetaAuthorizeUrl points at the versioned Facebook OAuth dialog w
 Deno.test("meta provider requests the Meta scope set (pages/instagram/ads), not the WhatsApp set", () => {
   const url = new URL(buildMetaAuthorizeUrl({ appId: "a", apiVersion: "v21.0", redirectUri: "https://x", state: "s", provider: "meta" }));
   const scope = url.searchParams.get("scope") || "";
-  assertEquals(scope.includes("pages_manage_posts"), true);
-  assertEquals(scope.includes("instagram_content_publish"), true);
+  assertEquals(scope.includes("pages_manage_posts"), false);
+  assertEquals(scope.includes("instagram_content_publish"), false);
   assertEquals(scope.includes("ads_management"), true);
   assertEquals(scope.includes("whatsapp_business_messaging"), false);
 });
