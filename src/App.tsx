@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
+import { Compass } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/EmptyState";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { RequireAuth } from "@/components/RequireAuth";
@@ -96,13 +99,29 @@ export function AppRoutes() {
         <Route path="/app/integrations" element={<Integrations />} />
         <Route path="/app/settings" element={<Settings />} />
         <Route path="/app/operator" element={<Operator />} />
+        {/* A stale/invalid authenticated link (e.g. an old campaign route
+            missing the /app prefix) must stay inside the authenticated
+            shell - never fall through to the public catch-all below,
+            which would look exactly like an unexpected logout even
+            though the session/workspace are both still fully intact. */}
+        <Route path="/app/*" element={<NotFoundInApp />} />
       </Route>
-      {/* Safety net: any unmatched path (e.g. a stale redirect/bookmark)
-          must never render a blank page - send it to the landing page,
-          which itself sends authenticated users onward. See the
-          integrations-oauth-callback blank-page regression. */}
+      {/* Safety net for genuinely public/unrecognized paths only - unknown
+          /app/* paths are handled above, inside the authenticated shell.
+          See the integrations-oauth-callback blank-page regression. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+  );
+}
+
+export function NotFoundInApp() {
+  return (
+    <EmptyState
+      icon={Compass}
+      title="Page not found"
+      description="That page doesn't exist or may have moved. Your workspace and session are unaffected."
+      action={<Button asChild><Link to="/app">Back to Dashboard</Link></Button>}
+    />
   );
 }
 

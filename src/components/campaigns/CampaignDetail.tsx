@@ -143,7 +143,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         </div>
         <div className="flex gap-2">
           {campaign.status === "draft" && hasPermission("campaign.edit") && (
-            <Button variant="outline" onClick={() => navigate(`/campaigns/${campaignId}/edit`)}>Continue editing</Button>
+            <Button variant="outline" onClick={() => navigate(`/app/campaigns/${campaignId}/edit`)}>Continue editing</Button>
           )}
           {(campaign.status === "active" || campaign.status === "paused") && hasPermission("campaign.pause") && (
             <Button variant="outline" onClick={handlePauseResume} disabled={pausing}>

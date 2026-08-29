@@ -54,7 +54,7 @@ export function CampaignsList() {
           const objective = getObjectiveOption(c.objective);
           const budget = c.budget_type === "daily" ? c.daily_budget_minor_units : c.lifetime_budget_minor_units;
           return (
-            <Card key={c.id} className="flex cursor-pointer items-center gap-4 p-4 hover:bg-accent/40" onClick={() => navigate(`/campaigns/${c.id}`)}>
+            <Card key={c.id} className="flex cursor-pointer items-center gap-4 p-4 hover:bg-accent/40" onClick={() => navigate(`/app/campaigns/${c.id}`)}>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <CampaignStatusBadge status={c.status} />

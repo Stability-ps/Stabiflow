@@ -11,7 +11,7 @@ export default function EditCampaign() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate(`/campaigns/${id}`)}><ArrowLeft className="mr-2 h-4 w-4" /> Campaign</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate(`/app/campaigns/${id}`)}><ArrowLeft className="mr-2 h-4 w-4" /> Campaign</Button>
       </div>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Edit draft campaign</h1>
