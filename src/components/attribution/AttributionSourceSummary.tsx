@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { useAttributionNames, useTouchSummary, type AttributionTargetType, type TouchSummaryRow } from "@/hooks/useAttribution";
 import { confidenceLabel, explainTouch, sourceLabel } from "@/lib/attribution";
@@ -21,7 +22,18 @@ function TouchLine({ label, row, workspaceId }: { label: string; row: TouchSumma
       </div>
       {(names?.campaignName || names?.adName) && (
         <p className="pl-1 text-[11px] text-muted-foreground">
-          {names.campaignName && <>Campaign: {names.campaignName}</>}
+          {names.campaignName && (
+            <>
+              Campaign:{" "}
+              {row.campaign_id ? (
+                <Link to={`/app/campaigns/${row.campaign_id}`} className="font-medium text-foreground underline-offset-2 hover:underline">
+                  {names.campaignName}
+                </Link>
+              ) : (
+                names.campaignName
+              )}
+            </>
+          )}
           {names.campaignName && names.adName && " · "}
           {names.adName && <>Ad: {names.adName}</>}
         </p>

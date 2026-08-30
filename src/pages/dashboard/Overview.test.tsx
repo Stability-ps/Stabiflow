@@ -27,6 +27,7 @@ vi.mock("@/hooks/useAnalytics", () => ({
   useCampaignPerformance: () => ({ data: mocks.campaigns, isLoading: false }),
 }));
 vi.mock("@/hooks/useInboxConversations", () => ({ useInboxConversations: () => ({ data: mocks.conversations, isLoading: false }) }));
+vi.mock("@/hooks/useNeedsAttention", () => ({ useNeedsAttention: () => ({ items: [], isLoading: false, partialFailure: false }) }));
 vi.mock("@/hooks/useOnboardingStatus", () => ({ useOnboardingStatus: () => ({ data: { members: 1 } }) }));
 vi.mock("@/components/dashboard/OnboardingChecklist", () => ({ OnboardingChecklist: () => <div>COMPACT SETUP</div> }));
 vi.mock("@/lib/onboarding", () => ({

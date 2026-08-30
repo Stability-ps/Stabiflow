@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/layout/MetricCard";
 import { EmptyState } from "@/components/EmptyState";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
+import { NeedsAttentionPanel } from "@/components/dashboard/NeedsAttentionPanel";
 import { computeOnboardingItems, onboardingProgress } from "@/lib/onboarding";
 import { computeRoas, DEFAULT_ATTRIBUTION_MODEL, formatMoneyByCurrency, formatRoas, summarizeCurrency } from "@/lib/analytics";
 import { formatActivityAction, isDashboardActivity } from "@/lib/activityPresentation";
@@ -125,6 +126,8 @@ export default function Overview() {
       {showOnboardingFirst && onboardingBlock}
 
       {kpiGrid}
+
+      <NeedsAttentionPanel workspaceId={currentWorkspaceId} />
 
       {!showOnboardingFirst && onboardingBlock}
 
