@@ -11,6 +11,7 @@ import { MediaPreview } from "@/components/content/MediaPreview";
 import { EmptyState } from "@/components/EmptyState";
 import { CampaignLifecycleBadge } from "@/components/campaigns/CampaignLifecycleBadge";
 import { CampaignActionsMenu } from "@/components/campaigns/CampaignActionsMenu";
+import { CampaignJourney } from "@/components/campaigns/CampaignJourney";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
@@ -300,6 +301,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="creative">Creative</TabsTrigger>
+          <TabsTrigger value="journey">Journey</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
         </TabsList>
@@ -377,6 +379,10 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           ) : (
             <EmptyState icon={AlertTriangle} title="No creative" description="This campaign has no creative selected yet." />
           )}
+        </TabsContent>
+
+        <TabsContent value="journey" className="mt-4">
+          <CampaignJourney campaignId={campaignId} />
         </TabsContent>
 
         <TabsContent value="performance" className="mt-4 space-y-3">
