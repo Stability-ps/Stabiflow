@@ -3,11 +3,10 @@ import {
   canDeleteCampaignDraft,
   deriveCampaignPresentation,
   isEditableCampaign,
-  isStartDateInPast,
   isUnpublishedCampaign,
 } from "./campaignLifecycle";
 
-const err = { code: "invalid_budget", message: "start date must not be in the past", severity: "error" as const };
+const err = { code: "invalid_budget", message: "scheduled start time has passed", severity: "error" as const };
 const warn = { code: "creative_media_too_small", message: "media is small", severity: "warning" as const };
 
 describe("deriveCampaignPresentation", () => {
@@ -80,29 +79,3 @@ describe("editability / deletability guards", () => {
   });
 });
 
-describe("isStartDateInPast (workspace-timezone calendar comparison)", () => {
-  const JHB = "Africa/Johannesburg";
-
-  it("a start date of TODAY in the workspace zone is NOT past, even if the stored instant is local-midnight earlier today", () => {
-    // 2026-08-29 00:00 JHB == 2026-08-28T22:00:00Z
-    expect(isStartDateInPast("2026-08-28T22:00:00.000Z", JHB, new Date("2026-08-29T10:00:00Z"))).toBe(false);
-  });
-
-  it("a start date genuinely before today in the workspace zone IS past", () => {
-    expect(isStartDateInPast("2026-08-27T22:00:00.000Z", JHB, new Date("2026-08-29T10:00:00Z"))).toBe(true);
-  });
-
-  it("a future start date is not past", () => {
-    expect(isStartDateInPast("2099-01-01T00:00:00.000Z", JHB, new Date("2026-08-29T10:00:00Z"))).toBe(false);
-  });
-
-  it("timezone boundary: 23:59 JHB is still 'today'; one minute later a same start date becomes past", () => {
-    const start = "2026-08-28T22:00:00.000Z"; // 2026-08-29 00:00 JHB
-    expect(isStartDateInPast(start, JHB, new Date("2026-08-29T21:59:00Z"))).toBe(false); // 23:59 JHB, 29th
-    expect(isStartDateInPast(start, JHB, new Date("2026-08-29T22:00:00Z"))).toBe(true); // 00:00 JHB, 30th
-  });
-
-  it("an invalid date string is treated as not-past rather than throwing", () => {
-    expect(isStartDateInPast("not-a-date", JHB, new Date("2026-08-29T10:00:00Z"))).toBe(false);
-  });
-});

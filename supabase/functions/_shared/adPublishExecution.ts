@@ -185,7 +185,9 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
         status: "PAUSED",
         optimizationGoal: rule.optimizationGoal,
         billingEvent: rule.billingEvent,
-        startTime: campaign.start_at as string,
+        // null start_at = "Start now" -> pass null so Meta omits start_time
+        // and begins delivery when the ad set is activated below.
+        startTime: (campaign.start_at as string | null) ?? null,
         endTime: (campaign.end_at as string) || null,
         targeting: buildMetaTargetingSpec((campaign.audience as Record<string, unknown>) || {}),
         pagePlacements: (campaign.placements as Record<string, unknown>) || {},
@@ -206,7 +208,9 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
           billing_event: rule.billingEvent,
           targeting: campaign.audience || {},
           placements: campaign.placements || {},
-          start_at: campaign.start_at,
+          // ad_sets.start_at is NOT NULL - for a "Start now" campaign the
+          // concrete start instant IS the publish moment.
+          start_at: (campaign.start_at as string | null) ?? new Date().toISOString(),
           end_at: campaign.end_at,
         })
         .select("*")

@@ -92,7 +92,7 @@ export type CampaignDraftInput = {
   daily_budget_minor_units: number | null;
   lifetime_budget_minor_units: number | null;
   currency: string;
-  start_at: string;
+  start_at: string | null; // null = "Start now" (publish immediately)
   end_at: string | null;
   audience: AudienceBasics;
   source_content_media_asset_id?: string | null;

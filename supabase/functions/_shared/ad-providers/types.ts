@@ -67,7 +67,10 @@ export type CreateAdSetInput = {
   status: "PAUSED";
   optimizationGoal: string;
   billingEvent: string;
-  startTime: string; // ISO
+  // ISO instant for a scheduled start, or null for "Start now" - Meta then
+  // starts delivery as soon as the ad set is set ACTIVE (which the publish
+  // saga does at the end). buildCreateAdSetPayload omits start_time when null.
+  startTime: string | null;
   endTime: string | null;
   targeting: Record<string, unknown>;
   pagePlacements: Record<string, unknown>;

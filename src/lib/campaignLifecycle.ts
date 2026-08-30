@@ -12,7 +12,6 @@
 // publish" vs "Needs attention" from an ACTUAL readiness result rather
 // than from the stored status alone.
 import type { ReadinessIssue } from "@/lib/adCampaigns";
-import { localDateString } from "@/lib/analyticsDate";
 
 export type CampaignPresentationState =
   | "draft"
@@ -90,19 +89,6 @@ export function deriveCampaignPresentation(input: CampaignPresentationInput): Ca
   const readiness = input.liveReadiness ?? input.lastReadinessCheck ?? null;
   if (!readiness) return "draft";
   return readiness.ready ? "ready_to_publish" : "needs_attention";
-}
-
-/**
- * True when the campaign's START calendar date is strictly before today's
- * calendar date IN THE WORKSPACE TIMEZONE. Mirrors the server rule
- * (supabase/functions/_shared/adMoney.ts) so the detail page's "Start date
- * has passed" hint and the server's "start date must not be in the past"
- * readiness issue never disagree. A start date of *today* is NOT past.
- */
-export function isStartDateInPast(startAtIso: string, timeZone: string, now: Date): boolean {
-  const start = new Date(startAtIso);
-  if (Number.isNaN(start.getTime())) return false;
-  return localDateString(start, timeZone) < localDateString(now, timeZone);
 }
 
 export type PresentationMeta = {

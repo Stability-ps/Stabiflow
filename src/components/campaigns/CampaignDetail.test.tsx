@@ -144,17 +144,29 @@ describe("CampaignDetail - lifecycle/readiness badge is derived, never a stale s
 });
 
 describe("CampaignDetail - schedule UX", () => {
-  it("flags a start date that has already passed and offers Edit schedule", () => {
+  it("flags a scheduled start time that has already passed and offers Edit schedule", () => {
     mocks.campaign = makeCampaign({ start_at: "2020-01-01T00:00:00.000Z" });
     renderDetail();
-    expect(screen.getByText("Start date has passed")).toBeInTheDocument();
+    expect(screen.getByText("Scheduled start time has passed")).toBeInTheDocument();
   });
 
-  it("does not flag a future start date", () => {
+  it("does not flag a future start time", () => {
     renderDetail(); // start_at 2099
-    expect(screen.queryByText("Start date has passed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scheduled start time has passed")).not.toBeInTheDocument();
+  });
+
+  it("a 'Start now' campaign (start_at null) shows 'Start now (immediate)' and no stale-start warning", () => {
+    mocks.campaign = makeCampaign({ start_at: null });
+    renderDetail();
+    expect(screen.getByText(/Start now \(immediate\)/)).toBeInTheDocument();
+    expect(screen.queryByText("Scheduled start time has passed")).not.toBeInTheDocument();
   });
 });
+
+// Radix DropdownMenu opens on keydown (Enter/Space/ArrowDown) - reliable in jsdom.
+function openActionsMenu() {
+  fireEvent.keyDown(screen.getByRole("button", { name: /More campaign actions/i }), { key: "Enter" });
+}
 
 describe("CampaignDetail - actions are lifecycle-appropriate", () => {
   it("an unpublished draft exposes Edit campaign, and it routes to the canonical editor", () => {
@@ -163,17 +175,19 @@ describe("CampaignDetail - actions are lifecycle-appropriate", () => {
     expect(navigateMock).toHaveBeenCalledWith("/app/campaigns/campaign-1/edit");
   });
 
-  it("a published (active, has Meta id) campaign does NOT expose Edit campaign or Delete draft", () => {
+  it("a published (active, has Meta id) campaign does NOT expose Edit campaign or Delete draft, but Duplicate is still available", async () => {
     mocks.campaign = makeCampaign({ status: "active", external_campaign_id: "23848xxxx" });
     renderDetail();
     expect(screen.queryByRole("button", { name: /Edit campaign/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Delete draft/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Duplicate campaign/i })).toBeInTheDocument(); // duplicate is always allowed
+    openActionsMenu();
+    expect(await screen.findByRole("menuitem", { name: /Duplicate campaign/i })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /Delete draft/i })).not.toBeInTheDocument();
   });
 
   it("Delete draft requires an explicit, name-identified confirmation and calls the draft-only delete (never a Meta delete/publish)", async () => {
     renderDetail();
-    fireEvent.click(screen.getByRole("button", { name: /Delete draft/i }));
+    openActionsMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Delete draft/i }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByRole("heading", { name: /Delete draft .*Splash/ })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete draft" }));
@@ -182,9 +196,20 @@ describe("CampaignDetail - actions are lifecycle-appropriate", () => {
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/app/campaigns"));
   });
 
+  it("opening the actions menu does not mutate anything", async () => {
+    renderDetail();
+    openActionsMenu();
+    await screen.findByRole("menuitem", { name: /Duplicate campaign/i });
+    expect(mocks.duplicateCampaignDraft).not.toHaveBeenCalled();
+    expect(mocks.deleteCampaignDraft).not.toHaveBeenCalled();
+    expect(mocks.publishCampaign).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
   it("Duplicate creates a new local draft and routes to it, without publishing", async () => {
     renderDetail();
-    fireEvent.click(screen.getByRole("button", { name: /Duplicate campaign/i }));
+    openActionsMenu();
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Duplicate campaign/i }));
     await waitFor(() => expect(mocks.duplicateCampaignDraft).toHaveBeenCalledWith("campaign-1"));
     expect(mocks.publishCampaign).not.toHaveBeenCalled();
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/app/campaigns/campaign-2/edit"));

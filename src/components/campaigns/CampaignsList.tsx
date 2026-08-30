@@ -5,14 +5,18 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { CampaignLifecycleBadge } from "@/components/campaigns/CampaignLifecycleBadge";
 import { deriveCampaignPresentation, type ReadinessSnapshot } from "@/lib/campaignLifecycle";
+import { formatScheduleSummary } from "@/lib/campaignSchedule";
 import { getObjectiveOption } from "@/lib/adObjectives";
 import { formatMoney } from "@/lib/adMoney";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { useAdCampaigns } from "@/hooks/useAdCampaigns";
 import { useMetaAdAccounts } from "@/hooks/useMetaAccountResources";
 
 export function CampaignsList() {
   const { currentWorkspaceId, hasPermission } = useAuth();
+  const workspaceTimezone = useWorkspaceTimezone(currentWorkspaceId);
+  const now = new Date();
   const navigate = useNavigate();
   const { data: campaigns, isLoading } = useAdCampaigns(currentWorkspaceId);
   const { data: adAccounts, isLoading: adAccountsLoading } = useMetaAdAccounts(currentWorkspaceId);
@@ -72,10 +76,7 @@ export function CampaignsList() {
               </div>
               <div className="hidden shrink-0 text-right text-xs text-muted-foreground sm:block">
                 <p>{formatMoney(budget, c.currency)} <span className="capitalize">{c.budget_type}</span></p>
-                <p>
-                  {new Date(c.start_at).toLocaleDateString()}
-                  {c.end_at ? ` - ${new Date(c.end_at).toLocaleDateString()}` : " - ongoing"}
-                </p>
+                <p>{formatScheduleSummary(c.start_at, workspaceTimezone, now)}</p>
               </div>
             </Card>
           );

@@ -58,8 +58,9 @@ const CODE_TARGET: Record<string, { step: CampaignBuilderStep; field: string | n
 // which field is actually at fault.
 function targetForInvalidBudget(message: string): { step: CampaignBuilderStep; field: string | null } {
   const lower = message.toLowerCase();
-  if (lower.includes("start date")) return { step: "Budget & Schedule", field: "startAt" };
-  if (lower.includes("end date")) return { step: "Budget & Schedule", field: "endAt" };
+  // Order matters: "end time must be after the start time" mentions both.
+  if (lower.includes("end date") || lower.includes("end time")) return { step: "Budget & Schedule", field: "endAt" };
+  if (lower.includes("start date") || lower.includes("start time")) return { step: "Budget & Schedule", field: "startAt" };
   return { step: "Budget & Schedule", field: "budgetDecimal" };
 }
 

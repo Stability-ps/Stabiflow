@@ -32,7 +32,6 @@ function baseInput(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
     },
     whatsappNumber: null,
     tokenHealthy: true,
-    timezone: "Africa/Johannesburg",
     now: new Date("2026-08-29T10:00:00Z"),
     ...overrides,
   };
@@ -126,31 +125,28 @@ Deno.test("tokenHealthy=null (not checked) produces no token issue - readiness n
   assertEquals(issues.some((i) => i.code === "token_unhealthy"), false);
 });
 
-Deno.test("REGRESSION: a start date of TODAY in the workspace timezone does NOT produce an 'in the past' issue", () => {
-  // start_at stored as JHB local midnight for 2026-08-29 -> 2026-08-28T22:00Z,
-  // which as an instant is 12h before the pinned now (2026-08-29 10:00Z /
-  // 12:00 JHB). Calendar-date comparison in JHB: 2026-08-29 == 2026-08-29.
-  const issues = checkCampaignReadiness(
-    baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-28T22:00:00Z" } }),
-  );
-  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("start date must not be in the past")), false);
+Deno.test("START NOW: startAt null produces no schedule issue and readiness passes", () => {
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: null } }));
+  assertEquals(issues.some((i) => i.code === "invalid_budget"), false);
   assertEquals(isReady(issues), true);
 });
 
-Deno.test("a start date that is genuinely yesterday in the workspace timezone still blocks readiness", () => {
-  const issues = checkCampaignReadiness(
-    baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-27T22:00:00Z" } }), // 2026-08-28 00:00 JHB, now is the 29th
-  );
-  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("start date must not be in the past")), true);
+Deno.test("SCHEDULED later today: a future start instant on the same calendar day is fine (no calendar-date-only rule)", () => {
+  // now 2026-08-29 10:00Z; start 2026-08-29 18:00Z - same day, still future.
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T18:00:00Z" } }));
+  assertEquals(issues.some((i) => i.code === "invalid_budget"), false);
+});
+
+Deno.test("SCHEDULED start time that has passed blocks readiness with a 'scheduled start time has passed' issue", () => {
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T09:00:00Z" } })); // 1h before now
+  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("scheduled start time has passed")), true);
   assertEquals(isReady(issues), false);
 });
 
-Deno.test("timezone defaults to UTC when the caller resolves none", () => {
-  // No `timezone` -> UTC. start 2026-08-29 00:00Z, now 2026-08-29 10:00Z: same UTC day -> allowed.
-  const issues = checkCampaignReadiness(
-    baseInput({ timezone: undefined, campaign: { ...baseInput().campaign, startAt: "2026-08-29T00:00:00Z" } }),
-  );
-  assertEquals(issues.some((i) => i.message.includes("start date must not be in the past")), false);
+Deno.test("publish-time recheck: the same campaign flips from ready to not-ready as `now` crosses its scheduled start", () => {
+  const campaign = { ...baseInput().campaign, startAt: "2026-08-29T14:10:00Z" };
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:00:00Z") }))), true);
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:20:00Z") }))), false);
 });
 
 Deno.test("isReady is false if ANY error-severity issue exists, regardless of warnings", () => {

@@ -2,8 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, Pencil, Trash2 } from "lucide-react";
+import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -14,11 +17,12 @@ import { canDeleteCampaignDraft, isEditableCampaign } from "@/lib/campaignLifecy
 
 type CampaignForActions = { id: string; name: string; status: string; external_campaign_id: string | null };
 
-// Lifecycle-appropriate campaign management (spec 1). Only renders actions
-// valid for the campaign's current state; nothing mutates until the user
-// explicitly confirms. Delete is draft-only (also RLS-enforced), visually
-// de-emphasised, and gated behind a name-identified confirmation dialog -
-// it never removes anything from Meta.
+// Lifecycle-appropriate campaign management (spec 1 / 8). Edit is the
+// primary action; Duplicate and Delete draft live in a "..." overflow
+// menu. Only actions valid for the current lifecycle state render, and
+// nothing mutates until the user explicitly confirms - opening the menu
+// does nothing. Delete is draft-only (also RLS-enforced), destructive,
+// and gated by a name-identified confirmation; it never touches Meta.
 export function CampaignActionsMenu({ campaign }: { campaign: CampaignForActions }) {
   const { hasPermission } = useAuth();
   const navigate = useNavigate();
@@ -64,25 +68,38 @@ export function CampaignActionsMenu({ campaign }: { campaign: CampaignForActions
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex items-center gap-2">
       {canEdit && (
         <Button variant="outline" onClick={() => navigate(`/app/campaigns/${campaign.id}/edit`)}>
           <Pencil className="mr-2 h-4 w-4" /> Edit campaign
         </Button>
       )}
-      {canDuplicate && (
-        <Button variant="outline" onClick={handleDuplicate} disabled={duplicating}>
-          <Copy className="mr-2 h-4 w-4" /> {duplicating ? "Duplicating..." : "Duplicate campaign"}
-        </Button>
-      )}
-      {canDelete && (
-        <Button
-          variant="ghost"
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => setConfirmDeleteOpen(true)}
-        >
-          <Trash2 className="mr-2 h-4 w-4" /> Delete draft
-        </Button>
+      {(canDuplicate || canDelete) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon" aria-label="More campaign actions">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canDuplicate && (
+              <DropdownMenuItem onClick={handleDuplicate} disabled={duplicating}>
+                <Copy className="mr-2 h-4 w-4" /> {duplicating ? "Duplicating..." : "Duplicate campaign"}
+              </DropdownMenuItem>
+            )}
+            {canDelete && (
+              <>
+                {canDuplicate && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  onClick={() => setConfirmDeleteOpen(true)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete draft
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>

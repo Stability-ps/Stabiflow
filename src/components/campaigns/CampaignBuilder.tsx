@@ -18,9 +18,8 @@ import { useAdCampaign } from "@/hooks/useAdCampaign";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { DESTINATION_TYPE_LABELS, OBJECTIVE_OPTIONS, getObjectiveOption, type DestinationType, type SupportedObjective } from "@/lib/adObjectives";
 import { decimalToMinorUnits, minorUnitsToDecimalString } from "@/lib/adMoney";
-import { zonedDateTimeToUtc } from "@/lib/contentTimezone";
-import { localDateString } from "@/lib/analyticsDate";
 import { isEditableCampaign } from "@/lib/campaignLifecycle";
+import { localDateTimeToUtc, utcToLocalDateTimeParts, type StartMode } from "@/lib/campaignSchedule";
 import {
   checkCampaignReadiness, createCampaignDraft, newPublishIdempotencyKey, publishCampaign,
   syncCampaignReviewStatus, updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
@@ -73,8 +72,13 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   const [geoCountries, setGeoCountries] = useState("ZA");
   const [budgetType, setBudgetType] = useState<"daily" | "lifetime">("daily");
   const [budgetDecimal, setBudgetDecimal] = useState("100.00");
-  const [startAt, setStartAt] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  // Scheduling: "Start now" (default - users must never be forced to wait
+  // until tomorrow) or a workspace-timezone date + time.
+  const [startMode, setStartMode] = useState<StartMode>("now");
+  const [startAt, setStartAt] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
   const [endAt, setEndAt] = useState("");
+  const [endTime, setEndTime] = useState("23:59");
   const [mediaAssetId, setMediaAssetId] = useState(prefill?.sourceContentMediaAssetId || "");
   const [headline, setHeadline] = useState("");
   const [primaryText, setPrimaryText] = useState(prefill?.primaryText || "");
@@ -120,10 +124,23 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setGeoCountries((audience.geo_countries || ["ZA"]).join(","));
     setBudgetType(existing.budget_type as "daily" | "lifetime");
     setBudgetDecimal(minorUnitsToDecimalString(existing.budget_type === "daily" ? existing.daily_budget_minor_units : existing.lifetime_budget_minor_units) || "100.00");
-    // Show the calendar date in the WORKSPACE timezone, matching how it
-    // was authored - not the raw UTC date, which can be the previous day.
-    setStartAt(localDateString(new Date(existing.start_at), workspaceTimezone));
-    setEndAt(existing.end_at ? localDateString(new Date(existing.end_at), workspaceTimezone) : "");
+    // Rehydrate the schedule: stored UTC instant -> workspace-local date +
+    // time. A null start_at means the campaign was set to "Start now".
+    if (existing.start_at) {
+      setStartMode("scheduled");
+      const startParts = utcToLocalDateTimeParts(existing.start_at, workspaceTimezone);
+      setStartAt(startParts.date);
+      setStartTime(startParts.time);
+    } else {
+      setStartMode("now");
+    }
+    if (existing.end_at) {
+      const endParts = utcToLocalDateTimeParts(existing.end_at, workspaceTimezone);
+      setEndAt(endParts.date);
+      setEndTime(endParts.time);
+    } else {
+      setEndAt("");
+    }
     const creative = existing.ad_creatives as unknown as { media_asset_id: string; headline: string | null; primary_text: string; description: string | null; cta: string; destination_url: string | null; whatsapp_number_id: string | null } | null;
     if (creative) {
       setMediaAssetId(creative.media_asset_id);
@@ -153,6 +170,11 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     appliedDeepLinkRef.current = true;
     setStepIndex(targetIndex);
     if (requestedFocus) {
+      // A start/end field can only be focused when the schedule is in
+      // "scheduled" mode - reveal it if the deep link points there.
+      if (requestedFocus === "startAt" || requestedFocus === "startTime" || requestedFocus === "endAt") {
+        setStartMode("scheduled");
+      }
       setPendingFocusFieldId(CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[requestedFocus] ?? null);
     }
   }, [requestedStep, requestedFocus, isEdit, existing]);
@@ -169,6 +191,15 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
 
   const geoCountryList = useMemo(() => geoCountries.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean), [geoCountries]);
 
+  // A slow ticking "now" so the "scheduled start must be in the future"
+  // check re-evaluates while the builder sits open. The server re-checks
+  // authoritatively at publish time regardless.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const validationIssues = useMemo(() => validateCampaignBuilder({
     name,
     objective,
@@ -184,8 +215,13 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     geoCountries: geoCountryList,
     budgetType,
     budgetDecimal,
+    startMode,
     startAt,
+    startTime,
     endAt,
+    endTime,
+    timezone: workspaceTimezone,
+    now,
     mediaAssetId,
     mediaAssetIsUsable: !!selectedMediaAsset,
     primaryText,
@@ -195,10 +231,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     whatsappNumberId,
     whatsappNumberIsUsable: activeWhatsappNumbers.some((number) => number.id === whatsappNumberId),
   }), [
-    adAccountId, ageMax, ageMin, budgetDecimal, budgetType, cta, destinationType, destinationUrl, endAt,
-    facebookPageId, geoCountryList, igAccounts, instagramAccountId, integration?.id, mediaAssetId, name, objective,
-    objectiveOption?.allowedCtas, pages, primaryText, selectedAdAccount, selectedMediaAsset, startAt, whatsappNumberId,
-    activeWhatsappNumbers,
+    adAccountId, ageMax, ageMin, budgetDecimal, budgetType, cta, destinationType, destinationUrl, endAt, endTime,
+    facebookPageId, geoCountryList, igAccounts, instagramAccountId, integration?.id, mediaAssetId, name, now, objective,
+    objectiveOption?.allowedCtas, pages, primaryText, selectedAdAccount, selectedMediaAsset, startAt, startMode, startTime,
+    whatsappNumberId, workspaceTimezone, activeWhatsappNumbers,
   ]);
 
   const canSaveDraft = validationIssues.length === 0;
@@ -213,19 +249,11 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setSaving(true);
     try {
       const minorUnits = decimalToMinorUnits(Number(budgetDecimal));
-      // A calendar date typed into a <input type="date"> is anchored to
-      // the WORKSPACE timezone, not the browser's - so "starts 29 Aug"
-      // means 29 Aug 00:00 in Africa/Johannesburg, and the server's
-      // calendar-date "not in the past" check agrees. (Previously parsed
-      // as browser-local midnight, which for a same-day start was already
-      // hours in the past by the server's old instant comparison.)
-      const [startYear, startMonth, startDay] = startAt.split("-").map(Number);
-      const startInstant = zonedDateTimeToUtc(startYear, startMonth, startDay, 0, 0, workspaceTimezone);
-      let endInstant: Date | null = null;
-      if (endAt) {
-        const [endYear, endMonth, endDay] = endAt.split("-").map(Number);
-        endInstant = zonedDateTimeToUtc(endYear, endMonth, endDay, 23, 59, workspaceTimezone);
-      }
+      // "Start now" -> start_at = null (the campaign publishes immediately;
+      // Meta's ad set is created with no start_time). Otherwise the user's
+      // workspace-local date + time is converted to the correct UTC instant.
+      const startInstant = startMode === "now" ? null : localDateTimeToUtc(startAt, startTime, workspaceTimezone);
+      const endInstant = endAt ? localDateTimeToUtc(endAt, endTime || "23:59", workspaceTimezone) : null;
       const campaignInput = {
         workspace_id: currentWorkspaceId,
         integration_id: integration.id,
@@ -239,7 +267,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         daily_budget_minor_units: budgetType === "daily" ? minorUnits : null,
         lifetime_budget_minor_units: budgetType === "lifetime" ? minorUnits : null,
         currency: selectedAdAccount.currency || "ZAR",
-        start_at: startInstant.toISOString(),
+        start_at: startInstant ? startInstant.toISOString() : null,
         end_at: endInstant ? endInstant.toISOString() : null,
         audience: { age_min: ageMin, age_max: ageMax, genders, geo_countries: geoCountryList },
         source_content_media_asset_id: prefill?.sourceContentMediaAssetId || null,
@@ -312,6 +340,9 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     const presentation = presentReadinessIssue(issue);
     if (!presentation.step) return;
     setStepIndex(STEPS.indexOf(presentation.step));
+    if (presentation.field === "startAt" || presentation.field === "endAt") {
+      setStartMode("scheduled"); // reveal the date/time fields so they can be focused
+    }
     const fieldId = presentation.field ? CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[presentation.field] : undefined;
     setPendingFocusFieldId(fieldId ?? null);
   };
@@ -527,30 +558,75 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       {step === "Budget & Schedule" && (
         <Card>
           <CardHeader><CardTitle>Budget and schedule</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-budget-type">Budget type</Label>
-              <Select value={budgetType} onValueChange={(v) => setBudgetType(v as "daily" | "lifetime")}>
-                <SelectTrigger id="campaign-budget-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily budget</SelectItem>
-                  <SelectItem value="lifetime">Lifetime budget</SelectItem>
-                </SelectContent>
-              </Select>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-budget-type">Budget type</Label>
+                <Select value={budgetType} onValueChange={(v) => setBudgetType(v as "daily" | "lifetime")}>
+                  <SelectTrigger id="campaign-budget-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily budget</SelectItem>
+                    <SelectItem value="lifetime">Lifetime budget</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-budget">{budgetType === "daily" ? "Daily" : "Lifetime"} budget ({selectedAdAccount?.currency || "?"})</Label>
+                <Input id="campaign-budget" type="number" min={1} step="0.01" value={budgetDecimal} onChange={(e) => setBudgetDecimal(e.target.value)} aria-invalid={!!fieldIssue("budgetDecimal")} />
+                <FieldError message={fieldIssue("budgetDecimal")?.message} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-budget">{budgetType === "daily" ? "Daily" : "Lifetime"} budget ({selectedAdAccount?.currency || "?"})</Label>
-              <Input id="campaign-budget" type="number" min={1} step="0.01" value={budgetDecimal} onChange={(e) => setBudgetDecimal(e.target.value)} aria-invalid={!!fieldIssue("budgetDecimal")} />
-              <FieldError message={fieldIssue("budgetDecimal")?.message} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-start-date">Start date</Label>
-              <Input id="campaign-start-date" type="date" value={startAt} onChange={(e) => setStartAt(e.target.value)} aria-invalid={!!fieldIssue("startAt")} />
+
+            <div className="space-y-2">
+              <Label>Start</Label>
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label="When should this campaign start?">
+                <button
+                  type="button"
+                  aria-pressed={startMode === "now"}
+                  onClick={() => setStartMode("now")}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${startMode === "now" ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent/40"}`}
+                >
+                  Start now
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Publish immediately once readiness passes</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={startMode === "scheduled"}
+                  onClick={() => setStartMode("scheduled")}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${startMode === "scheduled" ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent/40"}`}
+                >
+                  Schedule for later
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Pick a date &amp; time, including later today</span>
+                </button>
+              </div>
+              {startMode === "scheduled" && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="campaign-start-date">Start date</Label>
+                    <Input id="campaign-start-date" type="date" value={startAt} onChange={(e) => setStartAt(e.target.value)} aria-invalid={!!fieldIssue("startAt")} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="campaign-start-time">Start time</Label>
+                    <Input id="campaign-start-time" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} aria-invalid={!!fieldIssue("startAt")} />
+                  </div>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">Times are in <span className="font-medium">{workspaceTimezone}</span> (your workspace timezone).</p>
+                </div>
+              )}
               <FieldError message={fieldIssue("startAt")?.message} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-end-date">End date {budgetType === "lifetime" ? "(required)" : "(optional)"}</Label>
-              <Input id="campaign-end-date" type="date" value={endAt} onChange={(e) => setEndAt(e.target.value)} aria-invalid={!!fieldIssue("endAt")} />
+
+            <div className="space-y-2">
+              <Label>End {budgetType === "lifetime" ? "(required for a lifetime budget)" : "(optional)"}</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="campaign-end-date" className="text-xs text-muted-foreground">End date</Label>
+                  <Input id="campaign-end-date" type="date" value={endAt} onChange={(e) => setEndAt(e.target.value)} aria-invalid={!!fieldIssue("endAt")} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="campaign-end-time" className="text-xs text-muted-foreground">End time</Label>
+                  <Input id="campaign-end-time" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={!endAt} aria-invalid={!!fieldIssue("endAt")} />
+                </div>
+              </div>
               <FieldError message={fieldIssue("endAt")?.message} />
             </div>
           </CardContent>
@@ -709,7 +785,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
               <div><dt className="text-muted-foreground">Destination</dt><dd>{destinationType ? DESTINATION_TYPE_LABELS[destinationType] : "-"}{destinationUrl ? ` — ${destinationUrl}` : ""}</dd></div>
               <div><dt className="text-muted-foreground">Audience</dt><dd>{ageMin}-{ageMax}, {genders}, {geoCountryList.join(", ") || "-"}</dd></div>
               <div><dt className="text-muted-foreground">Budget</dt><dd>{budgetDecimal} {selectedAdAccount?.currency} ({budgetType})</dd></div>
-              <div><dt className="text-muted-foreground">Schedule</dt><dd>{startAt} {endAt ? `- ${endAt}` : "- ongoing"}</dd></div>
+              <div><dt className="text-muted-foreground">Schedule</dt><dd>{startMode === "now" ? "Start now" : `${startAt} ${startTime} (${workspaceTimezone})`}{endAt ? ` - ends ${endAt} ${endTime}` : " - ongoing"}</dd></div>
             </dl>
             {selectedMediaAsset && (
               <div className="rounded-lg border p-3">

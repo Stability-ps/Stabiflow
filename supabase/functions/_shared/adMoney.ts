@@ -29,15 +29,12 @@ export type MoneyInput = {
   dailyBudgetMinorUnits: number | null;
   lifetimeBudgetMinorUnits: number | null;
   currency: string;
-  startAt: Date;
+  // The scheduled start INSTANT (UTC), or null for "Start now" (immediate
+  // publish - the Meta ad set is created with no start_time). The client is
+  // responsible for converting the user's workspace-local date + time into
+  // this instant; the server only compares instants.
+  startAt: Date | null;
   endAt: Date | null;
-  // IANA timezone (workspace_settings.timezone) the campaign's schedule is
-  // authored in. The start-date "not in the past" rule is a CALENDAR-DATE
-  // comparison in this zone - a start date of *today* is allowed (Meta
-  // permits an immediate start), it is only "in the past" once the zone's
-  // calendar has actually rolled to a later day. Defaults to "UTC" so any
-  // caller that doesn't pass a zone keeps a stable, well-defined rule.
-  timezone?: string;
   // Injected clock, for deterministic tests (repo convention: no hidden
   // Date.now() in pure modules). Defaults to the real now.
   now?: Date;
@@ -46,17 +43,6 @@ export type MoneyInput = {
 export type MoneyValidationResult = { valid: true } | { valid: false; issues: string[] };
 
 const ISO_4217_PATTERN = /^[A-Z]{3}$/;
-
-// "YYYY-MM-DD" for `instant`'s wall-clock date in `timeZone`. Falls back to
-// UTC if the zone string is not a recognised IANA name. ISO date strings
-// compare correctly with <, so callers can order calendar dates directly.
-export function calendarDateInZone(instant: Date, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
-  } catch {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
-  }
-}
 
 export function convertDecimalToMinorUnits(decimalAmount: number): number {
   if (!Number.isFinite(decimalAmount)) return NaN;
@@ -109,21 +95,26 @@ export function validateCampaignBudget(input: MoneyInput): MoneyValidationResult
     issues.push(`budget_type must be 'daily' or 'lifetime', got "${input.budgetType}"`);
   }
 
-  if (input.endAt && input.endAt.getTime() <= input.startAt.getTime()) {
-    issues.push("end date must be after the start date");
+  const now = input.now ?? new Date();
+
+  // Schedule is a timezone-aware DATE + TIME, resolved by the caller to a
+  // UTC instant (or null for "Start now"). We compare instants here.
+  //
+  // End must be strictly after the effective start:
+  //  - scheduled start -> after that instant
+  //  - "start now" (startAt null) -> after "now"
+  const effectiveStartMs = input.startAt ? input.startAt.getTime() : now.getTime();
+  if (input.endAt && input.endAt.getTime() <= effectiveStartMs) {
+    issues.push("end time must be after the start time");
   }
 
-  // Calendar-date comparison in the campaign's authoring timezone, NOT an
-  // instant-vs-now comparison. A campaign whose start date is *today* is
-  // valid all day - it only becomes "in the past" once that zone's
-  // calendar has rolled to a later date. (The previous instant comparison
-  // treated local midnight of the start day as already-past for every hour
-  // after it, so a same-day start failed readiness from 00:00 onward - the
-  // stale-"ready"/timezone bug this fixes.)
-  const timezone = input.timezone || "UTC";
-  const now = input.now ?? new Date();
-  if (calendarDateInZone(input.startAt, timezone) < calendarDateInZone(now, timezone)) {
-    issues.push("start date must not be in the past");
+  // A SCHEDULED start must be in the future. "Start now" (null) is always
+  // valid - it publishes immediately. No artificial minimum buffer: the
+  // Meta Marketing API only requires an ad set start_time to be after the
+  // current time, and StabiFlow omits start_time entirely for an immediate
+  // start, so any genuinely-future instant is acceptable.
+  if (input.startAt && input.startAt.getTime() <= now.getTime()) {
+    issues.push("scheduled start time has passed");
   }
 
   return issues.length ? { valid: false, issues } : { valid: true };

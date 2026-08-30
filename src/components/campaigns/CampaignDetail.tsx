@@ -21,11 +21,11 @@ import { useSingleCampaignPerformance } from "@/hooks/useAnalytics";
 import { DEFAULT_ATTRIBUTION_MODEL, computeRoas, formatMoneyByCurrency, formatRoas } from "@/lib/analytics";
 import { getObjectiveOption, DESTINATION_TYPE_LABELS, type DestinationType } from "@/lib/adObjectives";
 import { formatMoney } from "@/lib/adMoney";
-import { formatInTimezone } from "@/lib/contentTimezone";
 import { localDateString } from "@/lib/analyticsDate";
 import {
-  deriveCampaignPresentation, isEditableCampaign, isStartDateInPast, isUnpublishedCampaign, type ReadinessSnapshot,
+  deriveCampaignPresentation, isEditableCampaign, isUnpublishedCampaign, type ReadinessSnapshot,
 } from "@/lib/campaignLifecycle";
+import { formatScheduleStart, isScheduledStartInPast } from "@/lib/campaignSchedule";
 import { campaignEditorPath, presentReadinessIssue, readinessActionLabel } from "@/lib/readinessIssuePresentation";
 import {
   checkCampaignReadiness, newPublishIdempotencyKey, pauseCampaign, publishCampaign, refreshCampaignMetrics,
@@ -38,13 +38,6 @@ import {
 // get_campaign_performance read model /analytics uses (just filtered to
 // one campaign_id client-side) so the two surfaces can never disagree.
 const ALL_TIME_RANGE = { from: new Date(0), to: new Date(Date.now() + 86_400_000) };
-
-function scheduleDateLabel(iso: string | null, timeZone: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return formatInTimezone(d, timeZone, { hour: undefined, minute: undefined });
-}
 
 function calendarDateLabel(iso: string | null | undefined, timeZone: string): string {
   if (!iso) return "-";
@@ -195,8 +188,10 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     campaign.destination_type === "website" ? creative?.destination_url || null
     : campaign.destination_type === "whatsapp" ? (whatsappNumber?.display_phone_number || "WhatsApp number") : null;
 
-  const startPast = isStartDateInPast(campaign.start_at, workspaceTimezone, new Date());
-  const scheduleRange = `${scheduleDateLabel(campaign.start_at, workspaceTimezone)}${campaign.end_at ? ` - ${scheduleDateLabel(campaign.end_at, workspaceTimezone)}` : " - ongoing"}`;
+  const startsNow = !campaign.start_at;
+  const startPast = isScheduledStartInPast(campaign.start_at, new Date());
+  const scheduleStartLabel = formatScheduleStart(campaign.start_at, workspaceTimezone);
+  const scheduleEndLabel = campaign.end_at ? formatScheduleStart(campaign.end_at, workspaceTimezone) : null;
   const canEditSchedule = isEditableCampaign(campaign) && hasPermission("campaign.edit");
 
   const editLink = (field?: string) => campaignEditorPath(campaignId, "Budget & Schedule", field);
@@ -310,10 +305,14 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
               <div><p className="text-xs text-muted-foreground">Budget</p><p className="text-sm font-medium">{formatMoney(budget, campaign.currency)} ({campaign.budget_type})</p></div>
               <div>
                 <p className="text-xs text-muted-foreground">Schedule</p>
-                <p className="text-sm font-medium">{scheduleRange}</p>
+                <p className="text-sm font-medium">
+                  {startsNow ? "Start now (immediate)" : scheduleStartLabel}
+                  {scheduleEndLabel ? ` → ${scheduleEndLabel}` : startsNow ? "" : " → ongoing"}
+                </p>
+                {!startsNow && <p className="text-xs text-muted-foreground">{workspaceTimezone}</p>}
                 {startPast && (
                   <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-                    <CalendarClock className="h-3.5 w-3.5" /> Start date has passed
+                    <CalendarClock className="h-3.5 w-3.5" /> Scheduled start time has passed
                     {canEditSchedule && <Link to={editLink("startAt")} className="underline underline-offset-2">Edit schedule</Link>}
                   </span>
                 )}

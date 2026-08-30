@@ -22,6 +22,7 @@ vi.mock("react-router-dom", async () => {
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ currentWorkspaceId: "workspace-1", hasPermission: () => true }),
 }));
+vi.mock("@/hooks/useWorkspaceTimezone", () => ({ useWorkspaceTimezone: () => "Africa/Johannesburg" }));
 
 const mockAdAccount = { id: "acct-1", name: "StabiFlow Insights", ad_account_id: "act_123", currency: "ZAR" };
 const baseCampaign = {
