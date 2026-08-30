@@ -85,7 +85,7 @@ export function computeOnboardingItems(counts: OnboardingCounts): OnboardingItem
       key: "conversation",
       label: "Receive your first conversation",
       description: "Once WhatsApp is connected, incoming messages show up in the Inbox.",
-      to: "/app/inbox",
+      to: "/app/whatsapp/inbox",
       complete: counts.conversations > 0,
     },
     {

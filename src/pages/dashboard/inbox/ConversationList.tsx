@@ -74,7 +74,7 @@ export function ConversationList({ conversations, unreadIds, selectedId, onSelec
         </Select>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" role="list" aria-label="WhatsApp conversations">
         {filtered.length === 0 ? (
           conversations.length === 0 ? (
             <EmptyState
@@ -89,18 +89,22 @@ export function ConversationList({ conversations, unreadIds, selectedId, onSelec
         ) : (
           filtered.map((c) => {
             const unread = unreadIds.has(c.id);
+            const name = c.display_name || c.phone_number;
             return (
               <button
                 key={c.id}
+                role="listitem"
                 onClick={() => onSelect(c.id)}
-                className={`flex w-full items-start gap-3 border-b p-3 text-left transition-colors hover:bg-muted/50 ${selectedId === c.id ? "bg-muted" : ""}`}
+                aria-current={selectedId === c.id ? "true" : undefined}
+                aria-label={`Conversation with ${name}${unread ? ", unread" : ""}, ${inboxStatusLabel(c.inbox_status)}`}
+                className={`flex w-full items-start gap-3 border-b p-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selectedId === c.id ? "bg-muted" : ""}`}
               >
                 <Avatar className="h-9 w-9 shrink-0">
                   <AvatarFallback className="text-xs">{(c.display_name || c.wa_id).slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <p className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}>{c.display_name || c.phone_number}</p>
+                    <p className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}>{name}</p>
                     <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(c.last_inbound_at || c.updated_at)}</span>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1">

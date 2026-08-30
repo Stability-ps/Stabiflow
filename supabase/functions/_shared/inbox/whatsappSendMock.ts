@@ -3,8 +3,9 @@
 // result with no real Meta API call and no real message delivered, so the
 // window/template send logic can be genuinely exercised end to end -
 // never imported by the real provider, never silently substituted for it;
-// the calling edge function is the only place that chooses (see
-// isWhatsAppMockMode() in whatsappSendProvider.ts).
+// the calling edge function is the only place that chooses, and only when
+// resolveWhatsAppSendMockMode(req) is true - env flag AND test-harness
+// header both present (see whatsappSendProvider.ts).
 import type { WhatsAppSendProvider } from "./whatsappSendProvider.ts";
 
 function mockWamid(prefix: string): string {

@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { MoreVertical, Plus, Workflow } from "lucide-react";
+import { WhatsAppContextBanner } from "@/components/whatsapp/WhatsAppContextBanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/EmptyState";
@@ -37,6 +39,17 @@ export default function Automations() {
   const canViewRuns = roleHasPermission(role, "automation.view_runs");
 
   const { data: automations, isLoading, refetch } = useAutomations(canView ? currentWorkspaceId : null);
+
+  // Entered from WhatsApp > Automations: show the "came from WhatsApp"
+  // context and narrow the list to conversation/message triggers. Purely a
+  // view filter - nothing is created, edited, or hidden from other routes.
+  const [searchParams] = useSearchParams();
+  const fromWhatsApp = searchParams.get("trigger") === "conversation";
+  const visibleAutomations = useMemo(() => {
+    const all = automations || [];
+    if (!fromWhatsApp) return all;
+    return all.filter((a) => a.trigger_event_type.startsWith("conversation.") || a.trigger_event_type.startsWith("message."));
+  }, [automations, fromWhatsApp]);
 
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editingAutomation, setEditingAutomation] = useState<AutomationRow | null>(null);
@@ -82,6 +95,11 @@ export default function Automations() {
 
   return (
     <div className="flex flex-col">
+      {fromWhatsApp && (
+        <div className="mb-4">
+          <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />
+        </div>
+      )}
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Automations</h1>
@@ -94,7 +112,13 @@ export default function Automations() {
         )}
       </div>
 
-      {(automations || []).length === 0 ? (
+      {fromWhatsApp && (automations || []).length > 0 && visibleAutomations.length === 0 ? (
+        <EmptyState
+          icon={Workflow}
+          title="No WhatsApp automations yet"
+          description="None of this workspace's automations are triggered by a WhatsApp conversation or message. Create one, or clear the filter to see all automations."
+        />
+      ) : (automations || []).length === 0 ? (
         <EmptyState
           icon={Workflow}
           title="No automations yet"
@@ -136,7 +160,7 @@ export default function Automations() {
               </tr>
             </thead>
             <tbody>
-              {(automations || []).map((automation) => (
+              {visibleAutomations.map((automation) => (
                 <tr key={automation.id} className="border-b last:border-b-0 hover:bg-muted/30">
                   <td className="px-4 py-2.5 font-medium">{automation.name}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</td>

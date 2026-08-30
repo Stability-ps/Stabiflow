@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BarChart3 } from "lucide-react";
+import { WhatsAppContextBanner } from "@/components/whatsapp/WhatsAppContextBanner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
@@ -27,6 +29,12 @@ export default function Analytics() {
   useEffect(() => {
     if (currentWorkspaceId) markAnalyticsVisited(currentWorkspaceId);
   }, [currentWorkspaceId]);
+
+  // Entered from WhatsApp > Analytics: keep the "came from WhatsApp"
+  // context and scroll the WhatsApp conversion card into view.
+  const [searchParams] = useSearchParams();
+  const fromWhatsApp = searchParams.has("whatsapp");
+  const whatsappSectionRef = useRef<HTMLDivElement | null>(null);
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
 
@@ -59,6 +67,12 @@ export default function Analytics() {
   const sourcesQuery = useLeadSourceBreakdown(canView ? currentWorkspaceId : null, range);
   const whatsappQuery = useWhatsAppAnalytics(canView ? currentWorkspaceId : null, range);
 
+  useEffect(() => {
+    if (fromWhatsApp && whatsappQuery.data && whatsappSectionRef.current) {
+      whatsappSectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [fromWhatsApp, whatsappQuery.data]);
+
   if (!currentWorkspaceId) return <div className="h-[70vh] animate-pulse rounded-lg bg-muted" />;
 
   if (!canView) {
@@ -67,6 +81,7 @@ export default function Analytics() {
 
   return (
     <div className="space-y-6">
+      {fromWhatsApp && <WhatsAppContextBanner label="Viewing WhatsApp conversion analytics." />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
@@ -98,7 +113,7 @@ export default function Analytics() {
             workspaceCurrency={workspaceCurrency}
           />
           <CreativePerformanceTable rows={creativesQuery.data || []} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div ref={whatsappSectionRef} id="whatsapp-analytics" className="grid scroll-mt-20 gap-4 lg:grid-cols-2">
             <SourceBreakdownSection rows={sourcesQuery.data || []} />
             {whatsappQuery.data && <WhatsAppAnalyticsSection data={whatsappQuery.data} />}
           </div>

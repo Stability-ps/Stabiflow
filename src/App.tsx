@@ -28,7 +28,11 @@ import NewCampaign from "@/pages/dashboard/campaigns/New";
 import EditCampaign from "@/pages/dashboard/campaigns/Edit";
 import CampaignDetailPage from "@/pages/dashboard/campaigns/Detail";
 import CreativeStudio from "@/pages/dashboard/CreativeStudio";
-import Inbox from "@/pages/dashboard/Inbox";
+import WhatsAppLayout from "@/pages/dashboard/whatsapp/WhatsAppLayout";
+import WhatsAppInbox from "@/pages/dashboard/whatsapp/Inbox";
+import WhatsAppContacts from "@/pages/dashboard/whatsapp/Contacts";
+import WhatsAppTemplates from "@/pages/dashboard/whatsapp/Templates";
+import WhatsAppSettings from "@/pages/dashboard/whatsapp/Settings";
 import Leads from "@/pages/dashboard/Leads";
 import Analytics from "@/pages/dashboard/Analytics";
 import FlowAI from "@/pages/dashboard/FlowAI";
@@ -91,7 +95,18 @@ export function AppRoutes() {
         <Route path="/app/campaigns/:id/edit" element={<EditCampaign />} />
         <Route path="/app/campaigns/:id" element={<CampaignDetailPage />} />
         <Route path="/app/creative-studio" element={<CreativeStudio />} />
-        <Route path="/app/inbox" element={<Inbox />} />
+        {/* Legacy flat Inbox route - kept as a redirect so old bookmarks and
+            in-app links stay valid now that the Inbox lives inside the
+            WhatsApp product area. */}
+        <Route path="/app/inbox" element={<Navigate to="/app/whatsapp/inbox" replace />} />
+        <Route path="/app/whatsapp" element={<WhatsAppLayout />}>
+          <Route index element={<Navigate to="/app/whatsapp/inbox" replace />} />
+          <Route path="inbox" element={<WhatsAppInbox />} />
+          <Route path="contacts" element={<WhatsAppContacts />} />
+          <Route path="templates" element={<WhatsAppTemplates />} />
+          <Route path="settings" element={<WhatsAppSettings />} />
+          <Route path="*" element={<Navigate to="/app/whatsapp/inbox" replace />} />
+        </Route>
         <Route path="/app/leads" element={<Leads />} />
         <Route path="/app/analytics" element={<Analytics />} />
         <Route path="/app/flow-ai" element={<FlowAI />} />

@@ -13,7 +13,7 @@
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 import { cleanReply } from "../_shared/inbox/replyGuardrails.ts";
 import type { WhatsAppSendCredential, WhatsAppTemplateParameter } from "../_shared/inbox/whatsappSend.ts";
-import { isWhatsAppMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
+import { isBlockedWhatsAppMockSend, resolveWhatsAppSendMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
 import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
@@ -222,7 +222,8 @@ Deno.serve(async (req: Request) => {
     }).select("id").single();
     if (pendingError || !pendingRow) return json(req, { error: "Unable to save this reply" }, 500);
 
-    const provider = isWhatsAppMockMode() ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+    if (isBlockedWhatsAppMockSend(req)) console.warn("inbox-actions: mock-mode flag is on but caller is not the test harness - sending for real");
+    const provider = resolveWhatsAppSendMockMode(req) ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
     let providerMessageId: string | null = null;
     let deliveryStatus = "submitted";
     let warning: string | null = null;
@@ -286,7 +287,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const bodyParameters: WhatsAppTemplateParameter[] = parameters.map((text) => ({ type: "text", text }));
-  const provider = isWhatsAppMockMode() ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+  if (isBlockedWhatsAppMockSend(req)) console.warn("inbox-actions: mock-mode flag is on but caller is not the test harness - sending template for real");
+  const provider = resolveWhatsAppSendMockMode(req) ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
   const renderedContent = `[Template: ${template!.name}]` + (parameters.length ? ` ${parameters.join(", ")}` : "");
 
   let providerMessageId: string | null = null;
