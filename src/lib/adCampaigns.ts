@@ -153,12 +153,120 @@ export async function updateCampaignDraft(campaignId: string, campaign: Partial<
   });
 }
 
-export async function markCampaignReadyForReview(campaignId: string) {
-  const { error } = await supabase.from("ad_campaigns").update({ status: "ready" }).eq("id", campaignId).eq("status", "draft");
+// Reconciles the stored review status of an UNPUBLISHED campaign with an
+// actual readiness result. Promotes draft -> 'ready' when readiness
+// passes, and demotes a stale 'ready' -> 'draft' when it does not. Never
+// touches a campaign that has been published to Meta. Replaces the old
+// markCampaignReadyForReview(), which promoted unconditionally the moment
+// the builder's Publish step opened - the source of the production
+// contradiction where the badge said "ready" but the campaign could not
+// be published.
+export async function syncCampaignReviewStatus(campaignId: string, ready: boolean) {
+  const { error } = await supabase
+    .from("ad_campaigns")
+    .update({ status: ready ? "ready" : "draft" })
+    .eq("id", campaignId)
+    .is("external_campaign_id", null)
+    .in("status", ["draft", "ready"]);
   if (error) throw new Error(error.message);
 }
 
 export async function deleteCampaignDraft(campaignId: string) {
-  const { error } = await supabase.from("ad_campaigns").delete().eq("id", campaignId).eq("status", "draft");
+  // The RLS delete policy only permits status = 'draft'. A campaign that
+  // the old builder optimistically flipped to 'ready' (but never
+  // published) is still a local-only draft - demote it first so the user
+  // isn't stuck with an undeletable row. Never demotes/deletes anything
+  // with a Meta id.
+  await supabase
+    .from("ad_campaigns")
+    .update({ status: "draft" })
+    .eq("id", campaignId)
+    .eq("status", "ready")
+    .is("external_campaign_id", null);
+
+  const { error, count } = await supabase
+    .from("ad_campaigns")
+    .delete({ count: "exact" })
+    .eq("id", campaignId)
+    .eq("status", "draft")
+    .is("external_campaign_id", null);
   if (error) throw new Error(error.message);
+  if (!count) throw new Error("This campaign can no longer be deleted as a draft. Refresh and try again.");
+}
+
+// Creates a NEW local draft from an existing campaign's configuration
+// (spec 8). The copy gets a fresh id, never reuses any Meta
+// campaign/ad-set/ad id, is never published, and creates no spend. The
+// user-editable builder fields carry over; provenance
+// (source_content_*) is preserved; all publish/readiness bookkeeping is
+// reset. Workspace isolation is the caller's own RLS scope, same as
+// createCampaignDraft.
+export async function duplicateCampaignDraft(campaignId: string): Promise<{ campaignId: string }> {
+  const { data: source, error: loadError } = await supabase
+    .from("ad_campaigns")
+    .select(
+      "workspace_id, integration_id, ad_account_id, facebook_page_id, instagram_account_id, name, objective, buying_type, destination_type, budget_type, daily_budget_minor_units, lifetime_budget_minor_units, currency, start_at, end_at, audience, placements, draft_creative_id, source_content_media_asset_id, source_content_series_id",
+    )
+    .eq("id", campaignId)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!source) throw new Error("The campaign to duplicate could not be found.");
+
+  let newCreativeId: string | null = null;
+  if (source.draft_creative_id) {
+    const { data: creative, error: creativeLoadError } = await supabase
+      .from("ad_creatives")
+      .select("workspace_id, media_asset_id, platform_variant_id, headline, primary_text, description, cta, destination_url, whatsapp_number_id")
+      .eq("id", source.draft_creative_id)
+      .maybeSingle();
+    if (creativeLoadError) throw new Error(creativeLoadError.message);
+    if (creative) {
+      const { data: creativeRow, error: creativeInsertError } = await supabase
+        .from("ad_creatives")
+        .insert({ ...creative, status: "draft" })
+        .select("id")
+        .single();
+      if (creativeInsertError || !creativeRow) throw new Error(creativeInsertError?.message || "Unable to copy the creative");
+      newCreativeId = creativeRow.id as string;
+    }
+  }
+
+  const { data: campaignRow, error: insertError } = await supabase
+    .from("ad_campaigns")
+    .insert({
+      workspace_id: source.workspace_id,
+      integration_id: source.integration_id,
+      ad_account_id: source.ad_account_id,
+      facebook_page_id: source.facebook_page_id,
+      instagram_account_id: source.instagram_account_id,
+      name: `${source.name} - Copy`,
+      objective: source.objective,
+      buying_type: source.buying_type,
+      destination_type: source.destination_type,
+      budget_type: source.budget_type,
+      daily_budget_minor_units: source.daily_budget_minor_units,
+      lifetime_budget_minor_units: source.lifetime_budget_minor_units,
+      currency: source.currency,
+      start_at: source.start_at,
+      end_at: source.end_at,
+      audience: source.audience,
+      placements: source.placements,
+      source_content_media_asset_id: source.source_content_media_asset_id,
+      source_content_series_id: source.source_content_series_id,
+      draft_creative_id: newCreativeId,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+  if (insertError || !campaignRow) throw new Error(insertError?.message || "Unable to duplicate the campaign");
+
+  await supabase.from("workspace_activity_log").insert({
+    workspace_id: source.workspace_id,
+    action: "campaign_duplicated",
+    target_type: "ad_campaign",
+    target_id: campaignRow.id,
+    metadata: { duplicated_from: campaignId },
+  });
+
+  return { campaignId: campaignRow.id as string };
 }

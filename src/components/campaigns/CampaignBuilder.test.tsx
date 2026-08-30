@@ -5,11 +5,12 @@ import { CampaignBuilder } from "./CampaignBuilder";
 
 const mocks = vi.hoisted(() => ({
   mediaState: { data: [] as Array<Record<string, unknown>>, isLoading: false, isError: false },
+  existingCampaign: null as Record<string, unknown> | null,
   createCampaignDraft: vi.fn(),
   updateCampaignDraft: vi.fn(),
   publishCampaign: vi.fn(),
   checkCampaignReadiness: vi.fn(),
-  markCampaignReadyForReview: vi.fn(),
+  syncCampaignReviewStatus: vi.fn(),
 }));
 
 const mockAssets = [
@@ -34,7 +35,8 @@ vi.mock("@/hooks/useMetaAccountResources", () => ({
 }));
 vi.mock("@/hooks/useIntegrations", () => ({ useAllWhatsAppNumbers: () => ({ data: [] }) }));
 vi.mock("@/hooks/useContentMediaAssets", () => ({ useContentMediaAssets: () => mocks.mediaState }));
-vi.mock("@/hooks/useAdCampaign", () => ({ useAdCampaign: () => ({ data: null, isLoading: false }) }));
+vi.mock("@/hooks/useAdCampaign", () => ({ useAdCampaign: () => ({ data: mocks.existingCampaign, isLoading: false }) }));
+vi.mock("@/hooks/useWorkspaceTimezone", () => ({ useWorkspaceTimezone: () => "Africa/Johannesburg" }));
 vi.mock("@/components/content/MediaPreview", () => ({
   MediaPreview: ({ storagePath, alt, className }: { storagePath: string; alt: string; className?: string }) => (
     <img src={`https://example.com/${storagePath}`} alt={alt} className={className} />
@@ -48,7 +50,7 @@ vi.mock("@/lib/adCampaigns", () => ({
   updateCampaignDraft: mocks.updateCampaignDraft,
   publishCampaign: mocks.publishCampaign,
   checkCampaignReadiness: mocks.checkCampaignReadiness,
-  markCampaignReadyForReview: mocks.markCampaignReadyForReview,
+  syncCampaignReviewStatus: mocks.syncCampaignReviewStatus,
   newPublishIdempotencyKey: () => "test-idempotency-key",
 }));
 
@@ -81,13 +83,14 @@ function completeThroughCreative() {
 describe("CampaignBuilder regression coverage", () => {
   beforeEach(() => {
     mocks.mediaState.data = mockAssets;
+    mocks.existingCampaign = null;
     mocks.mediaState.isLoading = false;
     mocks.mediaState.isError = false;
     mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-1", creativeId: "creative-1" });
     mocks.updateCampaignDraft.mockReset().mockResolvedValue(undefined);
     mocks.publishCampaign.mockReset();
     mocks.checkCampaignReadiness.mockReset().mockResolvedValue({ ok: true, ready: true, issues: [] });
-    mocks.markCampaignReadyForReview.mockReset().mockResolvedValue(undefined);
+    mocks.syncCampaignReviewStatus.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(cleanup);
@@ -186,13 +189,14 @@ async function createDraftAndReachPublish() {
 describe("CampaignBuilder Publish readiness actionability", () => {
   beforeEach(() => {
     mocks.mediaState.data = mockAssets;
+    mocks.existingCampaign = null;
     mocks.mediaState.isLoading = false;
     mocks.mediaState.isError = false;
     mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-1", creativeId: "creative-1" });
     mocks.updateCampaignDraft.mockReset().mockResolvedValue(undefined);
     mocks.publishCampaign.mockReset();
     mocks.checkCampaignReadiness.mockReset();
-    mocks.markCampaignReadyForReview.mockReset().mockResolvedValue(undefined);
+    mocks.syncCampaignReviewStatus.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(cleanup);
@@ -280,5 +284,87 @@ describe("CampaignBuilder Publish readiness actionability", () => {
 
     expect(await screen.findByText("Ready to publish.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled();
+  });
+});
+
+describe("CampaignBuilder editor deep-link (?step & ?focus from Campaign Detail readiness links)", () => {
+  beforeEach(() => {
+    mocks.mediaState.data = mockAssets;
+    mocks.existingCampaign = null;
+    mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-1", creativeId: "creative-1" });
+    mocks.checkCampaignReadiness.mockReset().mockResolvedValue({ ok: true, ready: true, issues: [] });
+    mocks.syncCampaignReviewStatus.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(cleanup);
+
+  it("opens directly at the Budget & Schedule step and focuses the Start date field", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/campaigns/new?step=Budget+%26+Schedule&focus=startAt"]}>
+        <CampaignBuilder />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Budget and schedule" })).toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement).toHaveAttribute("id", "campaign-start-date"));
+  });
+
+  it("opens directly at the Creative step for a creative readiness issue", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/campaigns/new?step=Creative"]}>
+        <CampaignBuilder />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole("heading", { name: "Creative" })).toBeInTheDocument();
+  });
+});
+
+describe("CampaignBuilder edit mode - hydrate an existing campaign and update it (never duplicate)", () => {
+  const existingDraft = {
+    id: "campaign-9", status: "draft", external_campaign_id: null, name: "Winter Sale",
+    objective: "OUTCOME_TRAFFIC", ad_account_id: "acct-1", facebook_page_id: null, instagram_account_id: null,
+    destination_type: "website", audience: { age_min: 25, age_max: 45, genders: "all", geo_countries: ["ZA"] },
+    budget_type: "daily", daily_budget_minor_units: 25000, lifetime_budget_minor_units: null,
+    start_at: "2099-07-01T00:00:00.000Z", end_at: null, draft_creative_id: "creative-9",
+    ad_creatives: {
+      media_asset_id: "asset-1", headline: "Cosy deals", primary_text: "Warm up your winter",
+      description: null, cta: "SHOP_NOW", destination_url: "https://stabiflow.com/winter", whatsapp_number_id: null,
+    },
+  };
+
+  beforeEach(() => {
+    mocks.mediaState.data = mockAssets;
+    mocks.existingCampaign = { ...existingDraft };
+    mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-9", creativeId: "creative-9" });
+    mocks.updateCampaignDraft.mockReset().mockResolvedValue(undefined);
+    mocks.checkCampaignReadiness.mockReset().mockResolvedValue({ ok: true, ready: true, issues: [] });
+    mocks.syncCampaignReviewStatus.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(cleanup);
+
+  function renderEditor() {
+    return render(<MemoryRouter initialEntries={["/app/campaigns/campaign-9/edit"]}><CampaignBuilder campaignId="campaign-9" /></MemoryRouter>);
+  }
+
+  it("hydrates the existing campaign's fields into the builder", async () => {
+    renderEditor();
+    expect(await screen.findByLabelText("Campaign name")).toHaveValue("Winter Sale");
+    fireEvent.click(screen.getByRole("button", { name: "5. Creative" }));
+    expect(await screen.findByLabelText("Primary text")).toHaveValue("Warm up your winter");
+    expect(screen.getByLabelText(/Headline/i)).toHaveValue("Cosy deals");
+  });
+
+  it("saving updates the existing campaign (updateCampaignDraft) and never calls createCampaignDraft", async () => {
+    renderEditor();
+    await screen.findByDisplayValue("Winter Sale");
+    fireEvent.click(screen.getByRole("button", { name: "6. Review" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save Draft" }));
+    await waitFor(() => expect(mocks.updateCampaignDraft).toHaveBeenCalledTimes(1));
+    expect(mocks.updateCampaignDraft.mock.calls[0][0]).toBe("campaign-9");
+    expect(mocks.createCampaignDraft).not.toHaveBeenCalled();
+  });
+
+  it("a still-unpublished campaign stored as 'ready' (no Meta id) is still editable here", async () => {
+    mocks.existingCampaign = { ...existingDraft, status: "ready" };
+    renderEditor();
+    expect(await screen.findByLabelText("Campaign name")).toHaveValue("Winter Sale");
   });
 });

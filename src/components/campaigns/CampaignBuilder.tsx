@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,15 @@ import { useMetaAdAccounts, useMetaFacebookPages, useMetaInstagramAccounts, useM
 import { useAllWhatsAppNumbers } from "@/hooks/useIntegrations";
 import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
 import { useAdCampaign } from "@/hooks/useAdCampaign";
+import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { DESTINATION_TYPE_LABELS, OBJECTIVE_OPTIONS, getObjectiveOption, type DestinationType, type SupportedObjective } from "@/lib/adObjectives";
 import { decimalToMinorUnits, minorUnitsToDecimalString } from "@/lib/adMoney";
+import { zonedDateTimeToUtc } from "@/lib/contentTimezone";
+import { localDateString } from "@/lib/analyticsDate";
+import { isEditableCampaign } from "@/lib/campaignLifecycle";
 import {
-  checkCampaignReadiness, createCampaignDraft, markCampaignReadyForReview, newPublishIdempotencyKey, publishCampaign,
-  updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
+  checkCampaignReadiness, createCampaignDraft, newPublishIdempotencyKey, publishCampaign,
+  syncCampaignReviewStatus, updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
 } from "@/lib/adCampaigns";
 import { presentReadinessIssue } from "@/lib/readinessIssuePresentation";
 import {
@@ -43,6 +47,8 @@ function FieldError({ message }: { message?: string }) {
 export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; prefill?: CampaignBuilderPrefill }) {
   const { currentWorkspaceId } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const workspaceTimezone = useWorkspaceTimezone(currentWorkspaceId);
   const isEdit = !!campaignId;
 
   const { data: existing, isLoading: existingLoading } = useAdCampaign(campaignId ?? null);
@@ -98,7 +104,9 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
 
   useEffect(() => {
     if (!existing || !isEdit) return;
-    if (existing.status !== "draft") return; // populated once; edit guard handled by parent page
+    // Hydrate once for any still-unpublished campaign - draft, or a stale
+    // 'ready' the old builder flipped optimistically (no Meta id).
+    if (!isEditableCampaign({ status: existing.status, external_campaign_id: existing.external_campaign_id })) return;
     setName(existing.name);
     setObjective(existing.objective as SupportedObjective);
     setAdAccountId(existing.ad_account_id);
@@ -112,8 +120,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setGeoCountries((audience.geo_countries || ["ZA"]).join(","));
     setBudgetType(existing.budget_type as "daily" | "lifetime");
     setBudgetDecimal(minorUnitsToDecimalString(existing.budget_type === "daily" ? existing.daily_budget_minor_units : existing.lifetime_budget_minor_units) || "100.00");
-    setStartAt(existing.start_at.slice(0, 10));
-    setEndAt(existing.end_at ? existing.end_at.slice(0, 10) : "");
+    // Show the calendar date in the WORKSPACE timezone, matching how it
+    // was authored - not the raw UTC date, which can be the previous day.
+    setStartAt(localDateString(new Date(existing.start_at), workspaceTimezone));
+    setEndAt(existing.end_at ? localDateString(new Date(existing.end_at), workspaceTimezone) : "");
     const creative = existing.ad_creatives as unknown as { media_asset_id: string; headline: string | null; primary_text: string; description: string | null; cta: string; destination_url: string | null; whatsapp_number_id: string | null } | null;
     if (creative) {
       setMediaAssetId(creative.media_asset_id);
@@ -125,7 +135,27 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       setDestinationUrl(creative.destination_url || "");
       setWhatsappNumberId(creative.whatsapp_number_id || "");
     }
-  }, [existing, isEdit]);
+  }, [existing, isEdit, workspaceTimezone]);
+
+  // Deep-link support: Campaign Detail's readiness "Edit <section>" links
+  // open /app/campaigns/:id/edit?step=<Step>&focus=<fieldKey>. Jump to the
+  // step and queue focusing the exact field once it has mounted - reusing
+  // the SAME field-focus machinery as the in-builder readiness buttons.
+  const requestedStep = searchParams.get("step");
+  const requestedFocus = searchParams.get("focus");
+  const appliedDeepLinkRef = useRef(false);
+  useEffect(() => {
+    if (appliedDeepLinkRef.current) return;
+    if (!requestedStep) return;
+    if (isEdit && !existing) return; // wait for hydration so we don't fight it
+    const targetIndex = STEPS.indexOf(requestedStep as CampaignBuilderStep);
+    if (targetIndex < 0) return;
+    appliedDeepLinkRef.current = true;
+    setStepIndex(targetIndex);
+    if (requestedFocus) {
+      setPendingFocusFieldId(CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[requestedFocus] ?? null);
+    }
+  }, [requestedStep, requestedFocus, isEdit, existing]);
 
   useEffect(() => {
     if (selectedAdAccount && !objectiveOption?.allowedDestinationTypes.includes(destinationType as DestinationType)) {
@@ -183,6 +213,19 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setSaving(true);
     try {
       const minorUnits = decimalToMinorUnits(Number(budgetDecimal));
+      // A calendar date typed into a <input type="date"> is anchored to
+      // the WORKSPACE timezone, not the browser's - so "starts 29 Aug"
+      // means 29 Aug 00:00 in Africa/Johannesburg, and the server's
+      // calendar-date "not in the past" check agrees. (Previously parsed
+      // as browser-local midnight, which for a same-day start was already
+      // hours in the past by the server's old instant comparison.)
+      const [startYear, startMonth, startDay] = startAt.split("-").map(Number);
+      const startInstant = zonedDateTimeToUtc(startYear, startMonth, startDay, 0, 0, workspaceTimezone);
+      let endInstant: Date | null = null;
+      if (endAt) {
+        const [endYear, endMonth, endDay] = endAt.split("-").map(Number);
+        endInstant = zonedDateTimeToUtc(endYear, endMonth, endDay, 23, 59, workspaceTimezone);
+      }
       const campaignInput = {
         workspace_id: currentWorkspaceId,
         integration_id: integration.id,
@@ -196,8 +239,8 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         daily_budget_minor_units: budgetType === "daily" ? minorUnits : null,
         lifetime_budget_minor_units: budgetType === "lifetime" ? minorUnits : null,
         currency: selectedAdAccount.currency || "ZAR",
-        start_at: new Date(`${startAt}T00:00:00`).toISOString(),
-        end_at: endAt ? new Date(`${endAt}T23:59:59`).toISOString() : null,
+        start_at: startInstant.toISOString(),
+        end_at: endInstant ? endInstant.toISOString() : null,
         audience: { age_min: ageMin, age_max: ageMax, genders, geo_countries: geoCountryList },
         source_content_media_asset_id: prefill?.sourceContentMediaAssetId || null,
       };
@@ -231,9 +274,12 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     if (!savedCampaignId) return;
     setCheckingReadiness(true);
     try {
-      await markCampaignReadyForReview(savedCampaignId);
       const result = await checkCampaignReadiness(savedCampaignId);
       setIssues(result.issues);
+      // Reconcile the stored review status with the ACTUAL result:
+      // promote to 'ready' only when readiness passes, demote a stale
+      // 'ready' back to 'draft' otherwise. Never flips optimistically.
+      await syncCampaignReviewStatus(savedCampaignId, result.ready);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to check readiness");
     } finally {
@@ -291,10 +337,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   };
 
   if (isEdit && existingLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
-  if (isEdit && existing && existing.status !== "draft") {
+  if (isEdit && existing && !isEditableCampaign({ status: existing.status, external_campaign_id: existing.external_campaign_id })) {
     return (
       <Card className="p-6 text-sm text-muted-foreground">
-        This campaign is no longer a draft ({existing.status}) and can't be edited here. Published campaigns support pause/resume only - see the campaign's detail page.
+        This campaign has been published to Meta ({existing.status}) and can't be edited here. Published campaigns support pause/resume only - see the campaign's detail page.
       </Card>
     );
   }

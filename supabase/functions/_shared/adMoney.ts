@@ -31,11 +31,32 @@ export type MoneyInput = {
   currency: string;
   startAt: Date;
   endAt: Date | null;
+  // IANA timezone (workspace_settings.timezone) the campaign's schedule is
+  // authored in. The start-date "not in the past" rule is a CALENDAR-DATE
+  // comparison in this zone - a start date of *today* is allowed (Meta
+  // permits an immediate start), it is only "in the past" once the zone's
+  // calendar has actually rolled to a later day. Defaults to "UTC" so any
+  // caller that doesn't pass a zone keeps a stable, well-defined rule.
+  timezone?: string;
+  // Injected clock, for deterministic tests (repo convention: no hidden
+  // Date.now() in pure modules). Defaults to the real now.
+  now?: Date;
 };
 
 export type MoneyValidationResult = { valid: true } | { valid: false; issues: string[] };
 
 const ISO_4217_PATTERN = /^[A-Z]{3}$/;
+
+// "YYYY-MM-DD" for `instant`'s wall-clock date in `timeZone`. Falls back to
+// UTC if the zone string is not a recognised IANA name. ISO date strings
+// compare correctly with <, so callers can order calendar dates directly.
+export function calendarDateInZone(instant: Date, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+  } catch {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+  }
+}
 
 export function convertDecimalToMinorUnits(decimalAmount: number): number {
   if (!Number.isFinite(decimalAmount)) return NaN;
@@ -92,8 +113,16 @@ export function validateCampaignBudget(input: MoneyInput): MoneyValidationResult
     issues.push("end date must be after the start date");
   }
 
-  if (input.startAt.getTime() < Date.now() - 5 * 60 * 1000) {
-    // 5 minute grace window for clock skew / the moment between form-fill and submit.
+  // Calendar-date comparison in the campaign's authoring timezone, NOT an
+  // instant-vs-now comparison. A campaign whose start date is *today* is
+  // valid all day - it only becomes "in the past" once that zone's
+  // calendar has rolled to a later date. (The previous instant comparison
+  // treated local midnight of the start day as already-past for every hour
+  // after it, so a same-day start failed readiness from 00:00 onward - the
+  // stale-"ready"/timezone bug this fixes.)
+  const timezone = input.timezone || "UTC";
+  const now = input.now ?? new Date();
+  if (calendarDateInZone(input.startAt, timezone) < calendarDateInZone(now, timezone)) {
     issues.push("start date must not be in the past");
   }
 

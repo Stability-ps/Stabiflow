@@ -19,6 +19,7 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
     { data: facebookPage },
     { data: instagramAccount },
     { data: creativeRow },
+    { data: workspaceSettings },
   ] = await Promise.all([
     campaign.integration_id ? sb.from("workspace_integrations").select("status").eq("id", campaign.integration_id).maybeSingle() : Promise.resolve({ data: null }),
     campaign.ad_account_id ? sb.from("workspace_meta_ad_accounts").select("is_active, currency").eq("id", campaign.ad_account_id).maybeSingle() : Promise.resolve({ data: null }),
@@ -26,6 +27,9 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
     campaign.instagram_account_id ? sb.from("workspace_instagram_accounts").select("is_active").eq("id", campaign.instagram_account_id).maybeSingle() : Promise.resolve({ data: null }),
     campaign.draft_creative_id
       ? sb.from("ad_creatives").select("primary_text, cta, destination_url, media_asset_id, platform_variant_id, whatsapp_number_id").eq("id", campaign.draft_creative_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    campaign.workspace_id
+      ? sb.from("workspace_settings").select("timezone").eq("workspace_id", campaign.workspace_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
@@ -79,5 +83,9 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
       : null,
     whatsappNumber: whatsappNumber ? { isActive: whatsappNumber.is_active } : null,
     tokenHealthy: null,
+    // workspace_settings.timezone (Phase 3) - the zone the campaign's
+    // schedule was authored in. Falls back to the same default the
+    // frontend hooks use when a workspace has never opened Settings.
+    timezone: (workspaceSettings?.timezone as string) || "Africa/Johannesburg",
   };
 }

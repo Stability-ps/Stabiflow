@@ -24,3 +24,12 @@ class ResizeObserverStub {
   disconnect() {}
 }
 window.ResizeObserver = window.ResizeObserver ?? (ResizeObserverStub as unknown as typeof ResizeObserver);
+
+// jsdom implements neither Pointer Capture nor scrollIntoView; Radix
+// menu/dialog/select primitives call them. Minimal no-op shims so those
+// components are testable (used by the Campaigns actions menu, etc.).
+for (const method of ["hasPointerCapture", "setPointerCapture", "releasePointerCapture", "scrollIntoView"] as const) {
+  if (!(method in Element.prototype)) {
+    Object.defineProperty(Element.prototype, method, { value: () => (method === "hasPointerCapture" ? false : undefined), writable: true });
+  }
+}

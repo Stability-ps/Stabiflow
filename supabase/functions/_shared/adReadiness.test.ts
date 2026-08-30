@@ -11,7 +11,7 @@ function baseInput(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
       dailyBudgetMinorUnits: 5000,
       lifetimeBudgetMinorUnits: null,
       currency: "ZAR",
-      startAt: new Date(Date.now() + 86400_000).toISOString(),
+      startAt: "2026-09-05T00:00:00Z", // comfortably after the pinned `now` below
       endAt: null,
       draftCreativeId: "11111111-1111-1111-1111-111111111111",
       facebookPageId: "22222222-2222-2222-2222-222222222222",
@@ -28,8 +28,12 @@ function baseInput(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
       mediaWidthPx: 1200,
       mediaHeightPx: 1200,
       mediaMimeType: "image/jpeg",
+      whatsappNumberId: null,
     },
+    whatsappNumber: null,
     tokenHealthy: true,
+    timezone: "Africa/Johannesburg",
+    now: new Date("2026-08-29T10:00:00Z"),
     ...overrides,
   };
 }
@@ -120,6 +124,33 @@ Deno.test("an unhealthy token surfaces as its own issue", () => {
 Deno.test("tokenHealthy=null (not checked) produces no token issue - readiness never claims to have checked what it didn't", () => {
   const issues = checkCampaignReadiness(baseInput({ tokenHealthy: null }));
   assertEquals(issues.some((i) => i.code === "token_unhealthy"), false);
+});
+
+Deno.test("REGRESSION: a start date of TODAY in the workspace timezone does NOT produce an 'in the past' issue", () => {
+  // start_at stored as JHB local midnight for 2026-08-29 -> 2026-08-28T22:00Z,
+  // which as an instant is 12h before the pinned now (2026-08-29 10:00Z /
+  // 12:00 JHB). Calendar-date comparison in JHB: 2026-08-29 == 2026-08-29.
+  const issues = checkCampaignReadiness(
+    baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-28T22:00:00Z" } }),
+  );
+  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("start date must not be in the past")), false);
+  assertEquals(isReady(issues), true);
+});
+
+Deno.test("a start date that is genuinely yesterday in the workspace timezone still blocks readiness", () => {
+  const issues = checkCampaignReadiness(
+    baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-27T22:00:00Z" } }), // 2026-08-28 00:00 JHB, now is the 29th
+  );
+  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("start date must not be in the past")), true);
+  assertEquals(isReady(issues), false);
+});
+
+Deno.test("timezone defaults to UTC when the caller resolves none", () => {
+  // No `timezone` -> UTC. start 2026-08-29 00:00Z, now 2026-08-29 10:00Z: same UTC day -> allowed.
+  const issues = checkCampaignReadiness(
+    baseInput({ timezone: undefined, campaign: { ...baseInput().campaign, startAt: "2026-08-29T00:00:00Z" } }),
+  );
+  assertEquals(issues.some((i) => i.message.includes("start date must not be in the past")), false);
 });
 
 Deno.test("isReady is false if ANY error-severity issue exists, regardless of warnings", () => {

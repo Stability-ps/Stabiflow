@@ -48,6 +48,12 @@ export type ReadinessInput = {
   } | null;
   whatsappNumber: { isActive: boolean } | null;
   tokenHealthy: boolean | null; // null = not checked (readiness check without a live provider call)
+  // IANA timezone (workspace_settings.timezone) the schedule is authored
+  // in - the start-date check is a calendar-date comparison in this zone so
+  // a start date of *today* is not wrongly rejected as past. Defaults to
+  // "UTC" when the caller doesn't resolve one.
+  timezone?: string;
+  now?: Date; // injected clock, for deterministic tests
 };
 
 // Meta's documented minimum for a standard feed image ad. Not exhaustive
@@ -105,6 +111,8 @@ export function checkCampaignReadiness(input: ReadinessInput): ReadinessIssue[] 
     currency: input.campaign.currency,
     startAt: new Date(input.campaign.startAt),
     endAt: input.campaign.endAt ? new Date(input.campaign.endAt) : null,
+    timezone: input.timezone || "UTC",
+    now: input.now,
   });
   if (!budgetValidation.valid) {
     for (const issue of budgetValidation.issues) push("invalid_budget", issue);

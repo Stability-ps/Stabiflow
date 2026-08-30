@@ -1,26 +1,35 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, CheckCircle2, Loader2, PauseCircle, PlayCircle, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarClock, CheckCircle2, Loader2, PauseCircle, PlayCircle, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { EmptyState } from "@/components/EmptyState";
-import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
+import { CampaignLifecycleBadge } from "@/components/campaigns/CampaignLifecycleBadge";
+import { CampaignActionsMenu } from "@/components/campaigns/CampaignActionsMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
+import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
+import { useAllWhatsAppNumbers } from "@/hooks/useIntegrations";
 import { useAdCampaign, useCampaignActivity } from "@/hooks/useAdCampaign";
 import { useAdCampaignMetrics } from "@/hooks/useAdCampaignMetrics";
 import { useSingleCampaignPerformance } from "@/hooks/useAnalytics";
 import { DEFAULT_ATTRIBUTION_MODEL, computeRoas, formatMoneyByCurrency, formatRoas } from "@/lib/analytics";
 import { getObjectiveOption, DESTINATION_TYPE_LABELS, type DestinationType } from "@/lib/adObjectives";
 import { formatMoney } from "@/lib/adMoney";
+import { formatInTimezone } from "@/lib/contentTimezone";
+import { localDateString } from "@/lib/analyticsDate";
+import {
+  deriveCampaignPresentation, isEditableCampaign, isStartDateInPast, isUnpublishedCampaign, type ReadinessSnapshot,
+} from "@/lib/campaignLifecycle";
+import { campaignEditorPath, presentReadinessIssue, readinessActionLabel } from "@/lib/readinessIssuePresentation";
 import {
   checkCampaignReadiness, newPublishIdempotencyKey, pauseCampaign, publishCampaign, refreshCampaignMetrics,
-  resumeCampaign, type ReadinessIssue,
+  resumeCampaign, syncCampaignReviewStatus, type ReadinessIssue,
 } from "@/lib/adCampaigns";
 
 // All-time window for this widget - matches the Phase G conversions card's
@@ -30,15 +39,29 @@ import {
 // one campaign_id client-side) so the two surfaces can never disagree.
 const ALL_TIME_RANGE = { from: new Date(0), to: new Date(Date.now() + 86_400_000) };
 
+function scheduleDateLabel(iso: string | null, timeZone: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return formatInTimezone(d, timeZone, { hour: undefined, minute: undefined });
+}
+
+function calendarDateLabel(iso: string | null | undefined, timeZone: string): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "-" : localDateString(d, timeZone);
+}
+
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { hasPermission, currentWorkspaceId } = useAuth();
   const workspaceCurrency = useWorkspaceCurrency(currentWorkspaceId);
-  const navigate = useNavigate();
+  const workspaceTimezone = useWorkspaceTimezone(currentWorkspaceId);
   const queryClient = useQueryClient();
   const { data: campaign, isLoading } = useAdCampaign(campaignId);
   const { data: activity } = useCampaignActivity(campaignId);
   const { data: metrics, isLoading: metricsLoading } = useAdCampaignMetrics(campaignId);
   const { data: performance } = useSingleCampaignPerformance(currentWorkspaceId, campaignId, ALL_TIME_RANGE, DEFAULT_ATTRIBUTION_MODEL);
+  const { data: whatsappNumbers } = useAllWhatsAppNumbers(currentWorkspaceId);
   const canSeeRevenue = hasPermission("revenue.view");
 
   const [issues, setIssues] = useState<ReadinessIssue[] | null>(null);
@@ -54,11 +77,26 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     queryClient.invalidateQueries({ queryKey: ["ad-campaign-activity", campaignId] });
   };
 
+  const unpublished = campaign ? isUnpublishedCampaign(campaign) : false;
+
   const runReadinessCheck = async () => {
     setChecking(true);
     try {
       const result = await checkCampaignReadiness(campaignId);
       setIssues(result.issues);
+      // Reconcile stored review status with the ACTUAL result, exactly as
+      // the builder does - promotes draft -> 'ready' when it passes,
+      // demotes a stale 'ready' -> 'draft' when it doesn't. This is what
+      // keeps the list/detail badge honest.
+      if (campaign && isUnpublishedCampaign(campaign)) {
+        try {
+          await syncCampaignReviewStatus(campaignId, result.ready);
+          queryClient.invalidateQueries({ queryKey: ["ad-campaign", campaignId] });
+          queryClient.invalidateQueries({ queryKey: ["ad-campaigns"] });
+        } catch {
+          // best-effort: a caller without campaign.edit can still see readiness
+        }
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to check readiness");
     } finally {
@@ -66,12 +104,15 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     }
   };
 
+  // Run a readiness check for any campaign that hasn't been published yet -
+  // its result drives both the lifecycle badge (Needs attention vs Ready
+  // to publish) and the actionable issue list below.
   useEffect(() => {
-    if (campaign && (campaign.status === "ready" || campaign.status === "failed") && issues === null) {
+    if (campaign && isUnpublishedCampaign(campaign) && issues === null) {
       runReadinessCheck();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaign?.status]);
+  }, [campaign?.id, campaign?.status]);
 
   const handlePublish = async () => {
     setPublishing(true);
@@ -126,35 +167,113 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const objectiveOption = getObjectiveOption(campaign.objective);
   const budget = campaign.budget_type === "daily" ? campaign.daily_budget_minor_units : campaign.lifetime_budget_minor_units;
   const creative = campaign.ad_creatives as unknown as {
-    primary_text: string; headline: string | null; description: string | null; cta: string; destination_url: string | null; media_asset_id: string;
+    primary_text: string; headline: string | null; description: string | null; cta: string; destination_url: string | null;
+    whatsapp_number_id: string | null; media_asset_id: string;
     content_media_assets: { storage_path: string; title: string } | null;
   } | null;
   const totalSpend = (metrics || []).reduce((sum, m) => sum + m.spend_minor_units, 0);
 
+  const liveReadiness = issues !== null ? { ready: issues.every((i) => i.severity !== "error"), issues } : null;
+  const presentation = deriveCampaignPresentation({
+    status: campaign.status,
+    externalCampaignId: campaign.external_campaign_id,
+    liveReadiness,
+    lastReadinessCheck: (campaign.last_readiness_check as ReadinessSnapshot | null) ?? null,
+  });
+
+  const audience = (campaign.audience || {}) as { age_min?: number; age_max?: number; genders?: string; geo_countries?: string[] };
+  const audienceSummary = [
+    audience.age_min != null && audience.age_max != null ? `Ages ${audience.age_min}-${audience.age_max}` : null,
+    audience.genders ? (audience.genders === "all" ? "All genders" : audience.genders) : null,
+    audience.geo_countries?.length ? audience.geo_countries.join(", ") : null,
+  ].filter(Boolean).join(" · ") || "-";
+
+  const whatsappNumber = creative?.whatsapp_number_id
+    ? (whatsappNumbers || []).find((n) => n.id === creative.whatsapp_number_id) ?? null
+    : null;
+  const destinationDetail =
+    campaign.destination_type === "website" ? creative?.destination_url || null
+    : campaign.destination_type === "whatsapp" ? (whatsappNumber?.display_phone_number || "WhatsApp number") : null;
+
+  const startPast = isStartDateInPast(campaign.start_at, workspaceTimezone, new Date());
+  const scheduleRange = `${scheduleDateLabel(campaign.start_at, workspaceTimezone)}${campaign.end_at ? ` - ${scheduleDateLabel(campaign.end_at, workspaceTimezone)}` : " - ongoing"}`;
+  const canEditSchedule = isEditableCampaign(campaign) && hasPermission("campaign.edit");
+
+  const editLink = (field?: string) => campaignEditorPath(campaignId, "Budget & Schedule", field);
+
+  // Actionable readiness rows: reuse presentReadinessIssue + the builder's
+  // own field-focus keys, turned into a deep link into the editor.
+  const readinessRows = (issues || []).map((issue) => {
+    const p = presentReadinessIssue(issue);
+    return {
+      key: `${issue.code}:${issue.message}`,
+      issue,
+      message: p.message,
+      severity: issue.severity,
+      actionLabel: readinessActionLabel(p),
+      href: p.step ? campaignEditorPath(campaignId, p.step, p.field) : null,
+    };
+  });
+  const hasBlockingIssues = readinessRows.some((r) => r.severity === "error");
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <CampaignStatusBadge status={campaign.status} />
+            <CampaignLifecycleBadge state={presentation} />
             <h1 className="text-2xl font-semibold tracking-tight">{campaign.name}</h1>
           </div>
           <p className="text-sm text-muted-foreground">{objectiveOption?.label || campaign.objective} · {campaign.workspace_meta_ad_accounts?.name || campaign.ad_account_id}</p>
         </div>
-        <div className="flex gap-2">
-          {campaign.status === "draft" && hasPermission("campaign.edit") && (
-            <Button variant="outline" onClick={() => navigate(`/app/campaigns/${campaignId}/edit`)}>Continue editing</Button>
-          )}
+        <div className="flex flex-wrap items-center gap-2">
           {(campaign.status === "active" || campaign.status === "paused") && hasPermission("campaign.pause") && (
             <Button variant="outline" onClick={handlePauseResume} disabled={pausing}>
               {campaign.status === "active" ? <PauseCircle className="mr-2 h-4 w-4" /> : <PlayCircle className="mr-2 h-4 w-4" />}
               {campaign.status === "active" ? "Pause" : "Resume"}
             </Button>
           )}
+          <CampaignActionsMenu campaign={campaign} />
         </div>
       </div>
 
-      {(campaign.status === "ready" || campaign.status === "failed") && hasPermission("campaign.publish") && (
+      {/* Needs-attention panel: shown for an unpublished campaign whose
+          readiness has any issue. Every fixable issue links straight into
+          the editor at the right step/field. */}
+      {unpublished && liveReadiness && readinessRows.length > 0 && (
+        <Card className={hasBlockingIssues ? "border-amber-300 dark:border-amber-800" : ""}>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+            <CardTitle className="text-base">
+              {hasBlockingIssues ? "This campaign needs attention before it can be published" : "Ready to publish - with warnings"}
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={runReadinessCheck} disabled={checking}>
+              {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Re-check"}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {readinessRows.map((row) => (
+                <li key={row.key} className={`flex flex-wrap items-start justify-between gap-2 rounded-md border p-2 text-sm ${row.severity === "error" ? "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400" : "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400"}`}>
+                  <span className="flex items-start gap-2">
+                    {row.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
+                    {row.message}
+                  </span>
+                  {row.href && row.actionLabel && canEditSchedule && (
+                    <Button asChild type="button" variant="outline" size="sm">
+                      <Link to={row.href}>{row.actionLabel}</Link>
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Publish panel: only once readiness actually passes (presentation
+          === ready_to_publish) or a prior publish failed. Never gated on a
+          stale stored 'ready'. */}
+      {unpublished && (presentation === "ready_to_publish" || campaign.status === "failed") && hasPermission("campaign.publish") && (
         <Card>
           <CardHeader><CardTitle>{campaign.status === "failed" ? "Publish failed - retry" : "Ready to publish"}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
@@ -163,24 +282,10 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 Last error: {(campaign.last_publish_error as { message?: string })?.message || "Unknown error"}
               </p>
             )}
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Readiness check</p>
-              <Button variant="outline" size="sm" onClick={runReadinessCheck} disabled={checking}>
-                {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Re-check"}
-              </Button>
-            </div>
-            {issues && issues.length === 0 && <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" /> Ready to publish.</p>}
-            {issues && issues.length > 0 && (
-              <ul className="space-y-1">
-                {issues.map((issue, i) => (
-                  <li key={i} className={`flex items-start gap-2 text-sm ${issue.severity === "error" ? "text-red-700 dark:text-red-400" : "text-amber-700 dark:text-amber-400"}`}>
-                    {issue.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
+            {liveReadiness?.ready && issues?.length === 0 && (
+              <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" /> Ready to publish.</p>
             )}
-            <Button onClick={handlePublish} disabled={!issues || issues.some((i) => i.severity === "error") || publishing} className="w-full">
+            <Button onClick={handlePublish} disabled={!liveReadiness?.ready || publishing} className="w-full">
               {publishing ? "Publishing..." : "Publish to Meta"}
             </Button>
           </CardContent>
@@ -197,31 +302,66 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
         <TabsContent value="overview" className="mt-4">
           <Card>
-            <CardContent className="grid gap-4 p-6 sm:grid-cols-2">
+            <CardContent className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div><p className="text-xs text-muted-foreground">Campaign name</p><p className="text-sm font-medium">{campaign.name}</p></div>
+              <div><p className="text-xs text-muted-foreground">Objective</p><p className="text-sm font-medium">{objectiveOption?.label || campaign.objective}</p></div>
+              <div><p className="text-xs text-muted-foreground">Status</p><p className="text-sm font-medium"><CampaignLifecycleBadge state={presentation} /></p></div>
+              <div><p className="text-xs text-muted-foreground">Ad account</p><p className="text-sm font-medium">{campaign.workspace_meta_ad_accounts?.name || campaign.workspace_meta_ad_accounts?.ad_account_id || campaign.ad_account_id}</p></div>
               <div><p className="text-xs text-muted-foreground">Budget</p><p className="text-sm font-medium">{formatMoney(budget, campaign.currency)} ({campaign.budget_type})</p></div>
-              <div><p className="text-xs text-muted-foreground">Schedule</p><p className="text-sm font-medium">{new Date(campaign.start_at).toLocaleDateString()}{campaign.end_at ? ` - ${new Date(campaign.end_at).toLocaleDateString()}` : " - ongoing"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Destination</p><p className="text-sm font-medium">{DESTINATION_TYPE_LABELS[campaign.destination_type as DestinationType] || campaign.destination_type}</p></div>
+              <div>
+                <p className="text-xs text-muted-foreground">Schedule</p>
+                <p className="text-sm font-medium">{scheduleRange}</p>
+                {startPast && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
+                    <CalendarClock className="h-3.5 w-3.5" /> Start date has passed
+                    {canEditSchedule && <Link to={editLink("startAt")} className="underline underline-offset-2">Edit schedule</Link>}
+                  </span>
+                )}
+              </div>
+              <div><p className="text-xs text-muted-foreground">Audience</p><p className="text-sm font-medium">{audienceSummary}</p></div>
+              <div><p className="text-xs text-muted-foreground">Destination</p><p className="text-sm font-medium">{DESTINATION_TYPE_LABELS[campaign.destination_type as DestinationType] || campaign.destination_type}{destinationDetail ? ` — ${destinationDetail}` : ""}</p></div>
               <div><p className="text-xs text-muted-foreground">Facebook Page</p><p className="text-sm font-medium">{campaign.workspace_facebook_pages?.page_name || "-"}</p></div>
               <div><p className="text-xs text-muted-foreground">Instagram</p><p className="text-sm font-medium">{campaign.workspace_instagram_accounts?.username ? `@${campaign.workspace_instagram_accounts.username}` : "-"}</p></div>
+              {campaign.destination_type === "whatsapp" && (
+                <div><p className="text-xs text-muted-foreground">WhatsApp destination</p><p className="text-sm font-medium">{whatsappNumber?.display_phone_number || whatsappNumber?.verified_name || "-"}</p></div>
+              )}
               <div><p className="text-xs text-muted-foreground">Meta campaign ID</p><p className="text-sm font-medium">{campaign.external_campaign_id || "Not published yet"}</p></div>
+              <div><p className="text-xs text-muted-foreground">Created</p><p className="text-sm font-medium">{calendarDateLabel(campaign.created_at, workspaceTimezone)}</p></div>
+              <div><p className="text-xs text-muted-foreground">Last updated</p><p className="text-sm font-medium">{calendarDateLabel(campaign.updated_at, workspaceTimezone)}</p></div>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="creative" className="mt-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">The media and copy this campaign will run.</p>
+            {isEditableCampaign(campaign) && hasPermission("campaign.edit") && (
+              <Button asChild variant="outline" size="sm">
+                <Link to={campaignEditorPath(campaignId, "Creative")}>Edit creative</Link>
+              </Button>
+            )}
+          </div>
           {creative ? (
             <Card>
-              <CardContent className="flex gap-4 p-6">
+              <CardContent className="flex flex-col gap-4 p-6 sm:flex-row">
                 {creative.content_media_assets && (
-                  <MediaPreview storagePath={creative.content_media_assets.storage_path} alt={creative.content_media_assets.title} className="h-24 w-24 shrink-0 rounded-md" />
+                  <div className="shrink-0">
+                    <MediaPreview storagePath={creative.content_media_assets.storage_path} alt={creative.content_media_assets.title} className="h-32 w-32 rounded-md object-cover" />
+                    <p className="mt-1 max-w-32 truncate text-xs text-muted-foreground" title={creative.content_media_assets.title}>{creative.content_media_assets.title}</p>
+                  </div>
                 )}
-                <div className="min-w-0 flex-1 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2 text-sm">
                   {creative.headline && <p className="font-medium">{creative.headline}</p>}
-                  <p className="text-sm">{creative.primary_text}</p>
-                  {creative.description && <p className="text-sm text-muted-foreground">{creative.description}</p>}
-                  <div className="flex items-center gap-2 pt-2">
-                    <Badge variant="outline">{creative.cta}</Badge>
-                    {creative.destination_url && <span className="truncate text-xs text-muted-foreground">{creative.destination_url}</span>}
+                  <p><span className="text-muted-foreground">Primary text:</span> {creative.primary_text}</p>
+                  {creative.description && <p><span className="text-muted-foreground">Description:</span> {creative.description}</p>}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Badge variant="outline">{creative.cta || "No CTA"}</Badge>
+                    {campaign.destination_type === "website" && creative.destination_url && (
+                      <span className="truncate text-xs text-muted-foreground">{creative.destination_url}</span>
+                    )}
+                    {campaign.destination_type === "whatsapp" && (
+                      <span className="text-xs text-muted-foreground">WhatsApp: {whatsappNumber?.display_phone_number || "number not resolved"}</span>
+                    )}
                   </div>
                 </div>
               </CardContent>
