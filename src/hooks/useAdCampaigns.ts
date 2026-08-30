@@ -9,7 +9,7 @@ export function useAdCampaigns(workspaceId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("ad_campaigns")
-        .select("id, name, objective, status, provider_effective_status, budget_type, daily_budget_minor_units, lifetime_budget_minor_units, currency, start_at, end_at, ad_account_id, external_campaign_id, created_at, workspace_meta_ad_accounts(name, ad_account_id)")
+        .select("id, name, objective, status, provider_effective_status, budget_type, daily_budget_minor_units, lifetime_budget_minor_units, currency, start_at, end_at, ad_account_id, external_campaign_id, last_readiness_check, created_at, updated_at, workspace_meta_ad_accounts(name, ad_account_id)")
         .eq("workspace_id", workspaceId as string)
         .order("created_at", { ascending: false });
       if (error) throw new Error(error.message);

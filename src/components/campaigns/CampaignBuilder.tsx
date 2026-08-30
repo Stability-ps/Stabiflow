@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,11 +15,14 @@ import { useMetaAdAccounts, useMetaFacebookPages, useMetaInstagramAccounts, useM
 import { useAllWhatsAppNumbers } from "@/hooks/useIntegrations";
 import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
 import { useAdCampaign } from "@/hooks/useAdCampaign";
+import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { DESTINATION_TYPE_LABELS, OBJECTIVE_OPTIONS, getObjectiveOption, type DestinationType, type SupportedObjective } from "@/lib/adObjectives";
 import { decimalToMinorUnits, minorUnitsToDecimalString } from "@/lib/adMoney";
+import { isEditableCampaign } from "@/lib/campaignLifecycle";
+import { localDateTimeToUtc, utcToLocalDateTimeParts, type StartMode } from "@/lib/campaignSchedule";
 import {
-  checkCampaignReadiness, createCampaignDraft, markCampaignReadyForReview, newPublishIdempotencyKey, publishCampaign,
-  updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
+  CampaignPublishNotReadyError, checkCampaignReadiness, createCampaignDraft, newPublishIdempotencyKey, publishCampaign,
+  syncCampaignReviewStatus, updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
 } from "@/lib/adCampaigns";
 import { presentReadinessIssue } from "@/lib/readinessIssuePresentation";
 import {
@@ -43,6 +46,8 @@ function FieldError({ message }: { message?: string }) {
 export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; prefill?: CampaignBuilderPrefill }) {
   const { currentWorkspaceId } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const workspaceTimezone = useWorkspaceTimezone(currentWorkspaceId);
   const isEdit = !!campaignId;
 
   const { data: existing, isLoading: existingLoading } = useAdCampaign(campaignId ?? null);
@@ -67,8 +72,13 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   const [geoCountries, setGeoCountries] = useState("ZA");
   const [budgetType, setBudgetType] = useState<"daily" | "lifetime">("daily");
   const [budgetDecimal, setBudgetDecimal] = useState("100.00");
-  const [startAt, setStartAt] = useState(() => new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  // Scheduling: "Start now" (default - users must never be forced to wait
+  // until tomorrow) or a workspace-timezone date + time.
+  const [startMode, setStartMode] = useState<StartMode>("now");
+  const [startAt, setStartAt] = useState("");
+  const [startTime, setStartTime] = useState("09:00");
   const [endAt, setEndAt] = useState("");
+  const [endTime, setEndTime] = useState("23:59");
   const [mediaAssetId, setMediaAssetId] = useState(prefill?.sourceContentMediaAssetId || "");
   const [headline, setHeadline] = useState("");
   const [primaryText, setPrimaryText] = useState(prefill?.primaryText || "");
@@ -96,9 +106,17 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   );
   const selectedMediaAsset = usableMediaAssets.find((asset) => asset.id === mediaAssetId) || null;
 
+  const hydratedForIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!existing || !isEdit) return;
-    if (existing.status !== "draft") return; // populated once; edit guard handled by parent page
+    // Hydrate once for any still-unpublished campaign - draft, or a stale
+    // 'ready' the old builder flipped optimistically (no Meta id).
+    if (!isEditableCampaign({ status: existing.status, external_campaign_id: existing.external_campaign_id })) return;
+    // Hydrate EXACTLY ONCE per campaign - re-running (e.g. when
+    // workspaceTimezone resolves default -> real) would overwrite whatever
+    // the user has since typed.
+    if (hydratedForIdRef.current === existing.id) return;
+    hydratedForIdRef.current = existing.id as string;
     setName(existing.name);
     setObjective(existing.objective as SupportedObjective);
     setAdAccountId(existing.ad_account_id);
@@ -112,8 +130,23 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setGeoCountries((audience.geo_countries || ["ZA"]).join(","));
     setBudgetType(existing.budget_type as "daily" | "lifetime");
     setBudgetDecimal(minorUnitsToDecimalString(existing.budget_type === "daily" ? existing.daily_budget_minor_units : existing.lifetime_budget_minor_units) || "100.00");
-    setStartAt(existing.start_at.slice(0, 10));
-    setEndAt(existing.end_at ? existing.end_at.slice(0, 10) : "");
+    // Rehydrate the schedule: stored UTC instant -> workspace-local date +
+    // time. A null start_at means the campaign was set to "Start now".
+    if (existing.start_at) {
+      setStartMode("scheduled");
+      const startParts = utcToLocalDateTimeParts(existing.start_at, workspaceTimezone);
+      setStartAt(startParts.date);
+      setStartTime(startParts.time);
+    } else {
+      setStartMode("now");
+    }
+    if (existing.end_at) {
+      const endParts = utcToLocalDateTimeParts(existing.end_at, workspaceTimezone);
+      setEndAt(endParts.date);
+      setEndTime(endParts.time);
+    } else {
+      setEndAt("");
+    }
     const creative = existing.ad_creatives as unknown as { media_asset_id: string; headline: string | null; primary_text: string; description: string | null; cta: string; destination_url: string | null; whatsapp_number_id: string | null } | null;
     if (creative) {
       setMediaAssetId(creative.media_asset_id);
@@ -125,7 +158,38 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       setDestinationUrl(creative.destination_url || "");
       setWhatsappNumberId(creative.whatsapp_number_id || "");
     }
+    // workspaceTimezone is read at hydration time only; it is intentionally
+    // NOT a dependency - a later value change must not re-hydrate and wipe
+    // in-progress edits (the ref guard above enforces once-per-campaign).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing, isEdit]);
+
+  // Deep-link support: Campaign Detail's readiness "Edit <section>" links
+  // open /app/campaigns/:id/edit?step=<Step>&focus=<fieldKey>. Jump to the
+  // step and queue focusing the exact field once it has mounted - reusing
+  // the SAME field-focus machinery as the in-builder readiness buttons.
+  const requestedStep = searchParams.get("step");
+  const requestedFocus = searchParams.get("focus");
+  const appliedDeepLinkRef = useRef(false);
+  useEffect(() => {
+    if (appliedDeepLinkRef.current) return;
+    if (!requestedStep) return;
+    if (isEdit && !existing) return; // wait for hydration so we don't fight it
+    const targetIndex = STEPS.indexOf(requestedStep as CampaignBuilderStep);
+    if (targetIndex < 0) return;
+    appliedDeepLinkRef.current = true;
+    setStepIndex(targetIndex);
+    if (requestedFocus) {
+      // The START date/time inputs only exist in "scheduled" mode - reveal
+      // them if the deep link targets one. The END inputs are always
+      // rendered, so an end-date issue must NOT flip a "Start now" campaign
+      // into scheduled mode.
+      if (requestedFocus === "startAt" || requestedFocus === "startTime") {
+        setStartMode("scheduled");
+      }
+      setPendingFocusFieldId(CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[requestedFocus] ?? null);
+    }
+  }, [requestedStep, requestedFocus, isEdit, existing]);
 
   useEffect(() => {
     if (selectedAdAccount && !objectiveOption?.allowedDestinationTypes.includes(destinationType as DestinationType)) {
@@ -138,6 +202,15 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   }, [objective]);
 
   const geoCountryList = useMemo(() => geoCountries.split(",").map((c) => c.trim().toUpperCase()).filter(Boolean), [geoCountries]);
+
+  // A slow ticking "now" so the "scheduled start must be in the future"
+  // check re-evaluates while the builder sits open. The server re-checks
+  // authoritatively at publish time regardless.
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const validationIssues = useMemo(() => validateCampaignBuilder({
     name,
@@ -154,8 +227,13 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     geoCountries: geoCountryList,
     budgetType,
     budgetDecimal,
+    startMode,
     startAt,
+    startTime,
     endAt,
+    endTime,
+    timezone: workspaceTimezone,
+    now,
     mediaAssetId,
     mediaAssetIsUsable: !!selectedMediaAsset,
     primaryText,
@@ -165,10 +243,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     whatsappNumberId,
     whatsappNumberIsUsable: activeWhatsappNumbers.some((number) => number.id === whatsappNumberId),
   }), [
-    adAccountId, ageMax, ageMin, budgetDecimal, budgetType, cta, destinationType, destinationUrl, endAt,
-    facebookPageId, geoCountryList, igAccounts, instagramAccountId, integration?.id, mediaAssetId, name, objective,
-    objectiveOption?.allowedCtas, pages, primaryText, selectedAdAccount, selectedMediaAsset, startAt, whatsappNumberId,
-    activeWhatsappNumbers,
+    adAccountId, ageMax, ageMin, budgetDecimal, budgetType, cta, destinationType, destinationUrl, endAt, endTime,
+    facebookPageId, geoCountryList, igAccounts, instagramAccountId, integration?.id, mediaAssetId, name, now, objective,
+    objectiveOption?.allowedCtas, pages, primaryText, selectedAdAccount, selectedMediaAsset, startAt, startMode, startTime,
+    whatsappNumberId, workspaceTimezone, activeWhatsappNumbers,
   ]);
 
   const canSaveDraft = validationIssues.length === 0;
@@ -183,6 +261,11 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setSaving(true);
     try {
       const minorUnits = decimalToMinorUnits(Number(budgetDecimal));
+      // "Start now" -> start_at = null (the campaign publishes immediately;
+      // Meta's ad set is created with no start_time). Otherwise the user's
+      // workspace-local date + time is converted to the correct UTC instant.
+      const startInstant = startMode === "now" ? null : localDateTimeToUtc(startAt, startTime, workspaceTimezone);
+      const endInstant = endAt ? localDateTimeToUtc(endAt, endTime || "23:59", workspaceTimezone) : null;
       const campaignInput = {
         workspace_id: currentWorkspaceId,
         integration_id: integration.id,
@@ -196,8 +279,8 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         daily_budget_minor_units: budgetType === "daily" ? minorUnits : null,
         lifetime_budget_minor_units: budgetType === "lifetime" ? minorUnits : null,
         currency: selectedAdAccount.currency || "ZAR",
-        start_at: new Date(`${startAt}T00:00:00`).toISOString(),
-        end_at: endAt ? new Date(`${endAt}T23:59:59`).toISOString() : null,
+        start_at: startInstant ? startInstant.toISOString() : null,
+        end_at: endInstant ? endInstant.toISOString() : null,
         audience: { age_min: ageMin, age_max: ageMax, genders, geo_countries: geoCountryList },
         source_content_media_asset_id: prefill?.sourceContentMediaAssetId || null,
       };
@@ -218,6 +301,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         const result = await createCampaignDraft(campaignInput, creativeInput);
         setSavedCampaignId(result.campaignId);
       }
+      // The save just invalidated any prior readiness result - drop the
+      // in-memory issues so the Publish step re-checks fresh, matching the
+      // server clearing last_readiness_check on the same write.
+      setIssues(null);
       toast.success("Draft saved");
       setStepIndex(STEPS.indexOf("Publish"));
     } catch (error) {
@@ -231,9 +318,12 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     if (!savedCampaignId) return;
     setCheckingReadiness(true);
     try {
-      await markCampaignReadyForReview(savedCampaignId);
       const result = await checkCampaignReadiness(savedCampaignId);
       setIssues(result.issues);
+      // Reconcile the stored review status with the ACTUAL result:
+      // promote to 'ready' only when readiness passes, demote a stale
+      // 'ready' back to 'draft' otherwise. Never flips optimistically.
+      await syncCampaignReviewStatus(savedCampaignId, result.ready);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to check readiness");
     } finally {
@@ -266,6 +356,9 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     const presentation = presentReadinessIssue(issue);
     if (!presentation.step) return;
     setStepIndex(STEPS.indexOf(presentation.step));
+    if (presentation.field === "startAt") {
+      setStartMode("scheduled"); // the start date/time inputs only render in scheduled mode
+    }
     const fieldId = presentation.field ? CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[presentation.field] : undefined;
     setPendingFocusFieldId(fieldId ?? null);
   };
@@ -283,18 +376,26 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       else if (result.outcome === "partial") toast.warning("Campaign partially published - see details below");
       else toast.error(result.error || "Publish failed");
     } catch (error) {
-      setPublishResult({ ok: false, message: error instanceof Error ? error.message : "Publish failed" });
-      toast.error(error instanceof Error ? error.message : "Publish failed");
+      if (error instanceof CampaignPublishNotReadyError) {
+        // Server rejected on readiness - repopulate the issue list (each
+        // row keeps its "Edit <step>" fix action) instead of just a toast.
+        setIssues(error.issues);
+        setPublishResult(null);
+        toast.error("This campaign isn't ready to publish yet - fix the items above.");
+      } else {
+        setPublishResult({ ok: false, message: error instanceof Error ? error.message : "Unable to publish this campaign right now." });
+        toast.error(error instanceof Error ? error.message : "Unable to publish this campaign right now.");
+      }
     } finally {
       setPublishing(false);
     }
   };
 
   if (isEdit && existingLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
-  if (isEdit && existing && existing.status !== "draft") {
+  if (isEdit && existing && !isEditableCampaign({ status: existing.status, external_campaign_id: existing.external_campaign_id })) {
     return (
       <Card className="p-6 text-sm text-muted-foreground">
-        This campaign is no longer a draft ({existing.status}) and can't be edited here. Published campaigns support pause/resume only - see the campaign's detail page.
+        This campaign has been published to Meta ({existing.status}) and can't be edited here. Published campaigns support pause/resume only - see the campaign's detail page.
       </Card>
     );
   }
@@ -481,30 +582,75 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       {step === "Budget & Schedule" && (
         <Card>
           <CardHeader><CardTitle>Budget and schedule</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-budget-type">Budget type</Label>
-              <Select value={budgetType} onValueChange={(v) => setBudgetType(v as "daily" | "lifetime")}>
-                <SelectTrigger id="campaign-budget-type"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Daily budget</SelectItem>
-                  <SelectItem value="lifetime">Lifetime budget</SelectItem>
-                </SelectContent>
-              </Select>
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-budget-type">Budget type</Label>
+                <Select value={budgetType} onValueChange={(v) => setBudgetType(v as "daily" | "lifetime")}>
+                  <SelectTrigger id="campaign-budget-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Daily budget</SelectItem>
+                    <SelectItem value="lifetime">Lifetime budget</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-budget">{budgetType === "daily" ? "Daily" : "Lifetime"} budget ({selectedAdAccount?.currency || "?"})</Label>
+                <Input id="campaign-budget" type="number" min={1} step="0.01" value={budgetDecimal} onChange={(e) => setBudgetDecimal(e.target.value)} aria-invalid={!!fieldIssue("budgetDecimal")} />
+                <FieldError message={fieldIssue("budgetDecimal")?.message} />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-budget">{budgetType === "daily" ? "Daily" : "Lifetime"} budget ({selectedAdAccount?.currency || "?"})</Label>
-              <Input id="campaign-budget" type="number" min={1} step="0.01" value={budgetDecimal} onChange={(e) => setBudgetDecimal(e.target.value)} aria-invalid={!!fieldIssue("budgetDecimal")} />
-              <FieldError message={fieldIssue("budgetDecimal")?.message} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-start-date">Start date</Label>
-              <Input id="campaign-start-date" type="date" value={startAt} onChange={(e) => setStartAt(e.target.value)} aria-invalid={!!fieldIssue("startAt")} />
+
+            <div className="space-y-2">
+              <Label>Start</Label>
+              <div className="grid grid-cols-2 gap-2" role="group" aria-label="When should this campaign start?">
+                <button
+                  type="button"
+                  aria-pressed={startMode === "now"}
+                  onClick={() => setStartMode("now")}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${startMode === "now" ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent/40"}`}
+                >
+                  Start now
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Publish immediately once readiness passes</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={startMode === "scheduled"}
+                  onClick={() => setStartMode("scheduled")}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${startMode === "scheduled" ? "border-primary bg-primary/5 font-medium" : "hover:bg-accent/40"}`}
+                >
+                  Schedule for later
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">Pick a date &amp; time, including later today</span>
+                </button>
+              </div>
+              {startMode === "scheduled" && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="campaign-start-date">Start date</Label>
+                    <Input id="campaign-start-date" type="date" value={startAt} onChange={(e) => setStartAt(e.target.value)} aria-invalid={!!fieldIssue("startAt")} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="campaign-start-time">Start time</Label>
+                    <Input id="campaign-start-time" type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} aria-invalid={!!fieldIssue("startAt")} />
+                  </div>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">Times are in <span className="font-medium">{workspaceTimezone}</span> (your workspace timezone).</p>
+                </div>
+              )}
               <FieldError message={fieldIssue("startAt")?.message} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="campaign-end-date">End date {budgetType === "lifetime" ? "(required)" : "(optional)"}</Label>
-              <Input id="campaign-end-date" type="date" value={endAt} onChange={(e) => setEndAt(e.target.value)} aria-invalid={!!fieldIssue("endAt")} />
+
+            <div className="space-y-2">
+              <Label>End {budgetType === "lifetime" ? "(required for a lifetime budget)" : "(optional)"}</Label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="campaign-end-date" className="text-xs text-muted-foreground">End date</Label>
+                  <Input id="campaign-end-date" type="date" value={endAt} onChange={(e) => setEndAt(e.target.value)} aria-invalid={!!fieldIssue("endAt")} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="campaign-end-time" className="text-xs text-muted-foreground">End time</Label>
+                  <Input id="campaign-end-time" type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} disabled={!endAt} aria-invalid={!!fieldIssue("endAt")} />
+                </div>
+              </div>
               <FieldError message={fieldIssue("endAt")?.message} />
             </div>
           </CardContent>
@@ -663,7 +809,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
               <div><dt className="text-muted-foreground">Destination</dt><dd>{destinationType ? DESTINATION_TYPE_LABELS[destinationType] : "-"}{destinationUrl ? ` — ${destinationUrl}` : ""}</dd></div>
               <div><dt className="text-muted-foreground">Audience</dt><dd>{ageMin}-{ageMax}, {genders}, {geoCountryList.join(", ") || "-"}</dd></div>
               <div><dt className="text-muted-foreground">Budget</dt><dd>{budgetDecimal} {selectedAdAccount?.currency} ({budgetType})</dd></div>
-              <div><dt className="text-muted-foreground">Schedule</dt><dd>{startAt} {endAt ? `- ${endAt}` : "- ongoing"}</dd></div>
+              <div><dt className="text-muted-foreground">Schedule</dt><dd>{startMode === "now" ? "Start now" : `${startAt} ${startTime} (${workspaceTimezone})`}{endAt ? ` - ends ${endAt} ${endTime}` : " - ongoing"}</dd></div>
             </dl>
             {selectedMediaAsset && (
               <div className="rounded-lg border p-3">

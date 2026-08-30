@@ -144,7 +144,7 @@ export type Database = {
           provider_state: Json
           source_content_media_asset_id: string | null
           source_content_series_id: string | null
-          start_at: string
+          start_at: string | null
           status: Database["public"]["Enums"]["ad_lifecycle_status"]
           updated_at: string
           workspace_id: string
@@ -177,7 +177,7 @@ export type Database = {
           provider_state?: Json
           source_content_media_asset_id?: string | null
           source_content_series_id?: string | null
-          start_at: string
+          start_at?: string | null
           status?: Database["public"]["Enums"]["ad_lifecycle_status"]
           updated_at?: string
           workspace_id: string
@@ -210,7 +210,7 @@ export type Database = {
           provider_state?: Json
           source_content_media_asset_id?: string | null
           source_content_series_id?: string | null
-          start_at?: string
+          start_at?: string | null
           status?: Database["public"]["Enums"]["ad_lifecycle_status"]
           updated_at?: string
           workspace_id?: string
@@ -3814,7 +3814,7 @@ export type Database = {
           lifetime_budget_minor_units: number
           name: string
           objective: string
-          start_at: string
+          start_at: string | null
           status: string
         }[]
       }

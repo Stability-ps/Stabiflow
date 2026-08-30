@@ -27,7 +27,7 @@ export type ReadinessInput = {
     dailyBudgetMinorUnits: number | null;
     lifetimeBudgetMinorUnits: number | null;
     currency: string;
-    startAt: string;
+    startAt: string | null; // null = "Start now" (immediate publish)
     endAt: string | null;
     draftCreativeId: string | null;
     facebookPageId: string | null;
@@ -48,6 +48,11 @@ export type ReadinessInput = {
   } | null;
   whatsappNumber: { isActive: boolean } | null;
   tokenHealthy: boolean | null; // null = not checked (readiness check without a live provider call)
+  // Injected clock, for deterministic tests. The readiness check is run
+  // AGAIN by ad-campaigns-publish immediately before a real publish, so a
+  // schedule that has gone stale while the page sat open is rejected at
+  // that point using the real current time.
+  now?: Date;
 };
 
 // Meta's documented minimum for a standard feed image ad. Not exhaustive
@@ -103,8 +108,9 @@ export function checkCampaignReadiness(input: ReadinessInput): ReadinessIssue[] 
     dailyBudgetMinorUnits: input.campaign.dailyBudgetMinorUnits,
     lifetimeBudgetMinorUnits: input.campaign.lifetimeBudgetMinorUnits,
     currency: input.campaign.currency,
-    startAt: new Date(input.campaign.startAt),
+    startAt: input.campaign.startAt ? new Date(input.campaign.startAt) : null,
     endAt: input.campaign.endAt ? new Date(input.campaign.endAt) : null,
+    now: input.now,
   });
   if (!budgetValidation.valid) {
     for (const issue of budgetValidation.issues) push("invalid_budget", issue);

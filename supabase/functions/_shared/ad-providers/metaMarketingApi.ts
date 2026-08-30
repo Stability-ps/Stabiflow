@@ -54,9 +54,12 @@ export function buildCreateAdSetPayload(input: CreateAdSetInput): Record<string,
     status: input.status,
     optimization_goal: input.optimizationGoal,
     billing_event: input.billingEvent,
-    start_time: input.startTime,
     targeting: input.targeting,
   };
+  // "Start now" -> omit start_time entirely. Meta begins delivery when the
+  // ad set is activated, which the publish saga does after every object is
+  // created. A non-null value is a scheduled ISO start instant.
+  if (input.startTime) payload.start_time = input.startTime;
   if (input.endTime) payload.end_time = input.endTime;
   if (input.dailyBudgetMinorUnits != null) payload.daily_budget = String(input.dailyBudgetMinorUnits);
   if (input.lifetimeBudgetMinorUnits != null) payload.lifetime_budget = String(input.lifetimeBudgetMinorUnits);

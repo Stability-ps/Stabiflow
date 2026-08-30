@@ -178,6 +178,12 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
     let adSetRow: Record<string, unknown> | null = null;
     if (step === "ad_set") {
       maybeForceFail("ad_set");
+      // null start_at = "Start now" -> pass null so Meta omits start_time
+      // and begins delivery when the ad set is activated below. A non-null
+      // start_at is a genuinely-future instant: the readiness gate rejects
+      // a scheduled start that has passed or is too close for safe
+      // submission BEFORE this saga runs, so it is never mutated here.
+      const adSetStartTime = (campaign.start_at as string | null) ?? null;
       const created = await options.provider.createAdSet(cred, {
         adAccountId: externalAdAccountId,
         campaignExternalId: providerState.campaign!.external_id,
@@ -185,7 +191,7 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
         status: "PAUSED",
         optimizationGoal: rule.optimizationGoal,
         billingEvent: rule.billingEvent,
-        startTime: campaign.start_at as string,
+        startTime: adSetStartTime,
         endTime: (campaign.end_at as string) || null,
         targeting: buildMetaTargetingSpec((campaign.audience as Record<string, unknown>) || {}),
         pagePlacements: (campaign.placements as Record<string, unknown>) || {},
@@ -206,7 +212,9 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
           billing_event: rule.billingEvent,
           targeting: campaign.audience || {},
           placements: campaign.placements || {},
-          start_at: campaign.start_at,
+          // ad_sets.start_at is NOT NULL - the scheduled start instant, or
+          // the publish moment for a "Start now" campaign.
+          start_at: adSetStartTime ?? new Date().toISOString(),
           end_at: campaign.end_at,
         })
         .select("*")

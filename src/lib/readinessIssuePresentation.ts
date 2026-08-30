@@ -58,8 +58,9 @@ const CODE_TARGET: Record<string, { step: CampaignBuilderStep; field: string | n
 // which field is actually at fault.
 function targetForInvalidBudget(message: string): { step: CampaignBuilderStep; field: string | null } {
   const lower = message.toLowerCase();
-  if (lower.includes("start date")) return { step: "Budget & Schedule", field: "startAt" };
-  if (lower.includes("end date")) return { step: "Budget & Schedule", field: "endAt" };
+  // Order matters: "end time must be after the start time" mentions both.
+  if (lower.includes("end date") || lower.includes("end time")) return { step: "Budget & Schedule", field: "endAt" };
+  if (lower.includes("start date") || lower.includes("start time")) return { step: "Budget & Schedule", field: "startAt" };
   return { step: "Budget & Schedule", field: "budgetDecimal" };
 }
 
@@ -71,4 +72,39 @@ export function presentReadinessIssue(issue: ReadinessIssue): ReadinessIssuePres
     step: target?.step ?? null,
     field: target?.field ?? null,
   };
+}
+
+// Human "Edit <thing>" labels per builder step, for the correction button
+// shown next to a readiness issue on Campaign Detail. The builder step
+// names are internal ("Budget & Schedule"); these are what a user sees.
+export const READINESS_STEP_ACTION_LABEL: Record<CampaignBuilderStep, string> = {
+  "Goal": "Edit goal",
+  "Ad Account": "Edit ad account & destination",
+  "Audience": "Edit audience",
+  "Budget & Schedule": "Edit budget & schedule",
+  "Creative": "Edit creative",
+  "Review": "Edit campaign",
+  "Publish": "Edit campaign",
+};
+
+// Special-case: a start/end-date issue reads more naturally as "Edit
+// schedule" even though it maps to the "Budget & Schedule" step (spec 3).
+export function readinessActionLabel(presentation: ReadinessIssuePresentation): string | null {
+  if (!presentation.step) return null;
+  if (presentation.step === "Budget & Schedule" && (presentation.field === "startAt" || presentation.field === "endAt")) {
+    return "Edit schedule";
+  }
+  return READINESS_STEP_ACTION_LABEL[presentation.step];
+}
+
+// The canonical editor deep-link. The Campaign Builder reads ?step= and
+// ?focus= on mount to open at the right step and focus the exact field -
+// the SAME step names and field keys the in-builder "Edit <Step>" buttons
+// already use (campaignBuilderFieldFocus.ts), not a second system.
+export function campaignEditorPath(campaignId: string, step?: CampaignBuilderStep | null, field?: string | null): string {
+  const params = new URLSearchParams();
+  if (step) params.set("step", step);
+  if (field) params.set("focus", field);
+  const query = params.toString();
+  return `/app/campaigns/${campaignId}/edit${query ? `?${query}` : ""}`;
 }

@@ -3,15 +3,20 @@ import { Megaphone, Plug, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
-import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
+import { CampaignLifecycleBadge } from "@/components/campaigns/CampaignLifecycleBadge";
+import { deriveCampaignPresentation, type ReadinessSnapshot } from "@/lib/campaignLifecycle";
+import { formatScheduleSummary } from "@/lib/campaignSchedule";
 import { getObjectiveOption } from "@/lib/adObjectives";
 import { formatMoney } from "@/lib/adMoney";
 import { useAuth } from "@/hooks/useAuth";
+import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
 import { useAdCampaigns } from "@/hooks/useAdCampaigns";
 import { useMetaAdAccounts } from "@/hooks/useMetaAccountResources";
 
 export function CampaignsList() {
   const { currentWorkspaceId, hasPermission } = useAuth();
+  const workspaceTimezone = useWorkspaceTimezone(currentWorkspaceId);
+  const now = new Date();
   const navigate = useNavigate();
   const { data: campaigns, isLoading } = useAdCampaigns(currentWorkspaceId);
   const { data: adAccounts, isLoading: adAccountsLoading } = useMetaAdAccounts(currentWorkspaceId);
@@ -53,11 +58,16 @@ export function CampaignsList() {
         {campaigns.map((c) => {
           const objective = getObjectiveOption(c.objective);
           const budget = c.budget_type === "daily" ? c.daily_budget_minor_units : c.lifetime_budget_minor_units;
+          const presentation = deriveCampaignPresentation({
+            status: c.status,
+            externalCampaignId: c.external_campaign_id,
+            lastReadinessCheck: (c.last_readiness_check as ReadinessSnapshot | null) ?? null,
+          });
           return (
             <Card key={c.id} className="flex cursor-pointer items-center gap-4 p-4 hover:bg-accent/40" onClick={() => navigate(`/app/campaigns/${c.id}`)}>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <CampaignStatusBadge status={c.status} />
+                  <CampaignLifecycleBadge state={presentation} />
                   <span className="truncate text-sm font-medium">{c.name}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -66,10 +76,7 @@ export function CampaignsList() {
               </div>
               <div className="hidden shrink-0 text-right text-xs text-muted-foreground sm:block">
                 <p>{formatMoney(budget, c.currency)} <span className="capitalize">{c.budget_type}</span></p>
-                <p>
-                  {new Date(c.start_at).toLocaleDateString()}
-                  {c.end_at ? ` - ${new Date(c.end_at).toLocaleDateString()}` : " - ongoing"}
-                </p>
+                <p>{formatScheduleSummary(c.start_at, workspaceTimezone, now)}</p>
               </div>
             </Card>
           );

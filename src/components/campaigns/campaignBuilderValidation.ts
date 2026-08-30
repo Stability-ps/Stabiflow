@@ -1,4 +1,5 @@
 import type { DestinationType, SupportedObjective } from "@/lib/adObjectives";
+import { localDateTimeToUtc, MIN_SCHEDULED_START_LEAD_MS, type StartMode } from "@/lib/campaignSchedule";
 
 export const CAMPAIGN_BUILDER_STEPS = ["Goal", "Ad Account", "Audience", "Budget & Schedule", "Creative", "Review", "Publish"] as const;
 
@@ -27,8 +28,14 @@ export type CampaignBuilderValidationInput = {
   geoCountries: string[];
   budgetType: "daily" | "lifetime";
   budgetDecimal: string;
-  startAt: string;
-  endAt: string;
+  // Scheduling: timezone-aware DATE + TIME, or "Start now".
+  startMode: StartMode;
+  startAt: string; // "YYYY-MM-DD" (used when startMode === "scheduled")
+  startTime: string; // "HH:mm" (used when startMode === "scheduled")
+  endAt: string; // "YYYY-MM-DD" (optional; required for a lifetime budget)
+  endTime: string; // "HH:mm" (optional; defaults to end-of-day when an endAt is set without one)
+  timezone: string; // workspace timezone the date+time are authored in
+  now: Date; // current instant, injected for deterministic validation
   mediaAssetId: string;
   mediaAssetIsUsable: boolean;
   primaryText: string;
@@ -83,20 +90,43 @@ export function validateCampaignBuilder(input: CampaignBuilderValidationInput): 
   if (!Number.isFinite(budget) || budget < 1) {
     add(issues, "Budget & Schedule", "budgetDecimal", "invalid_budget", "Budget must be at least 1.00.");
   }
-  if (!input.startAt) {
-    add(issues, "Budget & Schedule", "startAt", "missing_start_date", "Choose a start date.");
-  } else {
-    const now = new Date();
-    const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
-    if (input.startAt < localToday) {
-      add(issues, "Budget & Schedule", "startAt", "start_date_in_past", "Start date must not be in the past.");
+  // --- Schedule. "Start now" needs no start validation (the campaign
+  // publishes immediately). A scheduled start must be far enough ahead to
+  // survive the publish pipeline (MIN_SCHEDULED_START_LEAD_MS) - mirrors
+  // the server rule in adMoney.ts. The server re-checks against the real
+  // clock at publish time; a start that has since become too close/past is
+  // a blocking issue there, never a silent change.
+  let startMs: number | null = null;
+  if (input.startMode === "scheduled") {
+    if (!input.startAt || !input.startTime) {
+      add(issues, "Budget & Schedule", "startAt", "missing_start", "Choose a start date and time, or select Start now.");
+    } else {
+      const startInstant = localDateTimeToUtc(input.startAt, input.startTime, input.timezone);
+      if (!startInstant) {
+        add(issues, "Budget & Schedule", "startAt", "invalid_start", "Enter a valid start date and time.");
+      } else {
+        startMs = startInstant.getTime();
+        if (startMs <= input.now.getTime() + MIN_SCHEDULED_START_LEAD_MS) {
+          add(issues, "Budget & Schedule", "startAt", "start_in_past", "Scheduled start time is too close or has passed. Choose Start now or a later time.");
+        }
+      }
     }
   }
+
   if (input.budgetType === "lifetime" && !input.endAt) {
     add(issues, "Budget & Schedule", "endAt", "missing_end_date", "Choose an end date for a lifetime budget.");
   }
-  if (input.startAt && input.endAt && input.endAt <= input.startAt) {
-    add(issues, "Budget & Schedule", "endAt", "invalid_end_date", "End date must be after the start date.");
+  if (input.endAt) {
+    const endInstant = localDateTimeToUtc(input.endAt, input.endTime || "23:59", input.timezone);
+    if (!endInstant) {
+      add(issues, "Budget & Schedule", "endAt", "invalid_end_date", "Enter a valid end date and time.");
+    } else {
+      // "Start now" -> compare against now; scheduled -> against the start instant.
+      const effectiveStartMs = input.startMode === "now" ? input.now.getTime() : (startMs ?? input.now.getTime());
+      if (endInstant.getTime() <= effectiveStartMs) {
+        add(issues, "Budget & Schedule", "endAt", "invalid_end_date", "End must be after the start.");
+      }
+    }
   }
 
   if (!input.mediaAssetId || !input.mediaAssetIsUsable) {

@@ -56,7 +56,7 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
       dailyBudgetMinorUnits: (campaign.daily_budget_minor_units as number) ?? null,
       lifetimeBudgetMinorUnits: (campaign.lifetime_budget_minor_units as number) ?? null,
       currency: campaign.currency as string,
-      startAt: campaign.start_at as string,
+      startAt: (campaign.start_at as string | null) ?? null, // null = "Start now"
       endAt: (campaign.end_at as string) ?? null,
       draftCreativeId: (campaign.draft_creative_id as string) ?? null,
       facebookPageId: (campaign.facebook_page_id as string) ?? null,

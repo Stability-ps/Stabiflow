@@ -96,7 +96,10 @@ Deno.serve(async (req: Request) => {
 
   // Re-validate readiness server-side even though the UI should already
   // have shown a green checklist - "frontend checks are UX only" applies
-  // here exactly as it does in Content (instruction #9).
+  // here exactly as it does in Content (instruction #9). If a scheduled
+  // start has passed (or is now too close for safe provider submission)
+  // this fails here with an actionable issue - the schedule is NEVER
+  // silently mutated; the user re-chooses Start now or a later time.
   const readinessInput = await loadReadinessInput(serviceSb, claimed);
   const issues = checkCampaignReadiness(readinessInput);
   if (!isReady(issues)) {

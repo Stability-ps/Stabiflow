@@ -25,6 +25,36 @@ export function checkCampaignReadiness(campaignId: string) {
   return invoke<{ ok: true; ready: boolean; issues: ReadinessIssue[] }>("ad-campaigns-readiness", { campaign_id: campaignId });
 }
 
+// Thrown when ad-campaigns-publish rejects (422) because server-side
+// readiness failed. Carries the actionable issues so the caller can render
+// them in the readiness panel instead of a generic toast. `message` is
+// always one of our own human sentences, never a raw backend detail.
+export class CampaignPublishNotReadyError extends Error {
+  issues: ReadinessIssue[];
+  constructor(message: string, issues: ReadinessIssue[]) {
+    super(message);
+    this.name = "CampaignPublishNotReadyError";
+    this.issues = issues;
+  }
+}
+
+// Best-effort JSON parse of a supabase FunctionsHttpError's Response body
+// (non-2xx). Mirrors src/lib/integrations.ts's readErrorPayloadFromContext.
+async function readInvokeErrorBody(error: unknown, data: unknown): Promise<{ error?: string; message?: string; issues?: ReadinessIssue[] } | null> {
+  if (data && typeof data === "object") return data as Record<string, unknown>;
+  const context = (error as { context?: unknown } | null)?.context as
+    | { json?: () => Promise<unknown>; clone?: () => { json?: () => Promise<unknown> } }
+    | undefined;
+  if (!context || typeof context !== "object") return null;
+  const source = typeof context.clone === "function" ? context.clone() : context;
+  if (typeof source.json !== "function") return null;
+  try {
+    return (await source.json()) as { error?: string; message?: string; issues?: ReadinessIssue[] };
+  } catch {
+    return null;
+  }
+}
+
 // A fresh idempotency key per Publish attempt (Phase 6 instruction #14) -
 // minted once when the confirmation step is first shown, not per network
 // call, so a frontend retry of the SAME attempt reuses it and a genuinely
@@ -33,16 +63,33 @@ export function newPublishIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
-export function publishCampaign(campaignId: string, idempotencyKey: string) {
-  return invoke<{
-    ok: boolean;
-    outcome?: "success" | "partial" | "failed";
-    replay?: boolean;
-    operation?: { id: string; status: string; steps: Array<{ step: string; status: string; error?: unknown }> };
-    campaign?: { id: string; status: string; external_campaign_id: string | null; last_publish_error?: unknown };
-    error?: string;
-    issues?: ReadinessIssue[];
-  }>("ad-campaigns-publish", { campaign_id: campaignId, idempotency_key: idempotencyKey });
+export type PublishCampaignResult = {
+  ok: boolean;
+  outcome?: "success" | "partial" | "failed";
+  replay?: boolean;
+  operation?: { id: string; status: string; steps: Array<{ step: string; status: string; error?: unknown }> };
+  campaign?: { id: string; status: string; external_campaign_id: string | null; last_publish_error?: unknown };
+  error?: string;
+  issues?: ReadinessIssue[];
+};
+
+export async function publishCampaign(campaignId: string, idempotencyKey: string): Promise<PublishCampaignResult> {
+  const { data, error } = await supabase.functions.invoke("ad-campaigns-publish", {
+    body: { campaign_id: campaignId, idempotency_key: idempotencyKey },
+  });
+  if (error) {
+    const body = await readInvokeErrorBody(error, data);
+    // 422 not-ready: the server returns actionable readiness issues - throw
+    // a typed error so the caller can render them, not a generic toast.
+    if (body?.issues && body.issues.length) {
+      throw new CampaignPublishNotReadyError(body.error || "This campaign isn't ready to publish yet.", body.issues);
+    }
+    // Other failures: our own curated sentence if present (403 Forbidden,
+    // 409 wrong-state, suspended-workspace message, ...), never the raw
+    // supabase/internal string.
+    throw new Error(body?.message || body?.error || "Unable to publish this campaign right now.");
+  }
+  return (data ?? { ok: false }) as PublishCampaignResult;
 }
 
 export function pauseCampaign(campaignId: string) {
@@ -92,7 +139,7 @@ export type CampaignDraftInput = {
   daily_budget_minor_units: number | null;
   lifetime_budget_minor_units: number | null;
   currency: string;
-  start_at: string;
+  start_at: string | null; // null = "Start now" (publish immediately)
   end_at: string | null;
   audience: AudienceBasics;
   source_content_media_asset_id?: string | null;
@@ -141,7 +188,15 @@ export async function updateCampaignDraft(campaignId: string, campaign: Partial<
     const { error } = await supabase.from("ad_creatives").update(creative).eq("id", creativeId);
     if (error) throw new Error(error.message);
   }
-  const { error } = await supabase.from("ad_campaigns").update({ ...campaign, status: "draft" }).eq("id", campaignId);
+  // Any edit changes readiness-relevant configuration, so the stored
+  // readiness evidence (last_readiness_check) is now stale - clear it in
+  // the same write. Presentation (CampaignsList / deriveCampaignPresentation)
+  // must fall back to "Draft" until a FRESH readiness check repopulates it,
+  // never keep showing "Ready to publish" from a pre-edit result.
+  const { error } = await supabase
+    .from("ad_campaigns")
+    .update({ ...campaign, status: "draft", last_readiness_check: null })
+    .eq("id", campaignId);
   if (error) throw new Error(error.message);
 
   await supabase.from("workspace_activity_log").insert({
@@ -153,12 +208,120 @@ export async function updateCampaignDraft(campaignId: string, campaign: Partial<
   });
 }
 
-export async function markCampaignReadyForReview(campaignId: string) {
-  const { error } = await supabase.from("ad_campaigns").update({ status: "ready" }).eq("id", campaignId).eq("status", "draft");
+// Reconciles the stored review status of an UNPUBLISHED campaign with an
+// actual readiness result. Promotes draft -> 'ready' when readiness
+// passes, and demotes a stale 'ready' -> 'draft' when it does not. Never
+// touches a campaign that has been published to Meta. Replaces the old
+// markCampaignReadyForReview(), which promoted unconditionally the moment
+// the builder's Publish step opened - the source of the production
+// contradiction where the badge said "ready" but the campaign could not
+// be published.
+export async function syncCampaignReviewStatus(campaignId: string, ready: boolean) {
+  const { error } = await supabase
+    .from("ad_campaigns")
+    .update({ status: ready ? "ready" : "draft" })
+    .eq("id", campaignId)
+    .is("external_campaign_id", null)
+    .in("status", ["draft", "ready"]);
   if (error) throw new Error(error.message);
 }
 
 export async function deleteCampaignDraft(campaignId: string) {
-  const { error } = await supabase.from("ad_campaigns").delete().eq("id", campaignId).eq("status", "draft");
+  // The RLS delete policy only permits status = 'draft'. A campaign that
+  // the old builder optimistically flipped to 'ready' (but never
+  // published) is still a local-only draft - demote it first so the user
+  // isn't stuck with an undeletable row. Never demotes/deletes anything
+  // with a Meta id.
+  await supabase
+    .from("ad_campaigns")
+    .update({ status: "draft" })
+    .eq("id", campaignId)
+    .eq("status", "ready")
+    .is("external_campaign_id", null);
+
+  const { error, count } = await supabase
+    .from("ad_campaigns")
+    .delete({ count: "exact" })
+    .eq("id", campaignId)
+    .eq("status", "draft")
+    .is("external_campaign_id", null);
   if (error) throw new Error(error.message);
+  if (!count) throw new Error("This campaign can no longer be deleted as a draft. Refresh and try again.");
+}
+
+// Creates a NEW local draft from an existing campaign's configuration
+// (spec 8). The copy gets a fresh id, never reuses any Meta
+// campaign/ad-set/ad id, is never published, and creates no spend. The
+// user-editable builder fields carry over; provenance
+// (source_content_*) is preserved; all publish/readiness bookkeeping is
+// reset. Workspace isolation is the caller's own RLS scope, same as
+// createCampaignDraft.
+export async function duplicateCampaignDraft(campaignId: string): Promise<{ campaignId: string }> {
+  const { data: source, error: loadError } = await supabase
+    .from("ad_campaigns")
+    .select(
+      "workspace_id, integration_id, ad_account_id, facebook_page_id, instagram_account_id, name, objective, buying_type, destination_type, budget_type, daily_budget_minor_units, lifetime_budget_minor_units, currency, start_at, end_at, audience, placements, draft_creative_id, source_content_media_asset_id, source_content_series_id",
+    )
+    .eq("id", campaignId)
+    .maybeSingle();
+  if (loadError) throw new Error(loadError.message);
+  if (!source) throw new Error("The campaign to duplicate could not be found.");
+
+  let newCreativeId: string | null = null;
+  if (source.draft_creative_id) {
+    const { data: creative, error: creativeLoadError } = await supabase
+      .from("ad_creatives")
+      .select("workspace_id, media_asset_id, platform_variant_id, headline, primary_text, description, cta, destination_url, whatsapp_number_id")
+      .eq("id", source.draft_creative_id)
+      .maybeSingle();
+    if (creativeLoadError) throw new Error(creativeLoadError.message);
+    if (creative) {
+      const { data: creativeRow, error: creativeInsertError } = await supabase
+        .from("ad_creatives")
+        .insert({ ...creative, status: "draft" })
+        .select("id")
+        .single();
+      if (creativeInsertError || !creativeRow) throw new Error(creativeInsertError?.message || "Unable to copy the creative");
+      newCreativeId = creativeRow.id as string;
+    }
+  }
+
+  const { data: campaignRow, error: insertError } = await supabase
+    .from("ad_campaigns")
+    .insert({
+      workspace_id: source.workspace_id,
+      integration_id: source.integration_id,
+      ad_account_id: source.ad_account_id,
+      facebook_page_id: source.facebook_page_id,
+      instagram_account_id: source.instagram_account_id,
+      name: `${source.name} - Copy`,
+      objective: source.objective,
+      buying_type: source.buying_type,
+      destination_type: source.destination_type,
+      budget_type: source.budget_type,
+      daily_budget_minor_units: source.daily_budget_minor_units,
+      lifetime_budget_minor_units: source.lifetime_budget_minor_units,
+      currency: source.currency,
+      start_at: source.start_at,
+      end_at: source.end_at,
+      audience: source.audience,
+      placements: source.placements,
+      source_content_media_asset_id: source.source_content_media_asset_id,
+      source_content_series_id: source.source_content_series_id,
+      draft_creative_id: newCreativeId,
+      status: "draft",
+    })
+    .select("id")
+    .single();
+  if (insertError || !campaignRow) throw new Error(insertError?.message || "Unable to duplicate the campaign");
+
+  await supabase.from("workspace_activity_log").insert({
+    workspace_id: source.workspace_id,
+    action: "campaign_duplicated",
+    target_type: "ad_campaign",
+    target_id: campaignRow.id,
+    metadata: { duplicated_from: campaignId },
+  });
+
+  return { campaignId: campaignRow.id as string };
 }
