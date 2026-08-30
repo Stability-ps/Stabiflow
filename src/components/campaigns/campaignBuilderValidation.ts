@@ -1,5 +1,5 @@
 import type { DestinationType, SupportedObjective } from "@/lib/adObjectives";
-import { localDateTimeToUtc, type StartMode } from "@/lib/campaignSchedule";
+import { localDateTimeToUtc, MIN_SCHEDULED_START_LEAD_MS, type StartMode } from "@/lib/campaignSchedule";
 
 export const CAMPAIGN_BUILDER_STEPS = ["Goal", "Ad Account", "Audience", "Budget & Schedule", "Creative", "Review", "Publish"] as const;
 
@@ -91,10 +91,11 @@ export function validateCampaignBuilder(input: CampaignBuilderValidationInput): 
     add(issues, "Budget & Schedule", "budgetDecimal", "invalid_budget", "Budget must be at least 1.00.");
   }
   // --- Schedule. "Start now" needs no start validation (the campaign
-  // publishes immediately). A scheduled start must be a genuinely future
-  // instant in the workspace timezone - no artificial minimum buffer,
-  // mirroring the server rule in adMoney.ts. The server re-checks this at
-  // publish time against the real clock.
+  // publishes immediately). A scheduled start must be far enough ahead to
+  // survive the publish pipeline (MIN_SCHEDULED_START_LEAD_MS) - mirrors
+  // the server rule in adMoney.ts. The server re-checks against the real
+  // clock at publish time; a start that has since become too close/past is
+  // a blocking issue there, never a silent change.
   let startMs: number | null = null;
   if (input.startMode === "scheduled") {
     if (!input.startAt || !input.startTime) {
@@ -105,8 +106,8 @@ export function validateCampaignBuilder(input: CampaignBuilderValidationInput): 
         add(issues, "Budget & Schedule", "startAt", "invalid_start", "Enter a valid start date and time.");
       } else {
         startMs = startInstant.getTime();
-        if (startMs <= input.now.getTime()) {
-          add(issues, "Budget & Schedule", "startAt", "start_in_past", "Scheduled start time must be in the future.");
+        if (startMs <= input.now.getTime() + MIN_SCHEDULED_START_LEAD_MS) {
+          add(issues, "Budget & Schedule", "startAt", "start_in_past", "Scheduled start time is too close or has passed. Choose Start now or a later time.");
         }
       }
     }

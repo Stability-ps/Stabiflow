@@ -100,13 +100,20 @@ describe("validateCampaignBuilder", () => {
       expect(issues.filter((i) => i.step === "Budget & Schedule")).toEqual([]);
     });
 
-    it("a scheduled start one minute in the future is valid - there is no minimum buffer", () => {
-      // NOW is 14:00 JHB; 14:01 JHB is 12:01Z
+    it("a scheduled start only a minute ahead is rejected - too close for the publish pipeline", () => {
+      // NOW is 14:00 JHB; 14:01 JHB is 12:01Z - inside the 2-minute lead.
       const issues = validateCampaignBuilder(validInput({ startMode: "scheduled", startAt: "2026-08-30", startTime: "14:01", now: NOW }));
+      const issue = issues.find((i) => i.code === "start_in_past");
+      expect(issue).toBeTruthy();
+      expect(issue!.message).toMatch(/too close or has passed.*Start now/i);
+    });
+
+    it("a scheduled start comfortably ahead (5 minutes) is valid", () => {
+      const issues = validateCampaignBuilder(validInput({ startMode: "scheduled", startAt: "2026-08-30", startTime: "14:05", now: NOW }));
       expect(issues.some((i) => i.code === "start_in_past")).toBe(false);
     });
 
-    it("a scheduled start earlier today is rejected as 'Scheduled start time must be in the future.'", () => {
+    it("a scheduled start earlier today is rejected (never silently changed) with a Start-now / later-time message", () => {
       const issues = validateCampaignBuilder(validInput({ startMode: "scheduled", startAt: "2026-08-30", startTime: "13:00", now: NOW }));
       expect(issues).toContainEqual(expect.objectContaining({ code: "start_in_past", field: "startAt", step: "Budget & Schedule" }));
     });

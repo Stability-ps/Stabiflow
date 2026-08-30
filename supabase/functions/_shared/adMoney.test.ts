@@ -124,8 +124,10 @@ Deno.test("end date must be strictly after start date", () => {
 
 // --- Scheduling model: timezone-aware DATE + TIME resolved to a UTC
 // instant, or null for "Start now". validateCampaignBudget compares
-// instants; there is NO artificial minimum buffer - any genuinely future
-// instant is accepted, and "Start now" (null) is always valid.
+// instants. A SCHEDULED start must be at least MIN_SCHEDULED_START_LEAD_MS
+// (2 min) ahead to survive the publish pipeline; a start that has passed
+// or is too close is a BLOCKING issue (never a silent conversion). "Start
+// now" (null) is always valid.
 
 const sched = (over: Partial<Parameters<typeof validateCampaignBudget>[0]>) =>
   validateCampaignBudget({
@@ -150,24 +152,31 @@ Deno.test("START NOW with an end time that is in the future is valid; a past end
   if (!past.valid) assertEquals(past.issues.some((i) => i.includes("end time must be after the start time")), true);
 });
 
-Deno.test("SCHEDULED: a start instant one minute in the future is valid - no minimum buffer", () => {
-  assertEquals(sched({ startAt: new Date("2026-08-30T12:01:00Z") }).valid, true);
+Deno.test("SCHEDULED: a start only one minute ahead is REJECTED - too close for safe provider submission", () => {
+  const r = sched({ startAt: new Date("2026-08-30T12:01:00Z") });
+  assertEquals(r.valid, false);
+  if (!r.valid) assertEquals(r.issues.some((i) => i.includes("too close or has passed")), true);
 });
 
-Deno.test("SCHEDULED: a start instant ten minutes in the future is valid", () => {
+Deno.test("SCHEDULED: a start comfortably beyond the lead window (10 minutes) is valid", () => {
   assertEquals(sched({ startAt: new Date("2026-08-30T12:10:00Z") }).valid, true);
 });
 
-Deno.test("SCHEDULED: a start instant equal to now is 'has passed' (not in the future)", () => {
-  const r = sched({ startAt: new Date("2026-08-30T12:00:00Z") });
-  assertEquals(r.valid, false);
-  if (!r.valid) assertEquals(r.issues.some((i) => i.includes("scheduled start time has passed")), true);
+Deno.test("SCHEDULED lead boundary: just inside the 2-minute lead is rejected; just outside is accepted", () => {
+  assertEquals(sched({ startAt: new Date("2026-08-30T12:01:59Z") }).valid, false); // 1m59s ahead
+  assertEquals(sched({ startAt: new Date("2026-08-30T12:02:01Z") }).valid, true); // 2m01s ahead
 });
 
-Deno.test("SCHEDULED: a start instant one minute in the past has passed", () => {
+Deno.test("SCHEDULED: a start equal to now is rejected as 'too close or has passed'", () => {
+  const r = sched({ startAt: new Date("2026-08-30T12:00:00Z") });
+  assertEquals(r.valid, false);
+  if (!r.valid) assertEquals(r.issues.some((i) => i.includes("too close or has passed")), true);
+});
+
+Deno.test("SCHEDULED: a start one minute in the past is rejected (never silently converted to Start now)", () => {
   const r = sched({ startAt: new Date("2026-08-30T11:59:00Z") });
   assertEquals(r.valid, false);
-  if (!r.valid) assertEquals(r.issues.some((i) => i.includes("scheduled start time has passed")), true);
+  if (!r.valid) assertEquals(r.issues.some((i) => i.includes("too close or has passed") && i.includes("Start now")), true);
 });
 
 Deno.test("REGRESSION: 'later today' is valid - a same-day afternoon start no longer fails just because the calendar date == today", () => {

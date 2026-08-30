@@ -29,6 +29,15 @@ function dateDMY(d: Date, timeZone: string): string {
 // rather than crashing (Intl throws on an unknown IANA name).
 export const WORKSPACE_TIMEZONE_FALLBACK = "Africa/Johannesburg";
 
+// A SCHEDULED start must be at least this far ahead of "now" to be
+// publishable - the publish pipeline (readiness gate -> create campaign ->
+// create ad set) adds latency, and Meta rejects a past ad-set start_time.
+// A start that is closer than this (or has passed) is a blocking readiness
+// issue, NOT a silent conversion to "Start now". Mirrors
+// supabase/functions/_shared/adMoney.ts (MIN_SCHEDULED_START_LEAD_MS) -
+// keep the two values in sync.
+export const MIN_SCHEDULED_START_LEAD_MS = 2 * 60 * 1000;
+
 export function safeTimeZone(timeZone: string | null | undefined): string {
   if (!timeZone) return WORKSPACE_TIMEZONE_FALLBACK;
   try {

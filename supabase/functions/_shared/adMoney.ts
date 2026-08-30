@@ -24,6 +24,17 @@ export const MIN_DAILY_BUDGET_MINOR_UNITS = 100; // smallest-unit-agnostic floor
 export const MIN_LIFETIME_BUDGET_MINOR_UNITS = 100;
 export const MAX_BUDGET_MINOR_UNITS = 100_000_000_00; // R100,000,000.00 equivalent - a sanity ceiling against fat-finger input, not a Meta limit
 
+// A SCHEDULED start must be at least this far in the future to be
+// publishable. Meta's ad set start_time must be strictly after the current
+// time, and StabiFlow's publish pipeline (readiness gate -> create
+// campaign -> create ad set) adds real latency between validation and the
+// createAdSet call - a start_time that is only seconds ahead at the gate
+// would be in the past by the time it reaches Meta and be rejected. This
+// lead does NOT apply to "Start now" (startAt === null), which is the
+// correct choice for an immediate launch. Mirrored on the client in
+// src/lib/campaignSchedule.ts (MIN_SCHEDULED_START_LEAD_MS) - keep in sync.
+export const MIN_SCHEDULED_START_LEAD_MS = 2 * 60 * 1000;
+
 export type MoneyInput = {
   budgetType: BudgetType;
   dailyBudgetMinorUnits: number | null;
@@ -108,13 +119,14 @@ export function validateCampaignBudget(input: MoneyInput): MoneyValidationResult
     issues.push("end time must be after the start time");
   }
 
-  // A SCHEDULED start must be in the future. "Start now" (null) is always
-  // valid - it publishes immediately. No artificial minimum buffer: the
-  // Meta Marketing API only requires an ad set start_time to be after the
-  // current time, and StabiFlow omits start_time entirely for an immediate
-  // start, so any genuinely-future instant is acceptable.
-  if (input.startAt && input.startAt.getTime() <= now.getTime()) {
-    issues.push("scheduled start time has passed");
+  // A SCHEDULED start must be far enough in the future to survive the
+  // publish pipeline and be accepted by Meta (see MIN_SCHEDULED_START_LEAD_MS).
+  // If it has passed - or is now too close for safe submission - this is a
+  // BLOCKING readiness issue: the schedule is never silently changed; the
+  // user re-chooses "Start now" or a later time. "Start now" (startAt null)
+  // is always valid.
+  if (input.startAt && input.startAt.getTime() <= now.getTime() + MIN_SCHEDULED_START_LEAD_MS) {
+    issues.push("scheduled start time is too close or has passed - choose Start now or a later time");
   }
 
   return issues.length ? { valid: false, issues } : { valid: true };

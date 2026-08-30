@@ -137,16 +137,25 @@ Deno.test("SCHEDULED later today: a future start instant on the same calendar da
   assertEquals(issues.some((i) => i.code === "invalid_budget"), false);
 });
 
-Deno.test("SCHEDULED start time that has passed blocks readiness with a 'scheduled start time has passed' issue", () => {
+Deno.test("SCHEDULED start time that has passed blocks readiness with an actionable 'too close or has passed' issue (no silent conversion)", () => {
   const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T09:00:00Z" } })); // 1h before now
-  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("scheduled start time has passed")), true);
+  const issue = issues.find((i) => i.code === "invalid_budget" && i.message.includes("too close or has passed"));
+  assertEquals(!!issue, true);
+  assertEquals(issue!.message.includes("Start now"), true); // tells the user their options
   assertEquals(isReady(issues), false);
 });
 
-Deno.test("publish-time recheck: the same campaign flips from ready to not-ready as `now` crosses its scheduled start", () => {
+Deno.test("SCHEDULED start only a minute ahead is blocked (too close for the publish pipeline)", () => {
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T10:01:00Z" } })); // now is 10:00
+  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("too close or has passed")), true);
+  assertEquals(isReady(issues), false);
+});
+
+Deno.test("publish-time recheck: the same campaign flips from ready to not-ready as `now` approaches its scheduled start", () => {
   const campaign = { ...baseInput().campaign, startAt: "2026-08-29T14:10:00Z" };
-  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:00:00Z") }))), true);
-  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:20:00Z") }))), false);
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:00:00Z") }))), true); // 10m ahead
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:09:30Z") }))), false); // 30s ahead - too close
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:20:00Z") }))), false); // past
 });
 
 Deno.test("isReady is false if ANY error-severity issue exists, regardless of warnings", () => {
