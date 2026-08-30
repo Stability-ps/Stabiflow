@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { MessageCircle, Trophy, XCircle } from "lucide-react";
@@ -252,7 +253,16 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
           {lead.company_name && <p><span className="text-muted-foreground">Company:</span> {lead.company_name}</p>}
           <p><span className="text-muted-foreground">Source:</span> {lead.source}{lead.source_detail ? ` (${lead.source_detail})` : ""}</p>
           {lead.created_from_conversation_id && (
-            <p className="flex items-center gap-1 text-muted-foreground"><MessageCircle className="h-3.5 w-3.5" /> Linked to a WhatsApp conversation</p>
+            <p className="flex items-center gap-1 text-muted-foreground">
+              <MessageCircle className="h-3.5 w-3.5" />
+              <Link
+                to="/app/whatsapp/inbox"
+                state={{ selectedId: lead.created_from_conversation_id }}
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Open the originating WhatsApp conversation
+              </Link>
+            </p>
           )}
         </section>
 
