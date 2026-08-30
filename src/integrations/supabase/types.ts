@@ -4003,6 +4003,20 @@ export type Database = {
           source_label: string
         }[]
       }
+      get_revenue_breakdown: {
+        Args: {
+          p_workspace_id: string
+          p_date_from: string
+          p_date_to: string
+          p_dimension?: string
+        }
+        Returns: {
+          bucket_key: string
+          bucket_label: string
+          revenue: Json
+          event_count: number
+        }[]
+      }
       get_touch_summary: {
         Args: {
           p_target_id: string

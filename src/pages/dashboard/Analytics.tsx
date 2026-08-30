@@ -15,11 +15,15 @@ import { CreativePerformanceTable } from "@/components/analytics/CreativePerform
 import { SourceBreakdownSection } from "@/components/analytics/SourceBreakdownSection";
 import { WhatsAppAnalyticsSection } from "@/components/analytics/WhatsAppAnalyticsSection";
 import { RevenueAnalyticsSection } from "@/components/analytics/RevenueAnalyticsSection";
+import { RevenueAttributionView } from "@/components/analytics/RevenueAttributionView";
 import {
   useAnalyticsKpis, useCampaignPerformance, useCreativePerformance, useLeadSourceBreakdown, useWhatsAppAnalytics,
 } from "@/hooks/useAnalytics";
+import { cn } from "@/lib/utils";
 import { DEFAULT_ATTRIBUTION_MODEL, type AttributionModel } from "@/lib/analytics";
 import { previousComparisonRange, resolveDateRangePreset, type DateRangePreset } from "@/lib/analyticsDate";
+
+type AnalyticsView = "overview" | "revenue";
 
 export default function Analytics() {
   const { currentWorkspaceId, hasPermission } = useAuth();
@@ -32,11 +36,19 @@ export default function Analytics() {
 
   // Entered from WhatsApp > Analytics: keep the "came from WhatsApp"
   // context and scroll the WhatsApp conversion card into view.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const fromWhatsApp = searchParams.has("whatsapp");
   const whatsappSectionRef = useRef<HTMLDivElement | null>(null);
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
+
+  const view: AnalyticsView = searchParams.get("view") === "revenue" ? "revenue" : "overview";
+  const setView = (next: AnalyticsView) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "overview") params.delete("view");
+    else params.set("view", next);
+    setSearchParams(params, { replace: true });
+  };
 
   const [preset, setPreset] = useState<DateRangePreset>("last_30_days");
   const [customFrom, setCustomFrom] = useState("");
@@ -94,12 +106,41 @@ export default function Analytics() {
         />
       </div>
 
+      <nav className="flex gap-1 border-b" aria-label="Analytics views">
+        {([["overview", "Overview"], ["revenue", "Revenue"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setView(key)}
+            aria-current={view === key ? "page" : undefined}
+            className={cn(
+              "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+              view === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
       {!range ? (
         <EmptyState icon={BarChart3} title="Choose a date range" description="Pick both a start and end date to see analytics for a custom range." />
       ) : kpisQuery.isLoading ? (
         <div className="h-40 animate-pulse rounded-lg bg-muted" />
       ) : kpisQuery.isError ? (
         <EmptyState icon={BarChart3} title="Unable to load analytics" description="Something went wrong loading analytics for this workspace. Try again shortly." />
+      ) : kpisQuery.data && view === "revenue" ? (
+        <RevenueAttributionView
+          workspaceId={currentWorkspaceId}
+          range={range}
+          preset={preset}
+          kpis={kpisQuery.data}
+          campaignRows={campaignsQuery.data || []}
+          campaignsLoading={campaignsQuery.isLoading}
+          canSeeRevenue={canSeeRevenue}
+          workspaceCurrency={workspaceCurrency}
+          attributionModel={attributionModel}
+        />
       ) : kpisQuery.data ? (
         <>
           <KpiCards kpis={kpisQuery.data} previous={previousKpisQuery.data} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
