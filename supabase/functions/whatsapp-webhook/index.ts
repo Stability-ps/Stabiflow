@@ -23,8 +23,7 @@ import { normalizePhone, parseInboundMessageEvents, type InboundMessageEvent } f
 import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
 import { generateAIReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
-import { isWhatsAppMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
-import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
+import { REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
 import { assertWorkspaceActive } from "../_shared/workspaceStatus.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
@@ -111,7 +110,12 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
     return;
   }
 
-  const provider = isWhatsAppMockMode() ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+  // W1 hardening: the webhook is only ever reached by signature-verified
+  // Meta traffic - there is no legitimate caller that should see a faked
+  // send here, so this path always uses the REAL provider regardless of
+  // INTEGRATIONS_META_MOCK_MODE. The mock send seam exists solely for the
+  // harness-gated inbox-actions tests (whatsappSendProvider.ts).
+  const provider = REAL_WHATSAPP_PROVIDER;
   let providerMessageId: string | null = null;
   let deliveryStatus = "submitted";
   try {

@@ -14,12 +14,17 @@ import { useAllWhatsAppNumbers, type WorkspaceIntegrationRow } from "@/hooks/use
 import { checkIntegrationConnectionHealth, disconnectIntegration, refreshIntegrationResources, setResourceActive, type IntegrationResourceHealth } from "@/lib/integrations";
 import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
 
-export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDisconnect, onDisconnected }: {
+export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDisconnect, onDisconnected, chrome = "sheet" }: {
   workspaceId: string;
   integration: WorkspaceIntegrationRow;
   canManage: boolean;
   canDisconnect: boolean;
   onDisconnected: () => void;
+  // "sheet" (default) renders the Radix Sheet header primitives - only
+  // valid inside a <Sheet>. "page" renders a plain heading so the exact
+  // same panel can be embedded in the WhatsApp > Settings page without a
+  // dialog wrapper. All management logic is identical either way.
+  chrome?: "sheet" | "page";
 }) {
   const queryClient = useQueryClient();
   const { data: numbers, isLoading } = useAllWhatsAppNumbers(workspaceId);
@@ -97,12 +102,21 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
 
   return (
     <>
-      <SheetHeader>
-        <SheetTitle className="flex items-center gap-2">
-          Manage WhatsApp <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
-        </SheetTitle>
-        <SheetDescription>Choose which WhatsApp Business phone number(s) StabiFlow uses for this workspace.</SheetDescription>
-      </SheetHeader>
+      {chrome === "sheet" ? (
+        <SheetHeader>
+          <SheetTitle className="flex items-center gap-2">
+            Manage WhatsApp <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
+          </SheetTitle>
+          <SheetDescription>Choose which WhatsApp Business phone number(s) StabiFlow uses for this workspace.</SheetDescription>
+        </SheetHeader>
+      ) : (
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-semibold">
+            Manage WhatsApp <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
+          </h2>
+          <p className="text-sm text-muted-foreground">Choose which WhatsApp Business phone number(s) StabiFlow uses for this workspace.</p>
+        </div>
+      )}
 
       <div className="mt-6 flex gap-2">
         <Button variant="outline" size="sm" onClick={handleCheck} disabled={checking || !canManage}>
