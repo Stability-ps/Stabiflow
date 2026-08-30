@@ -123,6 +123,11 @@ begin
   v_paid_filter := case when p_attribution_model in ('first_paid_touch', 'last_paid_touch') then 'and source_type = ''paid''' else '' end;
   v_can_see_revenue := public.has_workspace_permission(p_workspace_id, 'revenue.view');
 
+  -- v_paid_filter / v_dir are SQL fragments (a predicate, a sort keyword)
+  -- and must be interpolated into the text. v_can_see_revenue is a VALUE:
+  -- it is bound as $3, never interpolated - a boolean rendered by
+  -- format('%s', ...) becomes the bare token t/f, which SQL then reads as
+  -- a column reference ("column t does not exist").
   return query execute format($q$
     with events as (
       select * from public.attribution_events
@@ -191,17 +196,19 @@ begin
     metrics as (
       select
         count(*) > 0 as has_rows,
-        coalesce(sum(spend_minor_units), 0) as spend_minor,
-        coalesce(sum(impressions), 0) as impressions,
-        coalesce(sum(reach), 0) as reach,
-        coalesce(sum(clicks), 0) as clicks,
+        -- sum() over a bigint column returns numeric; the RETURNS TABLE
+        -- columns are bigint - cast so the row structure matches.
+        coalesce(sum(spend_minor_units), 0)::bigint as spend_minor,
+        coalesce(sum(impressions), 0)::bigint as impressions,
+        coalesce(sum(reach), 0)::bigint as reach,
+        coalesce(sum(clicks), 0)::bigint as clicks,
         max(currency) as metric_currency
       from public.ad_campaign_metrics
       where workspace_id = $1 and campaign_id = $2
     ),
     breakdown as (
       select
-        coalesce((select jsonb_agg(row_to_jsonb(x) order by x.id) from (
+        coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from (
           select s.id,
             (select count(*) from j_conv where ad_set_id = s.id) as conversations,
             (select count(*) from j_lead where ad_set_id = s.id) as leads,
@@ -212,7 +219,7 @@ begin
             union all select ad_set_id from j_opp union all select ad_set_id from j_cust
           ) u where ad_set_id is not null) s
         ) x), '[]'::jsonb) as adset,
-        coalesce((select jsonb_agg(row_to_jsonb(x) order by x.id) from (
+        coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from (
           select a.id,
             (select count(*) from j_conv where ad_id = a.id) as conversations,
             (select count(*) from j_lead where ad_id = a.id) as leads,
@@ -223,7 +230,7 @@ begin
             union all select ad_id from j_opp union all select ad_id from j_cust
           ) u where ad_id is not null) a
         ) x), '[]'::jsonb) as ad,
-        coalesce((select jsonb_agg(row_to_jsonb(x) order by x.id) from (
+        coalesce((select jsonb_agg(to_jsonb(x) order by x.id) from (
           select cr.id,
             (select count(*) from j_conv where creative_id = cr.id) as conversations,
             (select count(*) from j_lead where creative_id = cr.id) as leads,
@@ -253,7 +260,7 @@ begin
       (select count(*) from j_cust),
       (select count(*) from j_cust where m in ('deterministic','exact_match')),
       (select count(*) from j_cust where m is null or m not in ('deterministic','exact_match')),
-      case when %3$s then coalesce((
+      case when $3 then coalesce((
         select jsonb_agg(jsonb_build_object('currency', currency, 'amount_minor', amt) order by currency)
         from (select currency, sum(amount_minor) as amt from revenue_scoped group by currency) rv
       ), '[]'::jsonb) else '[]'::jsonb end,
@@ -262,8 +269,8 @@ begin
       (select creative from breakdown)
     from public.ad_campaigns c
     where c.id = $2 and c.workspace_id = $1
-  $q$, v_paid_filter, v_dir, v_can_see_revenue)
-  using p_workspace_id, p_campaign_id;
+  $q$, v_paid_filter, v_dir)
+  using p_workspace_id, p_campaign_id, v_can_see_revenue;
 end;
 $$;
 

@@ -35,7 +35,7 @@ async function seedAe(workspaceId: string, cols: Record<string, unknown>) {
 describe("get_campaign_journey (Phase 1 remediation)", () => {
   let ws: TestTenant;
   let other: TestTenant;
-  let marketingClient: SupabaseClient; // has attribution.view, lacks revenue.view
+  let marketingClient: SupabaseClient; // marketing role: has attribution.view (and, by default, revenue.view)
 
   let campaignId: string;
   let adSetId: string;
@@ -197,12 +197,28 @@ describe("get_campaign_journey (Phase 1 remediation)", () => {
     expect((data as unknown[]).length).toBe(1);
   });
 
-  it("marketing (attribution.view, no revenue.view) sees the journey but revenue is blanked", async () => {
-    const { data, error } = await journey(marketingClient, ws.workspaceId, campaignId);
-    expect(error).toBeNull();
-    const r = (data as Array<Record<string, unknown>>)[0];
-    expect(Number(r.leads)).toBe(1); // funnel visible
-    expect(r.revenue).toEqual([]); // revenue blanked without revenue.view
+  it("get_campaign_journey blanks revenue for a caller without revenue.view, but still returns the funnel", async () => {
+    // Every shipped workspace_role carries BOTH attribution.view and
+    // revenue.view, so the RPC's revenue.view gate can only be exercised
+    // by transiently dropping that one grant for the marketing role.
+    // Restored in `finally`; `supabase db reset` re-seeds it regardless.
+    const { error: delErr } = await admin
+      .from("workspace_role_permissions")
+      .delete()
+      .eq("role", "marketing")
+      .eq("permission", "revenue.view");
+    if (delErr) throw new Error(`could not drop the revenue.view grant: ${delErr.message}`);
+    try {
+      const { data, error } = await journey(marketingClient, ws.workspaceId, campaignId);
+      expect(error).toBeNull();
+      const r = (data as Array<Record<string, unknown>>)[0];
+      expect(Number(r.leads)).toBe(1); // funnel still visible (attribution.view)
+      expect(r.revenue).toEqual([]); // revenue blanked (no revenue.view)
+    } finally {
+      await admin
+        .from("workspace_role_permissions")
+        .upsert({ role: "marketing", permission: "revenue.view" }, { onConflict: "role,permission" });
+    }
   });
 
   it("an unknown attribution model is rejected", async () => {

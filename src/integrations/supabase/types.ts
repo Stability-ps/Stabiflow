@@ -7,10 +7,30 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.17"
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -2848,32 +2868,46 @@ export type Database = {
           },
         ]
       }
-      profiles: {
+      platform_deletion_log: {
         Row: {
-          avatar_url: string | null
-          created_at: string
-          full_name: string | null
+          cleanup_status: Json
+          deleted_at: string
+          deleted_by: string | null
           id: string
-          is_platform_operator: boolean
-          updated_at: string
+          row_counts: Json
+          workspace_id: string
+          workspace_name: string
+          workspace_slug: string
         }
         Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          full_name?: string | null
-          id: string
-          is_platform_operator?: boolean
-          updated_at?: string
+          cleanup_status?: Json
+          deleted_at?: string
+          deleted_by?: string | null
+          id?: string
+          row_counts?: Json
+          workspace_id: string
+          workspace_name: string
+          workspace_slug: string
         }
         Update: {
-          avatar_url?: string | null
-          created_at?: string
-          full_name?: string | null
+          cleanup_status?: Json
+          deleted_at?: string
+          deleted_by?: string | null
           id?: string
-          is_platform_operator?: boolean
-          updated_at?: string
+          row_counts?: Json
+          workspace_id?: string
+          workspace_name?: string
+          workspace_slug?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "platform_deletion_log_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       platform_operator_actions: {
         Row: {
@@ -2916,6 +2950,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          is_platform_operator: boolean
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id: string
+          is_platform_operator?: boolean
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          is_platform_operator?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       revenue_events: {
         Row: {
@@ -3814,7 +3875,7 @@ export type Database = {
           lifetime_budget_minor_units: number
           name: string
           objective: string
-          start_at: string | null
+          start_at: string
           status: string
         }[]
       }
@@ -3953,6 +4014,64 @@ export type Database = {
           opportunities: number
         }[]
       }
+      get_campaign_journey: {
+        Args: {
+          p_attribution_model?: string
+          p_campaign_id: string
+          p_workspace_id: string
+        }
+        Returns: {
+          ad_breakdown: Json
+          adset_breakdown: Json
+          campaign_id: string
+          clicks: number
+          conversations: number
+          conversations_direct: number
+          conversations_inferred: number
+          creative_breakdown: Json
+          currency: string
+          customers: number
+          customers_direct: number
+          customers_inferred: number
+          impressions: number
+          leads: number
+          leads_direct: number
+          leads_inferred: number
+          metrics_available: boolean
+          name: string
+          opportunities: number
+          opportunities_direct: number
+          opportunities_inferred: number
+          qualified_leads: number
+          reach: number
+          revenue: Json
+          spend_minor: number
+          status: string
+        }[]
+      }
+      get_campaign_journey_entities: {
+        Args: {
+          p_attribution_model?: string
+          p_campaign_id: string
+          p_limit?: number
+          p_offset?: number
+          p_stage: string
+          p_workspace_id: string
+        }
+        Returns: {
+          attribution_confidence: string
+          attribution_method: string
+          conversation_id: string
+          customer_id: string
+          entity_id: string
+          lead_id: string
+          occurred_at: string
+          opportunity_id: string
+          primary_label: string
+          secondary_label: string
+          status_label: string
+        }[]
+      }
       get_campaign_performance: {
         Args: {
           p_attribution_model?: string
@@ -4003,76 +4122,14 @@ export type Database = {
           source_label: string
         }[]
       }
-      get_campaign_journey: {
-        Args: {
-          p_workspace_id: string
-          p_campaign_id: string
-          p_attribution_model?: string
-        }
-        Returns: {
-          campaign_id: string
-          name: string
-          status: string
-          currency: string
-          metrics_available: boolean
-          spend_minor: number
-          impressions: number
-          reach: number
-          clicks: number
-          conversations: number
-          conversations_direct: number
-          conversations_inferred: number
-          leads: number
-          leads_direct: number
-          leads_inferred: number
-          qualified_leads: number
-          opportunities: number
-          opportunities_direct: number
-          opportunities_inferred: number
-          customers: number
-          customers_direct: number
-          customers_inferred: number
-          revenue: Json
-          adset_breakdown: Json
-          ad_breakdown: Json
-          creative_breakdown: Json
-        }[]
-      }
-      get_campaign_journey_entities: {
-        Args: {
-          p_workspace_id: string
-          p_campaign_id: string
-          p_stage: string
-          p_attribution_model?: string
-          p_limit?: number
-          p_offset?: number
-        }
-        Returns: {
-          entity_id: string
-          primary_label: string
-          secondary_label: string | null
-          status_label: string | null
-          occurred_at: string
-          attribution_method: string | null
-          attribution_confidence: string | null
-          lead_id: string | null
-          opportunity_id: string | null
-          customer_id: string | null
-          conversation_id: string | null
-        }[]
-      }
       get_revenue_breakdown: {
-        Args: {
-          p_workspace_id: string
-          p_date_from: string
-          p_date_to: string
-        }
+        Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
         Returns: {
-          dimension: string
           bucket_key: string
           bucket_label: string
-          revenue: Json
+          dimension: string
           event_count: number
+          revenue: Json
         }[]
       }
       get_touch_summary: {
@@ -4338,6 +4395,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       ad_budget_type: ["daily", "lifetime"],
