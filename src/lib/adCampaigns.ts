@@ -25,6 +25,36 @@ export function checkCampaignReadiness(campaignId: string) {
   return invoke<{ ok: true; ready: boolean; issues: ReadinessIssue[] }>("ad-campaigns-readiness", { campaign_id: campaignId });
 }
 
+// Thrown when ad-campaigns-publish rejects (422) because server-side
+// readiness failed. Carries the actionable issues so the caller can render
+// them in the readiness panel instead of a generic toast. `message` is
+// always one of our own human sentences, never a raw backend detail.
+export class CampaignPublishNotReadyError extends Error {
+  issues: ReadinessIssue[];
+  constructor(message: string, issues: ReadinessIssue[]) {
+    super(message);
+    this.name = "CampaignPublishNotReadyError";
+    this.issues = issues;
+  }
+}
+
+// Best-effort JSON parse of a supabase FunctionsHttpError's Response body
+// (non-2xx). Mirrors src/lib/integrations.ts's readErrorPayloadFromContext.
+async function readInvokeErrorBody(error: unknown, data: unknown): Promise<{ error?: string; message?: string; issues?: ReadinessIssue[] } | null> {
+  if (data && typeof data === "object") return data as Record<string, unknown>;
+  const context = (error as { context?: unknown } | null)?.context as
+    | { json?: () => Promise<unknown>; clone?: () => { json?: () => Promise<unknown> } }
+    | undefined;
+  if (!context || typeof context !== "object") return null;
+  const source = typeof context.clone === "function" ? context.clone() : context;
+  if (typeof source.json !== "function") return null;
+  try {
+    return (await source.json()) as { error?: string; message?: string; issues?: ReadinessIssue[] };
+  } catch {
+    return null;
+  }
+}
+
 // A fresh idempotency key per Publish attempt (Phase 6 instruction #14) -
 // minted once when the confirmation step is first shown, not per network
 // call, so a frontend retry of the SAME attempt reuses it and a genuinely
@@ -33,16 +63,33 @@ export function newPublishIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
-export function publishCampaign(campaignId: string, idempotencyKey: string) {
-  return invoke<{
-    ok: boolean;
-    outcome?: "success" | "partial" | "failed";
-    replay?: boolean;
-    operation?: { id: string; status: string; steps: Array<{ step: string; status: string; error?: unknown }> };
-    campaign?: { id: string; status: string; external_campaign_id: string | null; last_publish_error?: unknown };
-    error?: string;
-    issues?: ReadinessIssue[];
-  }>("ad-campaigns-publish", { campaign_id: campaignId, idempotency_key: idempotencyKey });
+export type PublishCampaignResult = {
+  ok: boolean;
+  outcome?: "success" | "partial" | "failed";
+  replay?: boolean;
+  operation?: { id: string; status: string; steps: Array<{ step: string; status: string; error?: unknown }> };
+  campaign?: { id: string; status: string; external_campaign_id: string | null; last_publish_error?: unknown };
+  error?: string;
+  issues?: ReadinessIssue[];
+};
+
+export async function publishCampaign(campaignId: string, idempotencyKey: string): Promise<PublishCampaignResult> {
+  const { data, error } = await supabase.functions.invoke("ad-campaigns-publish", {
+    body: { campaign_id: campaignId, idempotency_key: idempotencyKey },
+  });
+  if (error) {
+    const body = await readInvokeErrorBody(error, data);
+    // 422 not-ready: the server returns actionable readiness issues - throw
+    // a typed error so the caller can render them, not a generic toast.
+    if (body?.issues && body.issues.length) {
+      throw new CampaignPublishNotReadyError(body.error || "This campaign isn't ready to publish yet.", body.issues);
+    }
+    // Other failures: our own curated sentence if present (403 Forbidden,
+    // 409 wrong-state, suspended-workspace message, ...), never the raw
+    // supabase/internal string.
+    throw new Error(body?.message || body?.error || "Unable to publish this campaign right now.");
+  }
+  return (data ?? { ok: false }) as PublishCampaignResult;
 }
 
 export function pauseCampaign(campaignId: string) {

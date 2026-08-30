@@ -2,8 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   formatScheduleStart,
   formatScheduleSummary,
-  isScheduledStartInPast,
+  isScheduledStartTooCloseOrPast,
   localDateTimeToUtc,
+  MIN_SCHEDULED_START_LEAD_MS,
   safeTimeZone,
   utcToLocalDateTimeParts,
   WORKSPACE_TIMEZONE_FALLBACK,
@@ -58,21 +59,27 @@ describe("localDateTimeToUtc - workspace-local date + time -> UTC instant", () =
   });
 });
 
-describe("isScheduledStartInPast", () => {
+describe("isScheduledStartTooCloseOrPast (mirrors the server readiness rule)", () => {
   const NOW = new Date("2026-08-30T12:00:00Z");
-  it("null (Start now) is never in the past", () => {
-    expect(isScheduledStartInPast(null, NOW)).toBe(false);
+  it("null (Start now) is never too close", () => {
+    expect(isScheduledStartTooCloseOrPast(null, NOW)).toBe(false);
   });
-  it("an instant strictly before now is past; exactly now counts as past; after now is not", () => {
-    expect(isScheduledStartInPast("2026-08-30T11:59:00Z", NOW)).toBe(true);
-    expect(isScheduledStartInPast("2026-08-30T12:00:00Z", NOW)).toBe(true);
-    expect(isScheduledStartInPast("2026-08-30T12:01:00Z", NOW)).toBe(false);
+  it("a past instant, exactly now, or within the lead window is 'too close or past'", () => {
+    expect(isScheduledStartTooCloseOrPast("2026-08-30T11:59:00Z", NOW)).toBe(true); // past
+    expect(isScheduledStartTooCloseOrPast("2026-08-30T12:00:00Z", NOW)).toBe(true); // now
+    expect(isScheduledStartTooCloseOrPast("2026-08-30T12:01:00Z", NOW)).toBe(true); // 1 min ahead - inside the lead
   });
-  it("later today (same calendar day, future instant) is NOT past", () => {
-    expect(isScheduledStartInPast("2026-08-30T18:00:00Z", NOW)).toBe(false);
+  it("lead boundary: just inside is flagged, just outside is not", () => {
+    const justInside = new Date(NOW.getTime() + MIN_SCHEDULED_START_LEAD_MS - 1000).toISOString();
+    const justOutside = new Date(NOW.getTime() + MIN_SCHEDULED_START_LEAD_MS + 1000).toISOString();
+    expect(isScheduledStartTooCloseOrPast(justInside, NOW)).toBe(true);
+    expect(isScheduledStartTooCloseOrPast(justOutside, NOW)).toBe(false);
   });
-  it("a malformed instant is treated as not-past", () => {
-    expect(isScheduledStartInPast("not-a-date", NOW)).toBe(false);
+  it("a start comfortably in the future (later today) is not flagged", () => {
+    expect(isScheduledStartTooCloseOrPast("2026-08-30T18:00:00Z", NOW)).toBe(false);
+  });
+  it("a malformed instant is treated as not-flagged", () => {
+    expect(isScheduledStartTooCloseOrPast("not-a-date", NOW)).toBe(false);
   });
 });
 

@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { CampaignPublishNotReadyError } from "@/lib/adCampaigns";
 import { CampaignDetail } from "./CampaignDetail";
 
 const { navigateMock, mocks } = vi.hoisted(() => ({
@@ -144,22 +145,68 @@ describe("CampaignDetail - lifecycle/readiness badge is derived, never a stale s
 });
 
 describe("CampaignDetail - schedule UX", () => {
-  it("flags a scheduled start time that has already passed and offers Edit schedule", () => {
+  const WARNING = /Scheduled start time is too close or has passed\./;
+
+  it("flags a scheduled start that has already passed and offers Edit schedule", () => {
     mocks.campaign = makeCampaign({ start_at: "2020-01-01T00:00:00.000Z" });
     renderDetail();
-    expect(screen.getByText("Scheduled start time has passed")).toBeInTheDocument();
+    expect(screen.getByText(WARNING)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Edit schedule" });
+    expect(link).toHaveAttribute("href", "/app/campaigns/campaign-1/edit?step=Budget+%26+Schedule&focus=startAt");
   });
 
-  it("does not flag a future start time", () => {
+  it("flags a start that is only a minute away (too close to publish safely) - same rule as readiness", () => {
+    mocks.campaign = makeCampaign({ start_at: new Date(Date.now() + 60_000).toISOString() });
+    renderDetail();
+    expect(screen.getByText(WARNING)).toBeInTheDocument();
+  });
+
+  it("does NOT flag a sufficiently future start time", () => {
     renderDetail(); // start_at 2099
-    expect(screen.queryByText("Scheduled start time has passed")).not.toBeInTheDocument();
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
   });
 
-  it("a 'Start now' campaign (start_at null) shows 'Start now (immediate)' and no stale-start warning", () => {
+  it("a 'Start now' campaign (start_at null) shows 'Start now (immediate)' and no warning", () => {
     mocks.campaign = makeCampaign({ start_at: null });
     renderDetail();
     expect(screen.getByText(/Start now \(immediate\)/)).toBeInTheDocument();
-    expect(screen.queryByText("Scheduled start time has passed")).not.toBeInTheDocument();
+    expect(screen.queryByText(WARNING)).not.toBeInTheDocument();
+  });
+});
+
+describe("CampaignDetail - publish 422 surfaces actionable readiness issues", () => {
+  const tooCloseIssue = {
+    code: "invalid_budget",
+    message: "Scheduled start time is too close or has passed - choose Start now or a later time",
+    severity: "error" as const,
+  };
+
+  async function renderReadyThenPublish() {
+    renderDetail();
+    const publishBtn = await screen.findByRole("button", { name: "Publish to Meta" });
+    fireEvent.click(publishBtn);
+  }
+
+  it("a not-ready 422 renders the returned issue in the readiness panel with an Edit schedule action (no raw error)", async () => {
+    mocks.publishCampaign.mockRejectedValueOnce(new CampaignPublishNotReadyError("This campaign isn't ready to publish yet.", [tooCloseIssue]));
+    await renderReadyThenPublish();
+
+    expect(await screen.findByText(/too close or has passed .*choose Start now or a later time/i)).toBeInTheDocument();
+    const link = await screen.findByRole("link", { name: "Edit schedule" });
+    expect(link).toHaveAttribute("href", "/app/campaigns/campaign-1/edit?step=Budget+%26+Schedule&focus=startAt");
+    // publish panel is gone (no longer "ready_to_publish")
+    expect(screen.queryByRole("button", { name: "Publish to Meta" })).not.toBeInTheDocument();
+  });
+
+  it("an unknown publish failure falls back to a generic toast and does NOT populate the readiness panel", async () => {
+    mocks.publishCampaign.mockRejectedValueOnce(new Error("kaboom internal detail"));
+    await renderReadyThenPublish();
+
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalled());
+    expect(screen.queryByText(/Scheduled start time is too close/)).not.toBeInTheDocument();
+    expect(screen.queryByText("kaboom internal detail")).not.toBeInTheDocument();
+    // still in the ready-to-publish state (issues were not replaced)
+    expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeInTheDocument();
   });
 });
 

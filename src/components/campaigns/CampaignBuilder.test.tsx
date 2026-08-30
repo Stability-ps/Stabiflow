@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { CampaignPublishNotReadyError } from "@/lib/adCampaigns";
 import { CampaignBuilder } from "./CampaignBuilder";
 
 const mocks = vi.hoisted(() => ({
@@ -46,14 +47,18 @@ vi.mock("@/components/content/MediaPreview", () => ({
 vi.mock("@/lib/contentMediaAssets", () => ({
   getContentAssetPreviewUrl: vi.fn(async (path: string) => `https://example.com/${path}`),
 }));
-vi.mock("@/lib/adCampaigns", () => ({
-  createCampaignDraft: mocks.createCampaignDraft,
-  updateCampaignDraft: mocks.updateCampaignDraft,
-  publishCampaign: mocks.publishCampaign,
-  checkCampaignReadiness: mocks.checkCampaignReadiness,
-  syncCampaignReviewStatus: mocks.syncCampaignReviewStatus,
-  newPublishIdempotencyKey: () => "test-idempotency-key",
-}));
+vi.mock("@/lib/adCampaigns", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/adCampaigns")>("@/lib/adCampaigns");
+  return {
+    ...actual, // keeps the real CampaignPublishNotReadyError class
+    createCampaignDraft: mocks.createCampaignDraft,
+    updateCampaignDraft: mocks.updateCampaignDraft,
+    publishCampaign: mocks.publishCampaign,
+    checkCampaignReadiness: mocks.checkCampaignReadiness,
+    syncCampaignReviewStatus: mocks.syncCampaignReviewStatus,
+    newPublishIdempotencyKey: () => "test-idempotency-key",
+  };
+});
 
 function renderBuilder() {
   return render(<MemoryRouter><CampaignBuilder /></MemoryRouter>);
@@ -287,6 +292,34 @@ describe("CampaignBuilder Publish readiness actionability", () => {
 
     expect(await screen.findByText("Ready to publish.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled();
+  });
+
+  it("a not-ready 422 from publish surfaces the returned issue + its Edit action, and disables Publish", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({ ok: true, ready: true, issues: [] });
+    mocks.publishCampaign.mockRejectedValueOnce(new CampaignPublishNotReadyError("This campaign isn't ready to publish yet.", [
+      { code: "invalid_budget", message: "scheduled start time is too close or has passed - choose Start now or a later time", severity: "error" },
+    ]));
+    renderBuilder();
+    await createDraftAndReachPublish();
+    fireEvent.click(await screen.findByRole("button", { name: "Publish to Meta" }));
+
+    expect(await screen.findByText(/too close or has passed .*choose Start now or a later time/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit Budget & Schedule" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeDisabled();
+  });
+
+  it("an unknown publish failure shows only the generic message - it does NOT populate the readiness issue list / Edit actions", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({ ok: true, ready: true, issues: [] });
+    // publishCampaign always throws a curated sentence for non-readiness failures (see adCampaigns.test.ts).
+    mocks.publishCampaign.mockRejectedValueOnce(new Error("Unable to publish this campaign right now."));
+    renderBuilder();
+    await createDraftAndReachPublish();
+    fireEvent.click(await screen.findByRole("button", { name: "Publish to Meta" }));
+
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalled());
+    expect(await screen.findByText("Unable to publish this campaign right now.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit Budget/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit Creative/ })).not.toBeInTheDocument();
   });
 });
 

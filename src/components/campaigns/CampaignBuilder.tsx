@@ -21,7 +21,7 @@ import { decimalToMinorUnits, minorUnitsToDecimalString } from "@/lib/adMoney";
 import { isEditableCampaign } from "@/lib/campaignLifecycle";
 import { localDateTimeToUtc, utcToLocalDateTimeParts, type StartMode } from "@/lib/campaignSchedule";
 import {
-  checkCampaignReadiness, createCampaignDraft, newPublishIdempotencyKey, publishCampaign,
+  CampaignPublishNotReadyError, checkCampaignReadiness, createCampaignDraft, newPublishIdempotencyKey, publishCampaign,
   syncCampaignReviewStatus, updateCampaignDraft, type AudienceBasics, type ReadinessIssue,
 } from "@/lib/adCampaigns";
 import { presentReadinessIssue } from "@/lib/readinessIssuePresentation";
@@ -376,8 +376,16 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       else if (result.outcome === "partial") toast.warning("Campaign partially published - see details below");
       else toast.error(result.error || "Publish failed");
     } catch (error) {
-      setPublishResult({ ok: false, message: error instanceof Error ? error.message : "Publish failed" });
-      toast.error(error instanceof Error ? error.message : "Publish failed");
+      if (error instanceof CampaignPublishNotReadyError) {
+        // Server rejected on readiness - repopulate the issue list (each
+        // row keeps its "Edit <step>" fix action) instead of just a toast.
+        setIssues(error.issues);
+        setPublishResult(null);
+        toast.error("This campaign isn't ready to publish yet - fix the items above.");
+      } else {
+        setPublishResult({ ok: false, message: error instanceof Error ? error.message : "Unable to publish this campaign right now." });
+        toast.error(error instanceof Error ? error.message : "Unable to publish this campaign right now.");
+      }
     } finally {
       setPublishing(false);
     }

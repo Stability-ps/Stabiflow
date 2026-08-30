@@ -71,15 +71,17 @@ export function utcToLocalDateTimeParts(iso: string, timeZone: string): { date: 
 }
 
 /**
- * True when a SCHEDULED start instant is at or before `now`. "Start now"
- * (startAt === null) is never "in the past". Instant-vs-instant, so no
- * timezone is needed here - the zone only matters when the user's local
- * date+time was converted TO the instant.
+ * True when a SCHEDULED start instant has passed OR is now too close to
+ * publish safely (within MIN_SCHEDULED_START_LEAD_MS of `now`) - the exact
+ * condition the server-side readiness rule (adMoney.ts) blocks on, so the
+ * Campaign Detail hint and readiness never disagree. "Start now"
+ * (startAt === null) is never too close. Instant-vs-instant; timezone only
+ * mattered when the user's local date+time was converted TO the instant.
  */
-export function isScheduledStartInPast(startAt: string | null, now: Date): boolean {
+export function isScheduledStartTooCloseOrPast(startAt: string | null, now: Date): boolean {
   if (!startAt) return false;
   const t = new Date(startAt).getTime();
-  return !Number.isNaN(t) && t <= now.getTime();
+  return !Number.isNaN(t) && t <= now.getTime() + MIN_SCHEDULED_START_LEAD_MS;
 }
 
 /** Compact schedule label for the campaigns list. "Starts now" | "Today, 14:30" | "01/09/2026, 09:00". */

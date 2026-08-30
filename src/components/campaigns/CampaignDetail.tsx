@@ -25,10 +25,10 @@ import { localDateString } from "@/lib/analyticsDate";
 import {
   deriveCampaignPresentation, isEditableCampaign, isUnpublishedCampaign, type ReadinessSnapshot,
 } from "@/lib/campaignLifecycle";
-import { formatScheduleStart, isScheduledStartInPast } from "@/lib/campaignSchedule";
+import { formatScheduleStart, isScheduledStartTooCloseOrPast } from "@/lib/campaignSchedule";
 import { campaignEditorPath, presentReadinessIssue, readinessActionLabel } from "@/lib/readinessIssuePresentation";
 import {
-  checkCampaignReadiness, newPublishIdempotencyKey, pauseCampaign, publishCampaign, refreshCampaignMetrics,
+  CampaignPublishNotReadyError, checkCampaignReadiness, newPublishIdempotencyKey, pauseCampaign, publishCampaign, refreshCampaignMetrics,
   resumeCampaign, syncCampaignReviewStatus, type ReadinessIssue,
 } from "@/lib/adCampaigns";
 
@@ -116,7 +116,16 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       else toast.error(result.error || "Publish failed");
       await invalidate();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Publish failed");
+      if (error instanceof CampaignPublishNotReadyError) {
+        // Server rejected on readiness - show the actionable issues in the
+        // same panel (each with its Edit action), not just a toast. The
+        // server also persisted last_readiness_check, so refresh the list.
+        setIssues(error.issues);
+        await invalidate();
+        toast.error("This campaign isn't ready to publish yet - see the checklist below.");
+      } else {
+        toast.error(error instanceof Error ? error.message : "Unable to publish this campaign right now.");
+      }
     } finally {
       setPublishing(false);
     }
@@ -189,7 +198,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     : campaign.destination_type === "whatsapp" ? (whatsappNumber?.display_phone_number || "WhatsApp number") : null;
 
   const startsNow = !campaign.start_at;
-  const startPast = isScheduledStartInPast(campaign.start_at, new Date());
+  const startTooCloseOrPast = isScheduledStartTooCloseOrPast(campaign.start_at, new Date());
   const scheduleStartLabel = formatScheduleStart(campaign.start_at, workspaceTimezone);
   const scheduleEndLabel = campaign.end_at ? formatScheduleStart(campaign.end_at, workspaceTimezone) : null;
   const canEditSchedule = isEditableCampaign(campaign) && hasPermission("campaign.edit");
@@ -310,9 +319,9 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                   {scheduleEndLabel ? ` → ${scheduleEndLabel}` : startsNow ? "" : " → ongoing"}
                 </p>
                 {!startsNow && <p className="text-xs text-muted-foreground">{workspaceTimezone}</p>}
-                {startPast && (
+                {startTooCloseOrPast && (
                   <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-                    <CalendarClock className="h-3.5 w-3.5" /> Scheduled start time has passed
+                    <CalendarClock className="h-3.5 w-3.5" /> Scheduled start time is too close or has passed.
                     {canEditSchedule && <Link to={editLink("startAt")} className="underline underline-offset-2">Edit schedule</Link>}
                   </span>
                 )}
