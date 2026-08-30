@@ -5,39 +5,64 @@
 
 export type NeedsAttentionSeverity = "critical" | "warning" | "info";
 
+export type NeedsAttentionKind =
+  | "human_takeover"
+  | "customer_reply"
+  | "priority_conversation"
+  | "message_failed"
+  | "campaign_failed"
+  | "integration_unhealthy"
+  | "automation_failed"
+  | "lead_unowned";
+
 export type NeedsAttentionItem = {
-  /** stable within a render - `${type}:${targetId}` */
+  /** stable + unique per render - the underlying alert/row id, never a
+   *  synthesised "type:targetId" that can collide across rows. */
   id: string;
-  type:
-    | "human_takeover"
-    | "customer_reply"
-    | "priority_conversation"
-    | "message_failed"
-    | "campaign_failed"
-    | "integration_unhealthy"
-    | "automation_failed"
-    | "lead_unowned";
+  kind: NeedsAttentionKind;
   severity: NeedsAttentionSeverity;
   title: string;
   description: string;
-  /** ISO timestamp of the underlying event, for ordering + display */
-  occurredAt: string;
+  /** ISO timestamp of the underlying event, or null when genuinely unknown
+   *  (never a synthesised "now" - audit M14). */
+  occurredAt: string | null;
   targetType: "conversation" | "campaign" | "integration" | "automation" | "lead";
   targetId: string;
-  /** in-app path (may be extended with navigation state by the panel) */
   actionPath: string;
+  /** the verb shown when the viewer may actually perform the action */
   actionLabel: string;
+  /** true when the viewer holds the permission the action requires; when
+   *  false the item still shows, but as a plain "View" link (audit M12). */
+  canAct: boolean;
 };
 
 const SEVERITY_RANK: Record<NeedsAttentionSeverity, number> = { critical: 0, warning: 1, info: 2 };
 
-/** Most urgent first: severity, then most recent. */
+/** Most urgent first: severity, then most recent (null timestamps last). */
 export function sortNeedsAttention(items: NeedsAttentionItem[]): NeedsAttentionItem[] {
   return [...items].sort((a, b) => {
     const s = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
     if (s !== 0) return s;
-    return new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime();
+    const at = a.occurredAt ? new Date(a.occurredAt).getTime() : -Infinity;
+    const bt = b.occurredAt ? new Date(b.occurredAt).getTime() : -Infinity;
+    return bt - at;
   });
+}
+
+/** De-duplicate by id, keeping the most recent occurrence (audit M9). */
+export function dedupeNeedsAttention(items: NeedsAttentionItem[]): NeedsAttentionItem[] {
+  const byId = new Map<string, NeedsAttentionItem>();
+  for (const item of items) {
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, item);
+      continue;
+    }
+    const a = item.occurredAt ? new Date(item.occurredAt).getTime() : -Infinity;
+    const b = existing.occurredAt ? new Date(existing.occurredAt).getTime() : -Infinity;
+    if (a > b) byId.set(item.id, item);
+  }
+  return [...byId.values()];
 }
 
 export function severityTone(severity: NeedsAttentionSeverity): string {
@@ -51,7 +76,8 @@ export function severityTone(severity: NeedsAttentionSeverity): string {
   }
 }
 
-export function relativeTimeShort(iso: string): string {
+export function relativeTimeShort(iso: string | null): string {
+  if (!iso) return "";
   const diffMs = Date.now() - new Date(iso).getTime();
   if (!Number.isFinite(diffMs)) return "";
   const minutes = Math.round(diffMs / 60_000);

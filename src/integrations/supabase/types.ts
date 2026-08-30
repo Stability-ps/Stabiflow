@@ -4003,14 +4003,72 @@ export type Database = {
           source_label: string
         }[]
       }
+      get_campaign_journey: {
+        Args: {
+          p_workspace_id: string
+          p_campaign_id: string
+          p_attribution_model?: string
+        }
+        Returns: {
+          campaign_id: string
+          name: string
+          status: string
+          currency: string
+          metrics_available: boolean
+          spend_minor: number
+          impressions: number
+          reach: number
+          clicks: number
+          conversations: number
+          conversations_direct: number
+          conversations_inferred: number
+          leads: number
+          leads_direct: number
+          leads_inferred: number
+          qualified_leads: number
+          opportunities: number
+          opportunities_direct: number
+          opportunities_inferred: number
+          customers: number
+          customers_direct: number
+          customers_inferred: number
+          revenue: Json
+          adset_breakdown: Json
+          ad_breakdown: Json
+          creative_breakdown: Json
+        }[]
+      }
+      get_campaign_journey_entities: {
+        Args: {
+          p_workspace_id: string
+          p_campaign_id: string
+          p_stage: string
+          p_attribution_model?: string
+          p_limit?: number
+          p_offset?: number
+        }
+        Returns: {
+          entity_id: string
+          primary_label: string
+          secondary_label: string | null
+          status_label: string | null
+          occurred_at: string
+          attribution_method: string | null
+          attribution_confidence: string | null
+          lead_id: string | null
+          opportunity_id: string | null
+          customer_id: string | null
+          conversation_id: string | null
+        }[]
+      }
       get_revenue_breakdown: {
         Args: {
           p_workspace_id: string
           p_date_from: string
           p_date_to: string
-          p_dimension?: string
         }
         Returns: {
+          dimension: string
           bucket_key: string
           bucket_label: string
           revenue: Json

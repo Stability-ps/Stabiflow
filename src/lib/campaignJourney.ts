@@ -1,11 +1,60 @@
 import { computeRoas, costPerOutcome, safeRate, summarizeCurrency, type MoneyByCurrency, type RoasResult } from "@/lib/analytics";
 
-// Pure presentation logic for the Campaign Journey. No I/O. Every derived
-// metric is `number | null` where null means "not enough data to compute
-// this" - NEVER a fabricated 0. The UI renders null as "—" and a real 0 as
-// "0", so the two stay semantically distinct (audit rule 16).
+// Pure presentation logic for the Campaign Journey. No I/O.
+//
+// Every number here comes from ONE authoritative source - the
+// get_campaign_journey RPC, whose crediting logic is identical to
+// get_campaign_performance. The funnel counts, the direct/inferred split
+// and the ad-set/ad/creative breakdown are all computed by that RPC over
+// the SAME model-credited population, so they reconcile (direct+inferred =
+// stage total; breakdown rows sum to <= stage total).
+//
+// `metricsAvailable === false` means Meta has never synced spend for this
+// campaign: spend/clicks are rendered "Not synced yet" (NEVER "0"), and
+// every cost-per-X / CAC / ROAS is "—". A measured 0 (metrics row exists,
+// spend is 0) still renders "0" / "R0.00". The two states stay distinct
+// (audit HIGH-4 / rule 16).
+
+export type JourneyBreakdownRow = {
+  id: string;
+  conversations: number;
+  leads: number;
+  opportunities: number;
+  customers: number;
+};
+
+/** One row from get_campaign_journey. */
+export type CampaignJourneyRow = {
+  campaign_id: string;
+  name: string;
+  status: string;
+  currency: string;
+  metrics_available: boolean;
+  spend_minor: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  conversations: number;
+  conversations_direct: number;
+  conversations_inferred: number;
+  leads: number;
+  leads_direct: number;
+  leads_inferred: number;
+  qualified_leads: number;
+  opportunities: number;
+  opportunities_direct: number;
+  opportunities_inferred: number;
+  customers: number;
+  customers_direct: number;
+  customers_inferred: number;
+  revenue: MoneyByCurrency;
+  adset_breakdown: JourneyBreakdownRow[];
+  ad_breakdown: JourneyBreakdownRow[];
+  creative_breakdown: JourneyBreakdownRow[];
+};
 
 export type JourneyFunnel = {
+  metricsAvailable: boolean;
   spend_minor: number;
   currency: string;
   impressions: number;
@@ -19,28 +68,75 @@ export type JourneyFunnel = {
   revenue: MoneyByCurrency;
 };
 
-export type JourneyStageKey = "conversations" | "qualified_leads" | "leads" | "opportunities" | "customers";
+export function toFunnel(row: CampaignJourneyRow): JourneyFunnel {
+  return {
+    metricsAvailable: row.metrics_available,
+    spend_minor: row.spend_minor,
+    currency: row.currency,
+    impressions: row.impressions,
+    reach: row.reach,
+    clicks: row.clicks,
+    conversations: row.conversations,
+    qualified_leads: row.qualified_leads,
+    leads: row.leads,
+    opportunities: row.opportunities,
+    customers: row.customers,
+    revenue: row.revenue,
+  };
+}
+
+export type JourneyStageKey = "conversations" | "leads" | "qualified_leads" | "opportunities" | "customers";
+
+export type BandSplit = { direct: number; inferred: number };
 
 export type JourneyStage = {
   key: JourneyStageKey;
   label: string;
   count: number;
-  /** spend / count, minor units - null when count is 0 */
+  /** spend / count, minor units - null when count is 0 OR metrics are unavailable */
   costPerMinor: number | null;
   /** % of the previous funnel stage - null when the previous stage is 0 */
   rateFromPrevious: number | null;
+  /** the previous stage's human label, so the UI can say "of Leads" not "of prev." */
+  previousLabel: string | null;
+  /** direct / inferred split for this stage - null for Qualified (a state, not a touch population) */
+  bands: BandSplit | null;
 };
 
-const STAGE_DEFS: { key: JourneyStageKey; label: string; prev: JourneyStageKey | "clicks" | null }[] = [
+// ORDER: Conversations → Leads → Qualified → Opportunities → Customers.
+// Qualified is a STATE of a lead, not a predecessor - its conversion is
+// qualified / leads (audit M6).
+const STAGE_DEFS: {
+  key: JourneyStageKey;
+  label: string;
+  prev: JourneyStageKey | "clicks" | null;
+}[] = [
   { key: "conversations", label: "Conversations", prev: "clicks" },
-  { key: "qualified_leads", label: "Qualified", prev: "conversations" },
   { key: "leads", label: "Leads", prev: "conversations" },
+  { key: "qualified_leads", label: "Qualified", prev: "leads" },
   { key: "opportunities", label: "Opportunities", prev: "leads" },
   { key: "customers", label: "Customers", prev: "opportunities" },
 ];
 
-export function buildJourneyStages(f: JourneyFunnel): JourneyStage[] {
+const PREV_LABEL: Record<string, string> = {
+  clicks: "Clicks",
+  conversations: "Conversations",
+  leads: "Leads",
+  qualified_leads: "Qualified",
+  opportunities: "Opportunities",
+};
+
+export function buildJourneyStages(row: CampaignJourneyRow): JourneyStage[] {
+  const f = toFunnel(row);
   const valueFor = (k: JourneyStageKey | "clicks"): number => (k === "clicks" ? f.clicks : f[k]);
+  const spendForCost = f.metricsAvailable ? f.spend_minor : null;
+  const bandsByKey: Record<JourneyStageKey, BandSplit | null> = {
+    conversations: { direct: row.conversations_direct, inferred: row.conversations_inferred },
+    leads: { direct: row.leads_direct, inferred: row.leads_inferred },
+    qualified_leads: null,
+    opportunities: { direct: row.opportunities_direct, inferred: row.opportunities_inferred },
+    customers: { direct: row.customers_direct, inferred: row.customers_inferred },
+  };
   return STAGE_DEFS.map((def) => {
     const count = f[def.key];
     const prevCount = def.prev ? valueFor(def.prev) : null;
@@ -48,30 +144,33 @@ export function buildJourneyStages(f: JourneyFunnel): JourneyStage[] {
       key: def.key,
       label: def.label,
       count,
-      costPerMinor: costPerOutcome(f.spend_minor, count),
+      costPerMinor: spendForCost === null ? null : costPerOutcome(spendForCost, count),
       rateFromPrevious: prevCount === null ? null : safeRate(prevCount, count),
+      previousLabel: def.prev ? PREV_LABEL[def.prev] : null,
+      bands: bandsByKey[def.key],
     };
   });
 }
 
 export type JourneyHeadline = {
-  /** spend / clicks, minor units - null when no clicks */
   costPerClickMinor: number | null;
-  /** spend / customers (CAC), minor units - null when no customers */
   cacMinor: number | null;
   roas: RoasResult;
-  /** overall conversation -> customer %, null when no conversations */
   conversationToCustomerRate: number | null;
-  /** lead -> customer %, null when no leads */
   leadToCustomerRate: number | null;
   revenueTotal: ReturnType<typeof summarizeCurrency>;
 };
 
-export function journeyHeadline(f: JourneyFunnel): JourneyHeadline {
+export function journeyHeadline(row: CampaignJourneyRow): JourneyHeadline {
+  const f = toFunnel(row);
+  const spend = f.metricsAvailable ? f.spend_minor : null;
   return {
-    costPerClickMinor: costPerOutcome(f.spend_minor, f.clicks),
-    cacMinor: costPerOutcome(f.spend_minor, f.customers),
-    roas: computeRoas(f.spend_minor, f.currency, f.revenue),
+    costPerClickMinor: spend === null ? null : costPerOutcome(spend, f.clicks),
+    cacMinor: spend === null ? null : costPerOutcome(spend, f.customers),
+    // computeRoas returns {status:'unavailable', reason:'no_spend'} for a
+    // non-positive / non-finite spend, which is exactly what we want when
+    // metrics are unavailable.
+    roas: computeRoas(spend ?? Number.NaN, f.currency, f.revenue),
     conversationToCustomerRate: safeRate(f.conversations, f.customers),
     leadToCustomerRate: safeRate(f.leads, f.customers),
     revenueTotal: summarizeCurrency(f.revenue),
@@ -79,11 +178,8 @@ export function journeyHeadline(f: JourneyFunnel): JourneyHeadline {
 }
 
 // --- attribution confidence banding -----------------------------------------
-// The crediting touchpoint's own attribution_method decides the band. This
-// mirrors src/lib/attribution.ts's explainTouch() vocabulary and the
-// _shared/attribution.ts writer: a Meta referral resolved to a campaign
-// StabiFlow itself published is "direct"; a referral that was present but
-// could not be matched is "inferred"; no evidence at all is "unattributed".
+// Mirrors src/lib/attribution.ts's explainTouch() vocabulary and the
+// _shared/attribution.ts writer.
 
 export type AttributionBand = "direct" | "inferred" | "unattributed";
 
@@ -101,79 +197,25 @@ export const BAND_LABEL: Record<AttributionBand, string> = {
 };
 
 export const BAND_EXPLANATION =
-  "Direct: the Meta ad referral was matched to a campaign you published in StabiFlow. Inferred: an ad referral was present but could not be matched to a StabiFlow campaign (the ad may have been created outside this platform).";
+  "Direct: the Meta ad referral was matched to a campaign you published in StabiFlow. Inferred: an ad referral was present but could not be matched to a StabiFlow campaign (the ad may have been created outside this platform). Direct + Inferred always equals the stage total.";
 
-export type BandSplit = { direct: number; inferred: number };
-
-/** Tally a set of crediting rows into a direct/inferred split per stage. */
-export function tallyBands(rows: { attribution_method: string | null }[]): BandSplit {
-  let direct = 0;
-  let inferred = 0;
-  for (const r of rows) {
-    if (attributionBand(r.attribution_method) === "direct") direct += 1;
-    else inferred += 1;
-  }
-  return { direct, inferred };
-}
-
-// --- drill-down structure --------------------------------------------------
-
-export type JourneyDrillRow = {
-  attribution_method: string | null;
-  ad_set_id: string | null;
-  ad_id: string | null;
-  creative_id: string | null;
-  conversation_id: string | null;
-  lead_id: string | null;
-  opportunity_id: string | null;
-  customer_id: string | null;
-};
-
-export type BreakdownRow = {
-  id: string;
-  conversations: number;
-  leads: number;
-  opportunities: number;
-  customers: number;
-};
-
-/** Group crediting rows by ad_set / ad / creative into conversion-count breakdowns. */
-export function breakdownBy(rows: JourneyDrillRow[], dim: "ad_set_id" | "ad_id" | "creative_id"): BreakdownRow[] {
-  const byId = new Map<string, BreakdownRow>();
-  const seen = { conv: new Set<string>(), lead: new Set<string>(), opp: new Set<string>(), cust: new Set<string>() };
-  for (const r of rows) {
-    const id = r[dim];
-    if (!id) continue;
-    let acc = byId.get(id);
-    if (!acc) {
-      acc = { id, conversations: 0, leads: 0, opportunities: 0, customers: 0 };
-      byId.set(id, acc);
-    }
-    // Count each distinct entity once per group.
-    if (r.conversation_id && !seen.conv.has(id + r.conversation_id)) { seen.conv.add(id + r.conversation_id); acc.conversations += 1; }
-    if (r.lead_id && !seen.lead.has(id + r.lead_id)) { seen.lead.add(id + r.lead_id); acc.leads += 1; }
-    if (r.opportunity_id && !seen.opp.has(id + r.opportunity_id)) { seen.opp.add(id + r.opportunity_id); acc.opportunities += 1; }
-    if (r.customer_id && !seen.cust.has(id + r.customer_id)) { seen.cust.add(id + r.customer_id); acc.customers += 1; }
-  }
-  return [...byId.values()].sort((a, b) => b.conversations - a.conversations);
-}
-
-/** Distinct entity ids for one funnel stage, with each id's crediting method (last write wins - a stage entity has exactly one crediting touchpoint per model in the source query anyway). */
-export function stageEntityIds(rows: JourneyDrillRow[], stage: JourneyStageKey): { id: string; method: string | null }[] {
-  const col: keyof JourneyDrillRow =
-    stage === "conversations" ? "conversation_id"
-    : stage === "opportunities" ? "opportunity_id"
-    : stage === "customers" ? "customer_id"
-    : "lead_id"; // leads + qualified_leads both key off lead_id
-  const map = new Map<string, string | null>();
-  for (const r of rows) {
-    const id = r[col];
-    if (id && typeof id === "string") map.set(id, r.attribution_method);
-  }
-  return [...map.entries()].map(([id, method]) => ({ id, method }));
-}
+export const BREAKDOWN_NOTE =
+  "Rows are grouped by the ad set / ad / creative of each entity's model-credited touchpoint, so they reconcile with the funnel above. Entities whose credited touchpoint has no resolved ad set (e.g. a manual attribution override) are not shown here, so a row's counts can sum to less than the funnel total.";
 
 export function hasAnyJourneyData(f: JourneyFunnel | null | undefined): boolean {
   if (!f) return false;
-  return f.spend_minor > 0 || f.clicks > 0 || f.conversations > 0 || f.leads > 0 || f.opportunities > 0 || f.customers > 0 || f.revenue.length > 0;
+  return (
+    (f.metricsAvailable && (f.spend_minor > 0 || f.clicks > 0)) ||
+    f.conversations > 0 ||
+    f.leads > 0 ||
+    f.opportunities > 0 ||
+    f.customers > 0 ||
+    f.revenue.length > 0
+  );
+}
+
+/** Rows without a resolved ad set/ad/creative: funnel stage total minus the sum of breakdown rows. Never negative. */
+export function breakdownRemainder(stageTotal: number, rows: JourneyBreakdownRow[], key: keyof Omit<JourneyBreakdownRow, "id">): number {
+  const sum = rows.reduce((n, r) => n + (r[key] || 0), 0);
+  return Math.max(0, stageTotal - sum);
 }

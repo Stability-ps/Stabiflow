@@ -42,7 +42,10 @@ export default function Analytics() {
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
 
-  const view: AnalyticsView = searchParams.get("view") === "revenue" ? "revenue" : "overview";
+  // The Revenue view is only reachable with revenue.view - a viewer/
+  // marketing role without it never sees a selectable tab that would only
+  // ever show a permission wall (audit §19). Backend/RPC stay authoritative.
+  const view: AnalyticsView = canSeeRevenue && searchParams.get("view") === "revenue" ? "revenue" : "overview";
   const setView = (next: AnalyticsView) => {
     const params = new URLSearchParams(searchParams);
     if (next === "overview") params.delete("view");
@@ -107,7 +110,7 @@ export default function Analytics() {
       </div>
 
       <nav className="flex gap-1 border-b" aria-label="Analytics views">
-        {([["overview", "Overview"], ["revenue", "Revenue"]] as const).map(([key, label]) => (
+        {(canSeeRevenue ? ([["overview", "Overview"], ["revenue", "Revenue"]] as const) : ([["overview", "Overview"]] as const)).map(([key, label]) => (
           <button
             key={key}
             type="button"
