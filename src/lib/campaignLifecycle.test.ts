@@ -78,4 +78,3 @@ describe("editability / deletability guards", () => {
     expect(isEditableCampaign({ status: "active", external_campaign_id: null })).toBe(false);
   });
 });
-

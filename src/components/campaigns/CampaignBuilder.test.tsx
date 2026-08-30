@@ -6,6 +6,7 @@ import { CampaignBuilder } from "./CampaignBuilder";
 const mocks = vi.hoisted(() => ({
   mediaState: { data: [] as Array<Record<string, unknown>>, isLoading: false, isError: false },
   existingCampaign: null as Record<string, unknown> | null,
+  workspaceTimezone: "Africa/Johannesburg",
   createCampaignDraft: vi.fn(),
   updateCampaignDraft: vi.fn(),
   publishCampaign: vi.fn(),
@@ -36,7 +37,7 @@ vi.mock("@/hooks/useMetaAccountResources", () => ({
 vi.mock("@/hooks/useIntegrations", () => ({ useAllWhatsAppNumbers: () => ({ data: [] }) }));
 vi.mock("@/hooks/useContentMediaAssets", () => ({ useContentMediaAssets: () => mocks.mediaState }));
 vi.mock("@/hooks/useAdCampaign", () => ({ useAdCampaign: () => ({ data: mocks.existingCampaign, isLoading: false }) }));
-vi.mock("@/hooks/useWorkspaceTimezone", () => ({ useWorkspaceTimezone: () => "Africa/Johannesburg" }));
+vi.mock("@/hooks/useWorkspaceTimezone", () => ({ useWorkspaceTimezone: () => mocks.workspaceTimezone }));
 vi.mock("@/components/content/MediaPreview", () => ({
   MediaPreview: ({ storagePath, alt, className }: { storagePath: string; alt: string; className?: string }) => (
     <img src={`https://example.com/${storagePath}`} alt={alt} className={className} />
@@ -83,6 +84,7 @@ function completeThroughCreative() {
 describe("CampaignBuilder regression coverage", () => {
   beforeEach(() => {
     mocks.mediaState.data = mockAssets;
+    mocks.workspaceTimezone = "Africa/Johannesburg";
     mocks.existingCampaign = null;
     mocks.mediaState.isLoading = false;
     mocks.mediaState.isError = false;
@@ -189,6 +191,7 @@ async function createDraftAndReachPublish() {
 describe("CampaignBuilder Publish readiness actionability", () => {
   beforeEach(() => {
     mocks.mediaState.data = mockAssets;
+    mocks.workspaceTimezone = "Africa/Johannesburg";
     mocks.existingCampaign = null;
     mocks.mediaState.isLoading = false;
     mocks.mediaState.isError = false;
@@ -290,6 +293,7 @@ describe("CampaignBuilder Publish readiness actionability", () => {
 describe("CampaignBuilder editor deep-link (?step & ?focus from Campaign Detail readiness links)", () => {
   beforeEach(() => {
     mocks.mediaState.data = mockAssets;
+    mocks.workspaceTimezone = "Africa/Johannesburg";
     mocks.existingCampaign = null;
     mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-1", creativeId: "creative-1" });
     mocks.checkCampaignReadiness.mockReset().mockResolvedValue({ ok: true, ready: true, issues: [] });
@@ -315,6 +319,31 @@ describe("CampaignBuilder editor deep-link (?step & ?focus from Campaign Detail 
     );
     expect(await screen.findByRole("heading", { name: "Creative" })).toBeInTheDocument();
   });
+
+  it("MEDIUM-4: ?focus=endAt does NOT flip a Start-now campaign into scheduled mode (the End inputs are always rendered)", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/campaigns/new?step=Budget+%26+Schedule&focus=endAt"]}>
+        <CampaignBuilder />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("heading", { name: "Budget and schedule" });
+    // Still "Start now" (the default) - the Start date/time inputs are hidden...
+    expect(screen.getByRole("button", { name: /Start now/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByLabelText("Start date")).not.toBeInTheDocument();
+    // ...but the End date input is present and focusable.
+    expect(screen.getByLabelText("End date")).toBeInTheDocument();
+  });
+
+  it("MEDIUM-4: ?focus=startAt still reveals the scheduled Start inputs", async () => {
+    render(
+      <MemoryRouter initialEntries={["/app/campaigns/new?step=Budget+%26+Schedule&focus=startAt"]}>
+        <CampaignBuilder />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("heading", { name: "Budget and schedule" });
+    expect(screen.getByRole("button", { name: /Schedule for later/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Start date")).toBeInTheDocument();
+  });
 });
 
 describe("CampaignBuilder edit mode - hydrate an existing campaign and update it (never duplicate)", () => {
@@ -332,6 +361,7 @@ describe("CampaignBuilder edit mode - hydrate an existing campaign and update it
 
   beforeEach(() => {
     mocks.mediaState.data = mockAssets;
+    mocks.workspaceTimezone = "Africa/Johannesburg";
     mocks.existingCampaign = { ...existingDraft };
     mocks.createCampaignDraft.mockReset().mockResolvedValue({ campaignId: "campaign-9", creativeId: "creative-9" });
     mocks.updateCampaignDraft.mockReset().mockResolvedValue(undefined);
@@ -366,5 +396,23 @@ describe("CampaignBuilder edit mode - hydrate an existing campaign and update it
     mocks.existingCampaign = { ...existingDraft, status: "ready" };
     renderEditor();
     expect(await screen.findByLabelText("Campaign name")).toHaveValue("Winter Sale");
+  });
+
+  it("MEDIUM-5: a later workspaceTimezone value does not re-hydrate and wipe in-progress edits", async () => {
+    mocks.workspaceTimezone = "Africa/Johannesburg";
+    const { rerender } = renderEditor();
+    const nameInput = await screen.findByLabelText("Campaign name");
+    expect(nameInput).toHaveValue("Winter Sale");
+
+    // user renames the campaign...
+    fireEvent.change(nameInput, { target: { value: "Winter Sale 2027" } });
+    expect(nameInput).toHaveValue("Winter Sale 2027");
+
+    // ...then the timezone query resolves to a different value and the tree re-renders.
+    mocks.workspaceTimezone = "America/New_York";
+    rerender(<MemoryRouter initialEntries={["/app/campaigns/campaign-9/edit"]}><CampaignBuilder campaignId="campaign-9" /></MemoryRouter>);
+
+    // hydration must NOT have run a second time.
+    expect(screen.getByLabelText("Campaign name")).toHaveValue("Winter Sale 2027");
   });
 });

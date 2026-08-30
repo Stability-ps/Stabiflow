@@ -141,7 +141,15 @@ export async function updateCampaignDraft(campaignId: string, campaign: Partial<
     const { error } = await supabase.from("ad_creatives").update(creative).eq("id", creativeId);
     if (error) throw new Error(error.message);
   }
-  const { error } = await supabase.from("ad_campaigns").update({ ...campaign, status: "draft" }).eq("id", campaignId);
+  // Any edit changes readiness-relevant configuration, so the stored
+  // readiness evidence (last_readiness_check) is now stale - clear it in
+  // the same write. Presentation (CampaignsList / deriveCampaignPresentation)
+  // must fall back to "Draft" until a FRESH readiness check repopulates it,
+  // never keep showing "Ready to publish" from a pre-edit result.
+  const { error } = await supabase
+    .from("ad_campaigns")
+    .update({ ...campaign, status: "draft", last_readiness_check: null })
+    .eq("id", campaignId);
   if (error) throw new Error(error.message);
 
   await supabase.from("workspace_activity_log").insert({

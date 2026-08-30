@@ -21,7 +21,7 @@
 // idempotency keys from concurrently publishing the same campaign.
 import { checkCampaignReadiness, isReady } from "../_shared/adReadiness.ts";
 import { loadReadinessInput, CAMPAIGN_COLUMNS } from "../_shared/adCampaignLoader.ts";
-import { claimCampaignForPublish, executeCampaignPublish, REAL_META_PROVIDER, type MetaAdsProvider, type PublishStep } from "../_shared/adPublishExecution.ts";
+import { claimCampaignForPublish, executeCampaignPublish, META_AD_SET_START_TIME_MIN_LEAD_MS, REAL_META_PROVIDER, type MetaAdsProvider, type PublishStep } from "../_shared/adPublishExecution.ts";
 import * as mockMetaProvider from "../_shared/ad-providers/metaMarketingApiMock.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
@@ -86,12 +86,35 @@ Deno.serve(async (req: Request) => {
   });
 
   const nowIso = new Date().toISOString();
-  const claimed = await claimCampaignForPublish(serviceSb, campaignId, nowIso);
+  let claimed = await claimCampaignForPublish(serviceSb, campaignId, nowIso);
   if (!claimed) {
     const { data: currentState } = await serviceSb.from("ad_campaigns").select("status").eq("id", campaignId).maybeSingle();
     return json(req, {
       error: `This campaign cannot be published from its current state (${currentState?.status ?? "unknown"}). It may already be publishing, active, or was just claimed by another request.`,
     }, 409);
+  }
+
+  // A scheduled start that has arrived (or is imminent enough that it would
+  // be past by the time the saga reaches Meta) becomes "Start now": null
+  // start_at so the readiness gate below passes and the ad set is created
+  // with no start_time, rather than 422-ing the publish the user just
+  // asked for. The user explicitly clicked Publish.
+  if (claimed.start_at && new Date(claimed.start_at as string).getTime() <= Date.now() + META_AD_SET_START_TIME_MIN_LEAD_MS) {
+    const { data: rescheduled } = await serviceSb
+      .from("ad_campaigns")
+      .update({ start_at: null })
+      .eq("id", campaignId)
+      .select(CAMPAIGN_COLUMNS)
+      .maybeSingle();
+    if (rescheduled) claimed = rescheduled;
+    await serviceSb.from("workspace_activity_log").insert({
+      workspace_id: existing.workspace_id,
+      actor_user_id: actorId,
+      action: "campaign_schedule_started_now",
+      target_type: "ad_campaign",
+      target_id: campaignId,
+      metadata: { reason: "scheduled_start_reached_at_publish" },
+    });
   }
 
   // Re-validate readiness server-side even though the UI should already

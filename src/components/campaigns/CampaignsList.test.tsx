@@ -98,4 +98,15 @@ describe("CampaignsList - lifecycle badge is consistent with the detail page", (
     renderList();
     expect(screen.getByText("Ready to publish")).toBeInTheDocument();
   });
+
+  it("HIGH-1: after an edit (status back to 'draft', last_readiness_check cleared) the list shows 'Draft', NOT the pre-edit 'Ready to publish'", () => {
+    // This is the exact post-updateCampaignDraft row shape: an edit resets
+    // status to 'draft' AND nulls last_readiness_check, so the stale
+    // passing result can no longer leak through.
+    state.campaigns = [{ ...baseCampaign, status: "draft", external_campaign_id: null, last_readiness_check: null }];
+    renderList();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to publish")).not.toBeInTheDocument();
+    expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
+  });
 });

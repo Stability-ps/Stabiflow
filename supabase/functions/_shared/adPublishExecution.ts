@@ -70,6 +70,24 @@ export function resolveNextStep(state: ProviderState): PublishStep {
   return "done";
 }
 
+// Meta rejects an ad-set start_time that is in the past. A scheduled start
+// that has already arrived - or is so imminent it would be past by the
+// time this saga's earlier calls complete and the createAdSet request
+// reaches Meta - is published IMMEDIATELY instead: return null so
+// buildCreateAdSetPayload omits start_time and Meta begins delivery when
+// the ad set is activated at the end of the saga. `now` is injected for
+// tests. This is a publish-time safety net; the caller
+// (ad-campaigns-publish) also nulls start_at before the readiness gate for
+// the same reason.
+export const META_AD_SET_START_TIME_MIN_LEAD_MS = 2 * 60 * 1000;
+
+export function resolveAdSetStartTime(scheduledStartIso: string | null | undefined, now: number = Date.now()): string | null {
+  if (!scheduledStartIso) return null;
+  const t = new Date(scheduledStartIso).getTime();
+  if (Number.isNaN(t)) return null;
+  return t > now + META_AD_SET_START_TIME_MIN_LEAD_MS ? scheduledStartIso : null;
+}
+
 // Atomic claim, same primitive as content-publish's claimScheduledPost:
 // only succeeds if the campaign is currently 'ready' or 'failed' (a retry
 // after a partial failure is allowed to resume) - a campaign already
@@ -178,6 +196,10 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
     let adSetRow: Record<string, unknown> | null = null;
     if (step === "ad_set") {
       maybeForceFail("ad_set");
+      // null start_at = "Start now"; a scheduled start that has already
+      // arrived (or is imminent) is also published immediately rather than
+      // sent as a past start_time Meta would reject.
+      const adSetStartTime = resolveAdSetStartTime(campaign.start_at as string | null);
       const created = await options.provider.createAdSet(cred, {
         adAccountId: externalAdAccountId,
         campaignExternalId: providerState.campaign!.external_id,
@@ -185,9 +207,7 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
         status: "PAUSED",
         optimizationGoal: rule.optimizationGoal,
         billingEvent: rule.billingEvent,
-        // null start_at = "Start now" -> pass null so Meta omits start_time
-        // and begins delivery when the ad set is activated below.
-        startTime: (campaign.start_at as string | null) ?? null,
+        startTime: adSetStartTime,
         endTime: (campaign.end_at as string) || null,
         targeting: buildMetaTargetingSpec((campaign.audience as Record<string, unknown>) || {}),
         pagePlacements: (campaign.placements as Record<string, unknown>) || {},
@@ -208,9 +228,10 @@ export async function executeCampaignPublish(sb: AnySupabaseClient, campaign: Re
           billing_event: rule.billingEvent,
           targeting: campaign.audience || {},
           placements: campaign.placements || {},
-          // ad_sets.start_at is NOT NULL - for a "Start now" campaign the
-          // concrete start instant IS the publish moment.
-          start_at: (campaign.start_at as string | null) ?? new Date().toISOString(),
+          // ad_sets.start_at is NOT NULL - record the instant delivery
+          // actually begins: the scheduled start if it is still in the
+          // future, otherwise the publish moment.
+          start_at: adSetStartTime ?? new Date().toISOString(),
           end_at: campaign.end_at,
         })
         .select("*")

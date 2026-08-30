@@ -106,11 +106,17 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
   );
   const selectedMediaAsset = usableMediaAssets.find((asset) => asset.id === mediaAssetId) || null;
 
+  const hydratedForIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!existing || !isEdit) return;
     // Hydrate once for any still-unpublished campaign - draft, or a stale
     // 'ready' the old builder flipped optimistically (no Meta id).
     if (!isEditableCampaign({ status: existing.status, external_campaign_id: existing.external_campaign_id })) return;
+    // Hydrate EXACTLY ONCE per campaign - re-running (e.g. when
+    // workspaceTimezone resolves default -> real) would overwrite whatever
+    // the user has since typed.
+    if (hydratedForIdRef.current === existing.id) return;
+    hydratedForIdRef.current = existing.id as string;
     setName(existing.name);
     setObjective(existing.objective as SupportedObjective);
     setAdAccountId(existing.ad_account_id);
@@ -152,7 +158,11 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
       setDestinationUrl(creative.destination_url || "");
       setWhatsappNumberId(creative.whatsapp_number_id || "");
     }
-  }, [existing, isEdit, workspaceTimezone]);
+    // workspaceTimezone is read at hydration time only; it is intentionally
+    // NOT a dependency - a later value change must not re-hydrate and wipe
+    // in-progress edits (the ref guard above enforces once-per-campaign).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existing, isEdit]);
 
   // Deep-link support: Campaign Detail's readiness "Edit <section>" links
   // open /app/campaigns/:id/edit?step=<Step>&focus=<fieldKey>. Jump to the
@@ -170,9 +180,11 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     appliedDeepLinkRef.current = true;
     setStepIndex(targetIndex);
     if (requestedFocus) {
-      // A start/end field can only be focused when the schedule is in
-      // "scheduled" mode - reveal it if the deep link points there.
-      if (requestedFocus === "startAt" || requestedFocus === "startTime" || requestedFocus === "endAt") {
+      // The START date/time inputs only exist in "scheduled" mode - reveal
+      // them if the deep link targets one. The END inputs are always
+      // rendered, so an end-date issue must NOT flip a "Start now" campaign
+      // into scheduled mode.
+      if (requestedFocus === "startAt" || requestedFocus === "startTime") {
         setStartMode("scheduled");
       }
       setPendingFocusFieldId(CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[requestedFocus] ?? null);
@@ -289,6 +301,10 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
         const result = await createCampaignDraft(campaignInput, creativeInput);
         setSavedCampaignId(result.campaignId);
       }
+      // The save just invalidated any prior readiness result - drop the
+      // in-memory issues so the Publish step re-checks fresh, matching the
+      // server clearing last_readiness_check on the same write.
+      setIssues(null);
       toast.success("Draft saved");
       setStepIndex(STEPS.indexOf("Publish"));
     } catch (error) {
@@ -340,8 +356,8 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     const presentation = presentReadinessIssue(issue);
     if (!presentation.step) return;
     setStepIndex(STEPS.indexOf(presentation.step));
-    if (presentation.field === "startAt" || presentation.field === "endAt") {
-      setStartMode("scheduled"); // reveal the date/time fields so they can be focused
+    if (presentation.field === "startAt") {
+      setStartMode("scheduled"); // the start date/time inputs only render in scheduled mode
     }
     const fieldId = presentation.field ? CAMPAIGN_BUILDER_FIELD_ELEMENT_IDS[presentation.field] : undefined;
     setPendingFocusFieldId(fieldId ?? null);
