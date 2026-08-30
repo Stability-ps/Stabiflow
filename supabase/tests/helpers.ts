@@ -5,16 +5,35 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Resolution order for the connection trio: process.env WINS over the
+// .env.test.local file. The file (see .env.test.local.example) is the
+// normal path and points at the linked REMOTE project - correct for the
+// suites that exercise deployed Edge Functions. The process-env overlay
+// lets an explicit wrapper (`npm run test:integration:local`, which reads
+// `supabase status`) point the DB-only Phase 1 read-model suites at LOCAL
+// Supabase, whose migration is intentionally not pushed to remote. The
+// file is optional only when the full trio is supplied via process.env;
+// the loud throw below still fires if it is incomplete from BOTH sources,
+// so a misconfigured env fails rather than silently skipping coverage.
+// Nothing here relaxes RLS/auth: every test still runs through a real,
+// independently-authenticated session.
 function loadTestEnv(): Record<string, string> {
-  const envPath = path.resolve(__dirname, "../../.env.test.local");
-  const raw = readFileSync(envPath, "utf8");
   const parsed: Record<string, string> = {};
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const separatorIndex = trimmed.indexOf("=");
-    if (separatorIndex === -1) continue;
-    parsed[trimmed.slice(0, separatorIndex).trim()] = trimmed.slice(separatorIndex + 1).trim();
+  const envPath = path.resolve(__dirname, "../../.env.test.local");
+  try {
+    const raw = readFileSync(envPath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const separatorIndex = trimmed.indexOf("=");
+      if (separatorIndex === -1) continue;
+      parsed[trimmed.slice(0, separatorIndex).trim()] = trimmed.slice(separatorIndex + 1).trim();
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+  for (const key of ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"]) {
+    if (process.env[key]) parsed[key] = process.env[key] as string;
   }
   return parsed;
 }
@@ -25,13 +44,13 @@ export const ANON_KEY = env.SUPABASE_ANON_KEY;
 export const SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SUPABASE_URL || !ANON_KEY || !SERVICE_ROLE_KEY) {
-  throw new Error("Missing SUPABASE_URL/SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY in .env.test.local");
+  throw new Error("Missing SUPABASE_URL/SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY (.env.test.local or process env)");
 }
 
-/** Reads any other value from .env.test.local (e.g. a dev-only shared secret a test needs to compute a matching signature against a deployed edge function). Throws if missing so a misconfigured test env fails loudly rather than silently skipping coverage. */
+/** Reads any other value from .env.test.local (e.g. a dev-only shared secret a test needs to compute a matching signature against a deployed edge function), with process.env taking precedence. Throws if missing so a misconfigured test env fails loudly rather than silently skipping coverage. */
 export function getTestEnv(key: string): string {
-  const value = env[key];
-  if (!value) throw new Error(`Missing ${key} in .env.test.local`);
+  const value = process.env[key] ?? env[key];
+  if (!value) throw new Error(`Missing ${key} in .env.test.local (or the process environment)`);
   return value;
 }
 
