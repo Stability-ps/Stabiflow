@@ -1,25 +1,30 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, Bot, CheckCircle2, Paperclip, Send, Sparkles, UserCheck, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, Briefcase, CheckCircle2, Paperclip, Send, Sparkles, UserCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { getInboxMediaUrl, useInboxInternalNotes, useInboxMessages, type InboxMessageRow } from "@/hooks/useInboxMessages";
 import type { InboxConversationRow } from "@/hooks/useInboxConversations";
-import { useLead } from "@/hooks/useLeads";
+import { useLead, usePipelines, usePipelineStages } from "@/hooks/useLeads";
+import { useOpportunitiesForLead } from "@/hooks/useOpportunities";
 import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
 import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
 import { roleHasPermission } from "@/lib/permissions";
-import { createLeadFromConversation, linkLeadConversation, type DuplicateLeadCandidate } from "@/lib/leads";
+import { createLeadFromConversation, createOpportunity, linkLeadConversation, type DuplicateLeadCandidate } from "@/lib/leads";
+import { intakeRows } from "@/lib/intakeDisplay";
+import { qualificationStatusLabel } from "@/lib/qualification";
 import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
 import { openOpportunityActionLabel } from "@/lib/terminology";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
@@ -74,6 +79,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const { data: notes } = useInboxInternalNotes(conversation.id);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: lead } = useLead(conversation.lead_id);
+  const { data: leadOpportunities } = useOpportunitiesForLead(conversation.lead_id);
   const { data: templates } = useInboxTemplates(workspaceId);
   const opportunityLabel = useOpportunityTerminology(workspaceId);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -81,6 +87,17 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const role = currentMembership?.role;
   const canCreateLead = roleHasPermission(role, "lead.create");
   const canViewLead = roleHasPermission(role, "lead.view");
+  const canCreateOpportunity = roleHasPermission(role, "opportunity.create");
+
+  // What the AI has learned - prefer the lead's persisted copy once a lead
+  // exists, otherwise the live conversation payload.
+  const learnedSummary = lead?.summary || conversation.ai_summary || null;
+  const learnedIntake = useMemo(
+    () => intakeRows(conversation.lead_id && lead ? lead.intake : conversation.intake_payload).slice(0, 6),
+    [conversation.lead_id, conversation.intake_payload, lead],
+  );
+  const ownerName = lead?.assigned_to ? (members || []).find((m) => m.user_id === lead.assigned_to)?.profile?.full_name || "Assigned" : null;
+  const latestOpportunity = (leadOpportunities || [])[0] || null;
 
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
@@ -90,6 +107,21 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const [busy, setBusy] = useState(false);
   const [creatingLead, setCreatingLead] = useState(false);
   const [leadDuplicates, setLeadDuplicates] = useState<DuplicateLeadCandidate[] | null>(null);
+  const [copyContextOnLink, setCopyContextOnLink] = useState(true);
+
+  // Create-opportunity dialog (Part D) - reuses the existing
+  // leads-actions create_opportunity path, never a second workflow.
+  const [oppDialogOpen, setOppDialogOpen] = useState(false);
+  const [oppTitle, setOppTitle] = useState("");
+  const [oppPipelineId, setOppPipelineId] = useState("");
+  const [oppStageId, setOppStageId] = useState("");
+  const [oppOwnerId, setOppOwnerId] = useState("");
+  const [oppValue, setOppValue] = useState("");
+  const [creatingOpp, setCreatingOpp] = useState(false);
+  const { data: pipelines } = usePipelines(canCreateOpportunity ? workspaceId : null);
+  const { data: oppStages } = usePipelineStages(workspaceId, oppPipelineId || lead?.pipeline_id || null);
+  const { data: leadStages } = usePipelineStages(canViewLead ? workspaceId : null, lead?.pipeline_id ?? null);
+  const leadStageName = lead?.pipeline_stage_id ? (leadStages || []).find((s) => s.id === lead.pipeline_stage_id)?.name ?? null : null;
 
   // Phase L-1: display-only indicator, computed client-side from the
   // already-fetched last_inbound_at - the actual send is always re-checked
@@ -263,14 +295,54 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const handleLinkExisting = async (leadId: string) => {
     setCreatingLead(true);
     try {
-      await linkLeadConversation(workspaceId, leadId, conversation.id);
+      const result = await linkLeadConversation(workspaceId, leadId, conversation.id, { applyContext: copyContextOnLink });
       setLeadDuplicates(null);
       queryClient.invalidateQueries({ queryKey: ["inbox-conversations", workspaceId] });
-      toast.success("Conversation linked to existing lead");
+      queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
+      queryClient.invalidateQueries({ queryKey: ["lead-attachments", leadId] });
+      const ctx = result.context;
+      const bits: string[] = [];
+      if (ctx?.attachments_linked) bits.push(`${ctx.attachments_linked} document${ctx.attachments_linked === 1 ? "" : "s"}`);
+      if (ctx?.summary_copied) bits.push("AI summary");
+      if (ctx && (ctx.intake_new_keys?.length ?? 0) > 0) bits.push("intake answers");
+      toast.success(bits.length ? `Linked to the lead - copied ${bits.join(", ")}.` : "Conversation linked to existing lead");
+      if (ctx?.summary_skipped) toast.info("This lead already has a summary, so the conversation's was kept in the intake answers instead.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to link this conversation");
     } finally {
       setCreatingLead(false);
+    }
+  };
+
+  const openOppDialog = () => {
+    setOppTitle(conversation.display_name ? `${conversation.display_name} - ${opportunityLabel.toLowerCase()}` : `New ${opportunityLabel.toLowerCase()}`);
+    setOppPipelineId(lead?.pipeline_id || (pipelines || []).find((p) => p.is_default)?.id || (pipelines || [])[0]?.id || "");
+    setOppStageId(lead?.pipeline_stage_id || "");
+    setOppOwnerId(lead?.assigned_to || "");
+    setOppValue(lead?.estimated_value != null ? String(lead.estimated_value) : "");
+    setOppDialogOpen(true);
+  };
+
+  const handleCreateOpportunity = async () => {
+    if (!conversation.lead_id || !oppTitle.trim()) return;
+    setCreatingOpp(true);
+    try {
+      const parsedValue = oppValue.trim() ? Number(oppValue.trim()) : undefined;
+      await createOpportunity(workspaceId, {
+        leadId: conversation.lead_id,
+        title: oppTitle.trim(),
+        pipelineId: oppPipelineId || undefined,
+        pipelineStageId: oppStageId || undefined,
+        assignedTo: oppOwnerId || undefined,
+        estimatedValue: parsedValue != null && Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : undefined,
+      });
+      setOppDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["opportunities", "lead", conversation.lead_id] });
+      toast.success(`${opportunityLabel} created`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `Unable to create this ${opportunityLabel.toLowerCase()}`);
+    } finally {
+      setCreatingOpp(false);
     }
   };
 
@@ -292,12 +364,46 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       </div>
 
       {(canCreateLead || canViewLead) && (
-        <div className="flex flex-wrap items-center gap-2 border-b bg-muted/20 p-2">
+        <div className="space-y-2 border-b bg-muted/20 p-2">
           {conversation.lead_id ? (
             <>
-              <Badge variant="secondary">Lead: {lead?.human_reference || "..."}</Badge>
-              {canViewLead && <Button size="sm" variant="ghost" onClick={() => goToLead(conversation.lead_id as string)}>View lead</Button>}
-              {canViewLead && <Button size="sm" variant="ghost" onClick={() => goToLead(conversation.lead_id as string, true)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button>}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant="secondary">Lead {lead?.human_reference || "..."}</Badge>
+                {lead && <Badge variant="secondary" className="capitalize">{lead.status}</Badge>}
+                {lead && lead.qualification_status !== "unqualified" && (
+                  <Badge variant="secondary">{qualificationStatusLabel(lead.qualification_status)}</Badge>
+                )}
+                {leadStageName && <Badge variant="outline">{leadStageName}</Badge>}
+                {ownerName && <Badge variant="outline">Owner: {ownerName}</Badge>}
+                {latestOpportunity && (
+                  <Badge variant="outline" className="capitalize">{opportunityLabel}: {latestOpportunity.status}</Badge>
+                )}
+                {lead?.status === "converted" && <Badge variant="secondary">Customer</Badge>}
+              </div>
+
+              {(learnedSummary || learnedIntake.length > 0) && (
+                <div className="rounded-md border bg-background p-2 text-xs">
+                  <p className="mb-1 font-medium text-muted-foreground">What we've learned</p>
+                  {learnedSummary && <p className="whitespace-pre-wrap">{learnedSummary}</p>}
+                  {learnedIntake.length > 0 && (
+                    <dl className="mt-1 grid grid-cols-[minmax(0,8rem)_1fr] gap-x-2 gap-y-0.5">
+                      {learnedIntake.map((r) => (
+                        <div key={r.key} className="contents">
+                          <dt className="truncate text-muted-foreground">{r.label}</dt>
+                          <dd className="min-w-0 break-words">{r.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-1.5">
+                {canViewLead && <Button size="sm" variant="ghost" className="h-7" onClick={() => goToLead(conversation.lead_id as string)}>Open lead</Button>}
+                {latestOpportunity
+                  ? canViewLead && <Button size="sm" variant="ghost" className="h-7" onClick={() => goToLead(conversation.lead_id as string, true)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button>
+                  : canCreateOpportunity && <Button size="sm" variant="outline" className="h-7" onClick={openOppDialog}><Briefcase className="mr-1.5 h-3.5 w-3.5" /> Create {opportunityLabel.toLowerCase()}</Button>}
+              </div>
             </>
           ) : canCreateLead ? (
             leadDuplicates ? (
@@ -312,6 +418,10 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
                     </div>
                   </div>
                 ))}
+                <label className="flex items-center gap-1.5 text-muted-foreground">
+                  <input type="checkbox" checked={copyContextOnLink} onChange={(e) => setCopyContextOnLink(e.target.checked)} />
+                  Also copy the AI summary &amp; any documents to that lead
+                </label>
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" className="h-7" onClick={() => setLeadDuplicates(null)}>Cancel</Button>
                   <Button size="sm" variant="outline" className="h-7" disabled={creatingLead} onClick={() => handleCreateLead(true)}>Create new anyway</Button>
@@ -455,6 +565,49 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           <AlertTriangle className="h-3.5 w-3.5" /> You have view-only access to this inbox.
         </div>
       )}
+
+      <Dialog open={oppDialogOpen} onOpenChange={setOppDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create {opportunityLabel.toLowerCase()} from this conversation</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Title</p>
+              <Input value={oppTitle} onChange={(e) => setOppTitle(e.target.value)} placeholder={`${opportunityLabel} title`} className="h-8 text-sm" />
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Pipeline</p>
+              <Select value={oppPipelineId} onValueChange={(v) => { setOppPipelineId(v); setOppStageId(""); }}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Default pipeline" /></SelectTrigger>
+                <SelectContent>{(pipelines || []).map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Stage</p>
+              <Select value={oppStageId} onValueChange={setOppStageId}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="First stage" /></SelectTrigger>
+                <SelectContent>{(oppStages || []).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Owner (optional)</p>
+              <Select value={oppOwnerId} onValueChange={setOppOwnerId}>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                <SelectContent>{(members || []).map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.profile?.full_name || "Unnamed"}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Estimated value (optional)</p>
+              <Input value={oppValue} onChange={(e) => setOppValue(e.target.value)} inputMode="decimal" placeholder="0.00" className="h-8 text-sm" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOppDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleCreateOpportunity} disabled={creatingOpp || !oppTitle.trim()}>Create {opportunityLabel.toLowerCase()}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

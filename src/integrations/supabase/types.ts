@@ -2476,6 +2476,93 @@ export type Database = {
           },
         ]
       }
+      lead_attachments: {
+        Row: {
+          conversation_id: string | null
+          created_at: string
+          id: string
+          lead_id: string
+          linked_by: string | null
+          media_filename: string | null
+          media_mime_type: string | null
+          media_size_bytes: number | null
+          message_id: string | null
+          received_at: string | null
+          source: string
+          storage_bucket: string
+          storage_path: string
+          workspace_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id: string
+          linked_by?: string | null
+          media_filename?: string | null
+          media_mime_type?: string | null
+          media_size_bytes?: number | null
+          message_id?: string | null
+          received_at?: string | null
+          source?: string
+          storage_bucket?: string
+          storage_path: string
+          workspace_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string
+          id?: string
+          lead_id?: string
+          linked_by?: string | null
+          media_filename?: string | null
+          media_mime_type?: string | null
+          media_size_bytes?: number | null
+          message_id?: string | null
+          received_at?: string | null
+          source?: string
+          storage_bucket?: string
+          storage_path?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_attachments_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_attachments_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_attachments_linked_by_fkey"
+            columns: ["linked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_attachments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           assigned_to: string | null
@@ -2489,6 +2576,7 @@ export type Database = {
           estimated_value: number | null
           human_reference: string
           id: string
+          intake: Json
           lost_at: string | null
           lost_reason: string | null
           phone: string | null
@@ -2517,6 +2605,7 @@ export type Database = {
           estimated_value?: number | null
           human_reference: string
           id?: string
+          intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
           phone?: string | null
@@ -2545,6 +2634,7 @@ export type Database = {
           estimated_value?: number | null
           human_reference?: string
           id?: string
+          intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
           phone?: string | null

@@ -15,12 +15,14 @@ import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, 
 import { normalizePhoneNumber } from "../_shared/phone.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 import type { EventType } from "../_shared/automations/taxonomy.ts";
+import { asIntakeRecord, resolveSummaryAndIntake, safeTypedLeadFields } from "../_shared/inbox/leadContext.ts";
 
 const VALID_ACTIONS = new Set([
   "check_duplicates",
   "create_from_conversation",
   "create_manual",
   "link_conversation",
+  "sign_lead_attachment",
   "assign",
   "set_qualification",
   "move_stage",
@@ -90,6 +92,76 @@ async function resolveDefaultPipelineFirstStage(sb: AnySupabaseClient, workspace
   return { pipelineId, stageId: stage?.id ?? null };
 }
 
+// --- Phase 2: conversation context -> CRM ----------------------------------
+//
+// The PURE rules live in _shared/inbox/leadContext.ts (unit tested). The
+// two DB helpers below wrap them. Nothing fabricates data, guesses an
+// ambiguous value into a typed column, or copies file bytes.
+
+/** Applies resolveSummaryAndIntake()'s decision to an EXISTING lead. */
+async function applyConversationContext(
+  sb: AnySupabaseClient,
+  lead: { id: string; summary: string | null; intake: unknown },
+  conversationAiSummary: string | null,
+  conversationIntake: Record<string, unknown>,
+  opts: { overwriteSummary?: boolean } = {},
+): Promise<{ summary_copied: boolean; summary_overwritten: boolean; summary_skipped: boolean; intake_new_keys: string[] }> {
+  const decision = resolveSummaryAndIntake(lead, conversationAiSummary, conversationIntake, opts);
+  if (Object.keys(decision.patch).length > 0) {
+    await sb.from("leads").update(decision.patch).eq("id", lead.id);
+  }
+  return {
+    summary_copied: decision.summary_copied,
+    summary_overwritten: decision.summary_overwritten,
+    summary_skipped: decision.summary_skipped,
+    intake_new_keys: decision.intake_new_keys,
+  };
+}
+
+/** Registers every inbound media object on the conversation against the
+ * lead. References the EXISTING stored object - no bytes copied, no
+ * re-upload. Idempotent: the (lead_id, storage_path) unique index absorbs
+ * a re-run / re-link silently. Returns how many NEW links were made. */
+async function linkConversationMediaToLead(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  leadId: string,
+  conversationId: string,
+  actorId: string,
+): Promise<number> {
+  const { data: mediaMessages } = await sb
+    .from("inbox_messages")
+    .select("id, media_storage_path, media_mime_type, media_filename, media_size_bytes, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("workspace_id", workspaceId)
+    .eq("direction", "inbound")
+    .not("media_storage_path", "is", null)
+    .order("created_at", { ascending: true });
+
+  let linked = 0;
+  for (const m of (mediaMessages || []) as Array<Record<string, unknown>>) {
+    const path = m.media_storage_path;
+    if (typeof path !== "string" || !path) continue;
+    const { error } = await sb.from("lead_attachments").insert({
+      workspace_id: workspaceId,
+      lead_id: leadId,
+      conversation_id: conversationId,
+      message_id: m.id,
+      storage_bucket: "inbox-media",
+      storage_path: path,
+      media_mime_type: (m.media_mime_type as string | null) ?? null,
+      media_filename: (m.media_filename as string | null) ?? null,
+      media_size_bytes: (m.media_size_bytes as number | null) ?? null,
+      source: "whatsapp_conversation",
+      received_at: (m.created_at as string | null) ?? null,
+      linked_by: actorId,
+    });
+    if (!error) linked++;
+    else if (error.code !== "23505") console.error("lead_attachments insert failed", error.message);
+  }
+  return linked;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -152,7 +224,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: conversation } = await serviceSb
       .from("inbox_conversations")
-      .select("id, workspace_id, display_name, phone_number, wa_id, lead_id")
+      .select("id, workspace_id, display_name, phone_number, wa_id, lead_id, ai_summary, intake_payload")
       .eq("id", conversationId)
       .eq("workspace_id", workspaceId)
       .maybeSingle();
@@ -169,12 +241,21 @@ Deno.serve(async (req: Request) => {
       if (duplicates.length > 0) return json(req, { duplicates, created: false });
     }
 
+    // Phase 2: carry the conversation's context onto the brand-new lead.
+    // Nothing is being overwritten (the lead does not exist yet), so the
+    // safe typed mapping runs against empty columns and the AI summary /
+    // intake are copied verbatim. Never fabricates a summary.
+    const conversationIntake = asIntakeRecord(conversation.intake_payload);
+    const aiSummary = typeof conversation.ai_summary === "string" && conversation.ai_summary.trim() ? conversation.ai_summary.trim().slice(0, 2000) : null;
+    const displayName = conversation.display_name || null;
+    const typed = safeTypedLeadFields(conversationIntake, { contact_name: displayName, email: null, company_name: null, estimated_value: null });
+
     const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
     const { data: lead, error: leadError } = await serviceSb
       .from("leads")
       .insert({
         workspace_id: workspaceId,
-        contact_name: conversation.display_name || null,
+        contact_name: displayName,
         phone: conversation.phone_number,
         phone_normalized: phoneNormalized,
         source: "whatsapp",
@@ -182,6 +263,9 @@ Deno.serve(async (req: Request) => {
         created_by: actorId,
         pipeline_id: defaultPlacement.pipelineId,
         pipeline_stage_id: defaultPlacement.stageId,
+        summary: aiSummary,
+        intake: conversationIntake,
+        ...typed.patch,
       })
       .select("*")
       .single();
@@ -189,11 +273,23 @@ Deno.serve(async (req: Request) => {
 
     await serviceSb.from("inbox_conversations").update({ lead_id: lead.id }).eq("id", conversationId);
     await backfillAttribution(serviceSb, "lead_id", lead.id, "conversation_id", conversationId);
-    await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, { source: "whatsapp", conversation_id: conversationId });
+    const attachmentsLinked = await linkConversationMediaToLead(serviceSb, workspaceId, lead.id, conversationId, actorId);
+    const intakeCopied = Object.keys(conversationIntake).length > 0;
+
+    await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, {
+      source: "whatsapp", conversation_id: conversationId,
+      summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typed.mapped, attachments_linked: attachmentsLinked,
+    });
     await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", lead.id, { conversation_id: conversationId });
+    if (intakeCopied) await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", lead.id, { conversation_id: conversationId, typed_fields_mapped: typed.mapped });
+    if (attachmentsLinked > 0) await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", lead.id, { conversation_id: conversationId, count: attachmentsLinked });
     await emitEvent("lead.created", "lead", lead.id, { entity_id: lead.id, source: "whatsapp", conversation_id: conversationId }, `lead.created:${lead.id}`);
 
-    return json(req, { lead, created: true });
+    return json(req, {
+      lead,
+      created: true,
+      context: { summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typed.mapped, attachments_linked: attachmentsLinked },
+    });
   }
 
   if (action === "create_manual") {
@@ -243,17 +339,66 @@ Deno.serve(async (req: Request) => {
     const conversationId = body.conversation_id;
     if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
     if (typeof conversationId !== "string" || !conversationId) return json(req, { error: "conversation_id is required" }, 400);
+    // Phase 2: default true - carrying context is non-destructive (empty
+    // summary filled, intake merged with existing keys winning, attachments
+    // are additive). overwrite_summary is the ONE opt-in that can replace a
+    // non-empty lead summary, and must be chosen explicitly by the user.
+    const applyContext = body.apply_context !== false;
+    const overwriteSummary = body.overwrite_summary === true;
 
-    const { data: lead } = await serviceSb.from("leads").select("id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    const { data: lead } = await serviceSb.from("leads").select("id, summary, intake").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
     if (!lead) return json(req, { error: "Lead not found" }, 404);
-    const { data: conversation } = await serviceSb.from("inbox_conversations").select("id").eq("id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+    const { data: conversation } = await serviceSb.from("inbox_conversations").select("id, ai_summary, intake_payload").eq("id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
     if (!conversation) return json(req, { error: "Conversation not found" }, 404);
 
     const { error } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to link this conversation" }, 500);
     await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
     await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
-    return json(req, { ok: true });
+
+    let context: Record<string, unknown> | null = null;
+    if (applyContext) {
+      const ctx = await applyConversationContext(
+        serviceSb,
+        lead as { id: string; summary: string | null; intake: unknown },
+        typeof conversation.ai_summary === "string" ? conversation.ai_summary : null,
+        asIntakeRecord(conversation.intake_payload),
+        { overwriteSummary },
+      );
+      const attachmentsLinked = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
+      context = { ...ctx, attachments_linked: attachmentsLinked };
+      if (ctx.summary_copied || ctx.summary_overwritten || ctx.intake_new_keys.length > 0) {
+        await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", leadId, {
+          conversation_id: conversationId, summary_overwritten: ctx.summary_overwritten, intake_new_keys: ctx.intake_new_keys,
+        });
+      }
+      if (attachmentsLinked > 0) {
+        await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", leadId, { conversation_id: conversationId, count: attachmentsLinked });
+      }
+    }
+
+    return json(req, { ok: true, context });
+  }
+
+  // Read-only: mint a short-lived signed URL for a lead attachment. The
+  // storage path never leaves the server; the attachment -> lead ->
+  // workspace chain is re-checked, and lead.view is required (a
+  // lead-viewer may not have inbox.view, so they cannot sign the
+  // inbox-media object themselves).
+  if (action === "sign_lead_attachment") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.view"))) return json(req, { error: "Forbidden" }, 403);
+    const attachmentId = body.attachment_id;
+    if (typeof attachmentId !== "string" || !attachmentId) return json(req, { error: "attachment_id is required" }, 400);
+    const { data: attachment } = await serviceSb
+      .from("lead_attachments")
+      .select("id, storage_bucket, storage_path")
+      .eq("id", attachmentId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!attachment) return json(req, { error: "Attachment not found" }, 404);
+    const { data: signed, error } = await serviceSb.storage.from(attachment.storage_bucket).createSignedUrl(attachment.storage_path, 300);
+    if (error || !signed?.signedUrl) return json(req, { error: "Unable to open this file" }, 502);
+    return json(req, { url: signed.signedUrl });
   }
 
   // --- assignment ------------------------------------------------------------

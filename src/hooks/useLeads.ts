@@ -66,6 +66,9 @@ export type LeadRow = {
   qualification_reason: string | null;
   estimated_value: number | null;
   summary: string | null;
+  // Phase 2: the originating conversation's intake_payload, preserved
+  // verbatim. A flat key/value bag today (Phase 3 adds a real schema).
+  intake: Record<string, unknown>;
   created_from_conversation_id: string | null;
   lost_reason: string | null;
   created_at: string;
@@ -75,7 +78,7 @@ export type LeadRow = {
 };
 
 const LEAD_COLUMNS =
-  "id, human_reference, contact_name, phone, email, company_name, source, source_detail, status, assigned_to, pipeline_id, pipeline_stage_id, qualification_status, qualification_notes, qualification_reason, estimated_value, summary, created_from_conversation_id, lost_reason, created_at, updated_at, converted_at, lost_at";
+  "id, human_reference, contact_name, phone, email, company_name, source, source_detail, status, assigned_to, pipeline_id, pipeline_stage_id, qualification_status, qualification_notes, qualification_reason, estimated_value, summary, intake, created_from_conversation_id, lost_reason, created_at, updated_at, converted_at, lost_at";
 
 export function useLeads(workspaceId: string | null) {
   const queryClient = useQueryClient();
@@ -116,4 +119,53 @@ export function useLead(leadId: string | null) {
     },
     enabled: !!leadId,
   });
+}
+
+// Phase 2: media a customer sent on WhatsApp, linked to the lead at
+// conversion. RLS restricts this to lead.view members of the lead's
+// workspace; the raw storage path is intentionally NOT selected (a
+// non-secret opaque key in a private bucket, and the file is opened via a
+// server-minted signed URL - see signLeadAttachment).
+export type LeadAttachmentRow = {
+  id: string;
+  lead_id: string;
+  conversation_id: string | null;
+  media_mime_type: string | null;
+  media_filename: string | null;
+  media_size_bytes: number | null;
+  source: string;
+  received_at: string | null;
+  created_at: string;
+};
+
+export function useLeadAttachments(leadId: string | null) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: ["lead-attachments", leadId],
+    queryFn: async (): Promise<LeadAttachmentRow[]> => {
+      const { data, error } = await supabase
+        .from("lead_attachments")
+        .select("id, lead_id, conversation_id, media_mime_type, media_filename, media_size_bytes, source, received_at, created_at")
+        .eq("lead_id", leadId as string)
+        .order("received_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data as LeadAttachmentRow[];
+    },
+    enabled: !!leadId,
+  });
+
+  useEffect(() => {
+    if (!leadId) return;
+    const channel = supabase
+      .channel(`lead-attachments-${leadId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lead_attachments", filter: `lead_id=eq.${leadId}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ["lead-attachments", leadId] });
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [leadId, queryClient]);
+
+  return query;
 }

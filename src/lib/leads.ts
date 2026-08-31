@@ -33,12 +33,24 @@ export function checkDuplicateLeads(workspaceId: string, params: { phone?: strin
   });
 }
 
+export type ConversationContextResult = {
+  summary_copied?: boolean;
+  summary_overwritten?: boolean;
+  summary_skipped?: boolean;
+  intake_copied?: boolean;
+  intake_new_keys?: string[];
+  typed_fields_mapped?: string[];
+  attachments_linked?: number;
+};
+
 export function createLeadFromConversation(workspaceId: string, conversationId: string, force = false) {
-  return runLeadsAction<{ lead?: unknown; created: boolean; already_linked?: boolean; duplicates?: DuplicateLeadCandidate[] }>(
-    workspaceId,
-    "create_from_conversation",
-    { conversation_id: conversationId, force },
-  );
+  return runLeadsAction<{
+    lead?: unknown;
+    created: boolean;
+    already_linked?: boolean;
+    duplicates?: DuplicateLeadCandidate[];
+    context?: ConversationContextResult;
+  }>(workspaceId, "create_from_conversation", { conversation_id: conversationId, force });
 }
 
 export function createLeadManual(workspaceId: string, params: {
@@ -56,8 +68,28 @@ export function createLeadManual(workspaceId: string, params: {
   });
 }
 
-export function linkLeadConversation(workspaceId: string, leadId: string, conversationId: string) {
-  return runLeadsAction<{ ok: true }>(workspaceId, "link_conversation", { lead_id: leadId, conversation_id: conversationId });
+export function linkLeadConversation(
+  workspaceId: string,
+  leadId: string,
+  conversationId: string,
+  opts: { applyContext?: boolean; overwriteSummary?: boolean } = {},
+) {
+  return runLeadsAction<{ ok: true; context: ConversationContextResult | null }>(workspaceId, "link_conversation", {
+    lead_id: leadId,
+    conversation_id: conversationId,
+    // Backend default is apply_context: true; only send the flag when the
+    // caller explicitly opts out, or opts in to overwriting the summary.
+    ...(opts.applyContext === false ? { apply_context: false } : {}),
+    ...(opts.overwriteSummary ? { overwrite_summary: true } : {}),
+  });
+}
+
+// Mint a short-lived signed URL for a lead attachment. The storage path is
+// resolved server-side (leads-actions re-checks the attachment -> lead ->
+// workspace chain and lead.view); the client only ever holds the signed
+// URL, never the raw path.
+export function signLeadAttachment(workspaceId: string, attachmentId: string) {
+  return runLeadsAction<{ url: string }>(workspaceId, "sign_lead_attachment", { attachment_id: attachmentId });
 }
 
 export function assignLead(workspaceId: string, leadId: string, staffId: string) {
