@@ -280,7 +280,13 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       }
       setLeadDuplicates(null);
       queryClient.invalidateQueries({ queryKey: ["inbox-conversations", workspaceId] });
-      toast.success(result.already_linked ? "This conversation already has a linked lead" : "Lead created");
+      toast.success(
+        result.created
+          ? "Lead created"
+          : result.completed_pending
+            ? "Finished setting up the lead from this conversation"
+            : "This conversation already has a linked lead",
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create a lead");
     } finally {

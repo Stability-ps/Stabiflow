@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { asIntakeRecord, deepMergePreferExisting, resolveSummaryAndIntake, safeTypedLeadFields } from "./leadContext.ts";
+import { asIntakeRecord, deepMergePreferExisting, resolveSummaryAndIntake, safeTypedLeadFields, sanitizeIntake, stableStringify } from "./leadContext.ts";
 
 // --- asIntakeRecord ---------------------------------------------------------
 
@@ -151,4 +151,69 @@ Deno.test("resolveSummaryAndIntake: a nested-only addition still produces patch.
   assertEquals(d.patch.intake, { company: { name: "A", industry: "Mining" } });
   assertEquals(d.intake_changed, true);
   assertEquals(d.intake_new_keys, []); // 'company' already existed at the top level
+});
+
+// --- F2: stableStringify depth cap (no stack overflow on deep intake) -----
+
+Deno.test("F2: stableStringify does not throw on a pathologically deep value", () => {
+  let deep: Record<string, unknown> = { leaf: 1 };
+  for (let i = 0; i < 5000; i++) deep = { n: deep };
+  // before the depth cap this recursed 5000 frames and threw RangeError
+  const s = stableStringify(deep);
+  assertEquals(typeof s, "string");
+});
+
+Deno.test("F2: resolveSummaryAndIntake survives a very deep existing intake and still detects a new top-level key", () => {
+  let deep: Record<string, unknown> = { leaf: "kept" };
+  for (let i = 0; i < 5000; i++) deep = { n: deep };
+  const d = resolveSummaryAndIntake({ summary: "s", intake: deep }, "s", { unrelated: "x" });
+  assertEquals(d.intake_changed, true);
+  assertEquals(d.intake_new_keys, ["unrelated"]);
+});
+
+Deno.test("F2: a shallow conversation intake against a 5000-deep existing => no change, no throw", () => {
+  let deep: Record<string, unknown> = { leaf: "kept" };
+  for (let i = 0; i < 5000; i++) deep = { n: deep };
+  const d = resolveSummaryAndIntake({ summary: "s", intake: deep }, "s", {});
+  assertEquals(d.intake_changed, false);
+  assertEquals(d.patch.intake, undefined);
+});
+
+// --- F3: prototype-pollution keys stripped on BOTH paths -----------------
+
+Deno.test("F3: sanitizeIntake strips __proto__ / constructor / prototype at every level and inside arrays", () => {
+  const raw = JSON.parse(
+    '{"__proto__":{"p":1},"constructor":{"c":1},"prototype":{"y":1},"legit":"v","nested":{"__proto__":{"q":1},"keep":2},"arr":[{"__proto__":{"r":1},"a":1},"scalar"]}',
+  );
+  const out = sanitizeIntake(raw);
+  assertEquals(out, { legit: "v", nested: { keep: 2 }, arr: [{ a: 1 }, "scalar"] });
+  // the global prototype was not polluted by parsing/merging
+  assertEquals(({} as Record<string, unknown>).p, undefined);
+});
+
+Deno.test("F3: deepMergePreferExisting drops a dangerous key even when it is only on the EXISTING side", () => {
+  const existing = JSON.parse('{"__proto__":{"bad":1},"ok":1}');
+  const merged = deepMergePreferExisting(existing, { extra: 2 }) as Record<string, unknown>;
+  assertEquals(Object.prototype.hasOwnProperty.call(merged, "__proto__"), false);
+  assertEquals(merged, { ok: 1, extra: 2 });
+});
+
+Deno.test("F3: resolveSummaryAndIntake never writes a __proto__ key back (existing had one)", () => {
+  const existing = JSON.parse('{"__proto__":{"bad":1},"urgency":"low"}');
+  const d = resolveSummaryAndIntake({ summary: "s", intake: existing }, "s", { region: "KZN" });
+  assertEquals(d.intake_changed, true);
+  assertEquals(Object.prototype.hasOwnProperty.call(d.patch.intake ?? {}, "__proto__"), false);
+  assertEquals(d.patch.intake, { urgency: "low", region: "KZN" });
+});
+
+// --- F6: estimated_value magnitude cap ---------------------------------
+
+const EMPTY_TYPED = { contact_name: null, email: null, company_name: null, estimated_value: null };
+
+Deno.test("F6: estimated_value >= 1e12 (numeric(14,2) overflow) is NOT mapped", () => {
+  assertEquals(safeTypedLeadFields({ estimated_value: 1e13 }, EMPTY_TYPED).patch.estimated_value, undefined);
+  assertEquals(safeTypedLeadFields({ estimated_value: 1e12 }, EMPTY_TYPED).patch.estimated_value, undefined);
+  // the largest value numeric(14,2) can hold is still mapped
+  assertEquals(safeTypedLeadFields({ estimated_value: 999999999999.99 }, EMPTY_TYPED).patch.estimated_value, 999999999999.99);
+  assertEquals(safeTypedLeadFields({ estimated_value: 25000 }, EMPTY_TYPED).patch.estimated_value, 25000);
 });

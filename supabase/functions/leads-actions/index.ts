@@ -15,7 +15,9 @@ import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, 
 import { normalizePhoneNumber } from "../_shared/phone.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 import type { EventType } from "../_shared/automations/taxonomy.ts";
-import { asIntakeRecord, resolveSummaryAndIntake, safeTypedLeadFields } from "../_shared/inbox/leadContext.ts";
+import { resolveSummaryAndIntake, safeTypedLeadFields, sanitizeIntake } from "../_shared/inbox/leadContext.ts";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const VALID_ACTIONS = new Set([
   "check_duplicates",
@@ -99,13 +101,23 @@ async function resolveDefaultPipelineFirstStage(sb: AnySupabaseClient, workspace
 // two DB helpers below wrap them. Nothing fabricates data, guesses an
 // ambiguous value into a typed column, or copies file bytes.
 
-/** First path segment of an inbox-media object key, if it is a UUID -
- * mirrors public.inbox_storage_path_workspace_id() so sign_lead_attachment
- * can re-tie a stored path to a workspace before signing with the service
- * role (which bypasses storage RLS). */
+/** First path segment of an inbox-media object key, normalized to a
+ * canonical lowercase UUID - mirrors public.inbox_storage_path_workspace_id()
+ * so sign_lead_attachment can re-tie a stored path to a workspace before
+ * signing with the service role (which bypasses storage RLS).
+ *
+ * F7: also accepts the hyphenless 32-hex form (Postgres `::uuid` does), so
+ * the signer's accept set is a superset-safe match for the trigger's - the
+ * signer never rejects a path the trigger already tied to this workspace.
+ * Exotic uuid text forms (braces, urn:) are intentionally NOT mirrored:
+ * they cannot appear in an inbox-media object key the webhook wrote. */
 function deriveWorkspaceFromInboxPath(path: unknown): string | null {
-  const first = typeof path === "string" ? path.split("/")[0] : "";
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(first) ? first.toLowerCase() : null;
+  const first = typeof path === "string" ? path.split("/")[0].toLowerCase() : "";
+  if (UUID_RE.test(first)) return first;
+  if (/^[0-9a-f]{32}$/.test(first)) {
+    return `${first.slice(0, 8)}-${first.slice(8, 12)}-${first.slice(12, 16)}-${first.slice(16, 20)}-${first.slice(20)}`;
+  }
+  return null;
 }
 
 /** Applies resolveSummaryAndIntake()'s decision to an EXISTING lead.
@@ -249,7 +261,12 @@ Deno.serve(async (req: Request) => {
   if (action === "check_duplicates") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.view"))) return json(req, { error: "Forbidden" }, 403);
     const phoneNormalized = normalizePhoneNumber(typeof body.phone === "string" ? body.phone : null);
-    const conversationId = typeof body.conversation_id === "string" ? body.conversation_id : null;
+    // F5: conversation_id is interpolated into a PostgREST .or() filter in
+    // findDuplicateLeads - it must be a UUID, never a caller-crafted filter
+    // fragment.
+    const rawConversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
+    if (rawConversationId && !UUID_RE.test(rawConversationId)) return json(req, { error: "conversation_id must be a valid id" }, 400);
+    const conversationId = rawConversationId || null;
     const candidates = await findDuplicateLeads(serviceSb, workspaceId, phoneNormalized, conversationId);
     return json(req, { candidates });
   }
@@ -277,7 +294,10 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (!conversation) return json(req, { error: "Conversation not found" }, 404);
 
-    const conversationIntake = asIntakeRecord(conversation.intake_payload);
+    // F3: sanitize prototype-pollution keys once, here, so BOTH the initial
+    // insert (intake: conversationIntake) and the merge path store the same
+    // safe shape.
+    const conversationIntake = sanitizeIntake(conversation.intake_payload);
     const aiSummary = typeof conversation.ai_summary === "string" && conversation.ai_summary.trim() ? conversation.ai_summary.trim().slice(0, 2000) : null;
     const phoneNormalized = normalizePhoneNumber(conversation.phone_number);
 
@@ -408,7 +428,12 @@ Deno.serve(async (req: Request) => {
     return json(req, {
       lead,
       created,
+      // already_linked: the conversation already pointed at this lead on
+      // entry (nothing to do link-wise). completed_pending: this call
+      // finished a link a prior partial conversion had left undone (F9) -
+      // distinct from a fresh create so the UI can word it correctly.
       already_linked: !created && !linkedThisCall,
+      completed_pending: !created && linkedThisCall,
       context: {
         summary_copied: created ? !!aiSummary : ctx.summary_copied,
         summary_overwritten: ctx.summary_overwritten,
@@ -511,7 +536,7 @@ Deno.serve(async (req: Request) => {
         serviceSb,
         lead as { id: string; summary: string | null; intake: unknown },
         typeof conversation.ai_summary === "string" ? conversation.ai_summary : null,
-        asIntakeRecord(conversation.intake_payload),
+        sanitizeIntake(conversation.intake_payload), // F3
         { overwriteSummary },
       );
       if (ctx.error) return json(req, { error: "Linked the conversation, but copying its details didn't finish. Try again to complete." }, 500);
@@ -560,6 +585,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (!attachment) return json(req, { error: "Attachment not found" }, 404);
 
+    // F8: the bucket / path->workspace / message-media checks below are
+    // belt-and-suspenders - the CHECK constraint pins storage_bucket and
+    // the lead_attachments_validate_workspace trigger already blocks any
+    // row whose path resolves elsewhere or disagrees with its source
+    // message (INSERT *and* UPDATE, even from service-role code). They are
+    // kept so a signed URL is never minted from a row that a future schema
+    // change, a manual patch, or a post-link message mutation slipped past.
     if (attachment.storage_bucket !== "inbox-media") return json(req, { error: "Attachment not found" }, 404);
     const pathWorkspace = deriveWorkspaceFromInboxPath(attachment.storage_path);
     if (!pathWorkspace || pathWorkspace !== workspaceId.toLowerCase()) return json(req, { error: "Attachment not found" }, 404);
@@ -722,6 +754,18 @@ Deno.serve(async (req: Request) => {
     const { data: lead } = await serviceSb.from("leads").select("id, pipeline_id, pipeline_stage_id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
     if (!lead) return json(req, { error: "Lead not found" }, 404);
 
+    // F4: validate CALLER-SUPPLIED pipeline / stage / owner against this
+    // workspace up front and return a clean 400 - do not let a cross-
+    // workspace id fall through to the DB trigger and surface as a 500.
+    // (Values derived from `lead` are already workspace-trusted.)
+    const bodyAssignedTo = typeof body.assigned_to === "string" ? body.assigned_to : null;
+    if (bodyAssignedTo && !(await isWorkspaceMember(serviceSb, workspaceId, bodyAssignedTo))) {
+      return json(req, { error: "That person is not a member of this workspace" }, 400);
+    }
+    if (typeof body.pipeline_id === "string") {
+      const { data: p } = await serviceSb.from("pipelines").select("id").eq("id", body.pipeline_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (!p) return json(req, { error: "That pipeline does not belong to this workspace" }, 400);
+    }
     let pipelineId = typeof body.pipeline_id === "string" ? body.pipeline_id : lead.pipeline_id;
     let pipelineStageId = typeof body.pipeline_stage_id === "string" ? body.pipeline_stage_id : (pipelineId === lead.pipeline_id ? lead.pipeline_stage_id : null);
 
@@ -729,6 +773,14 @@ Deno.serve(async (req: Request) => {
       const { data: defaultPipeline } = await serviceSb.from("pipelines").select("id").eq("workspace_id", workspaceId).eq("is_default", true).maybeSingle();
       pipelineId = defaultPipeline?.id ?? null;
       pipelineStageId = null;
+    }
+    if (typeof body.pipeline_stage_id === "string") {
+      const { data: s } = await serviceSb
+        .from("pipeline_stages").select("id")
+        .eq("id", body.pipeline_stage_id).eq("workspace_id", workspaceId)
+        .eq("pipeline_id", pipelineId ?? "00000000-0000-0000-0000-000000000000")
+        .maybeSingle();
+      if (!s) return json(req, { error: "That stage does not belong to this workspace/pipeline" }, 400);
     }
 
     const { data: opportunity, error } = await serviceSb

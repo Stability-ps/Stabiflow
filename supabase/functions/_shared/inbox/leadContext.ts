@@ -13,6 +13,8 @@
 //     with no clear currency is NOT unambiguous
 
 export const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+// leads.estimated_value is numeric(14,2): max 999_999_999_999.99 (< 1e12).
+const MAX_ESTIMATED_VALUE = 1e12;
 
 export function asIntakeRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
@@ -27,6 +29,9 @@ export function asIntakeRecord(value: unknown): Record<string, unknown> {
 
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 const MAX_MERGE_DEPTH = 8;
+// F2: comfortably above MAX_MERGE_DEPTH and any realistic intake, so a
+// pathologically deep stored intake can never blow the stack here.
+const STRINGIFY_MAX_DEPTH = 40;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -40,7 +45,11 @@ export function deepMergePreferExisting(existing: unknown, incoming: unknown, de
     // back to the conversation value when the lead key is genuinely absent.
     return existing === undefined ? incoming : existing;
   }
-  const out: Record<string, unknown> = { ...existing };
+  // F3: never carry a prototype-pollution key forward from EITHER side.
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(existing)) {
+    if (!DANGEROUS_KEYS.has(key)) out[key] = existing[key];
+  }
   for (const key of Object.keys(incoming)) {
     if (DANGEROUS_KEYS.has(key)) continue;
     if (!(key in out)) {
@@ -53,13 +62,43 @@ export function deepMergePreferExisting(existing: unknown, incoming: unknown, de
   return out;
 }
 
-/** Order-insensitive structural stringify, for cheap deep-equality. */
-export function stableStringify(value: unknown): string {
+/** F3: recursively strip prototype-pollution keys from a plain-object /
+ * array structure so BOTH the initial conversion copy and the merge path
+ * store the same sanitized shape. Non-plain objects are dropped to `null`.
+ * Depth-capped: past the cap a subtree is passed through untouched (it is
+ * already jsonb-round-tripped data, and the cap is far beyond real intake). */
+export function sanitizeIntakeValue(value: unknown, depth = 0): unknown {
+  if (depth >= STRINGIFY_MAX_DEPTH) return value;
+  if (Array.isArray(value)) return value.map((v) => sanitizeIntakeValue(v, depth + 1));
+  if (value !== null && typeof value === "object") {
+    if (!isPlainObject(value)) return null;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(value)) {
+      if (DANGEROUS_KEYS.has(key)) continue;
+      out[key] = sanitizeIntakeValue((value as Record<string, unknown>)[key], depth + 1);
+    }
+    return out;
+  }
+  return value;
+}
+
+/** asIntakeRecord + F3 sanitization - the single entry point for turning a
+ * conversation's raw intake_payload into something safe to store/merge. */
+export function sanitizeIntake(value: unknown): Record<string, unknown> {
+  return sanitizeIntakeValue(asIntakeRecord(value)) as Record<string, unknown>;
+}
+
+/** Order-insensitive structural stringify, for cheap deep-equality.
+ * F2: depth-capped - past the cap two subtrees compare equal (a change
+ * that deep is impossible: deepMergePreferExisting stops recursing at
+ * MAX_MERGE_DEPTH and keeps the existing reference below it). */
+export function stableStringify(value: unknown, depth = 0): string {
+  if (depth >= STRINGIFY_MAX_DEPTH) return '"[deep]"';
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  if (Array.isArray(value)) return `[${value.map((v) => stableStringify(v, depth + 1)).join(",")}]`;
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(",")}}`;
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k], depth + 1)}`).join(",")}}`;
 }
 
 export type ExistingTypedLeadFields = {
@@ -94,8 +133,10 @@ export function safeTypedLeadFields(
     // Strict on purpose: only a key literally named estimated_value that is
     // already a finite non-negative number. "budget"/"amount" are NOT
     // mapped - currency & units are ambiguous, guessing corrupts revenue.
+    // F6: also bounded to what leads.estimated_value numeric(14,2) holds -
+    // a larger value would overflow and 500 the whole conversion.
     const ev = intake.estimated_value;
-    if (typeof ev === "number" && Number.isFinite(ev) && ev >= 0) { patch.estimated_value = ev; mapped.push("estimated_value"); }
+    if (typeof ev === "number" && Number.isFinite(ev) && ev >= 0 && ev < MAX_ESTIMATED_VALUE) { patch.estimated_value = ev; mapped.push("estimated_value"); }
   }
   return { patch, mapped };
 }

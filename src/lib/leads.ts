@@ -5,7 +5,9 @@ async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T
   if (error) {
     // Surface the edge function's curated { error } body (403/404/409/…),
     // not the generic "non-2xx status code". supabase-js exposes the raw
-    // Response on error.context for non-2xx invocations.
+    // Response on error.context for non-2xx invocations. (F10: this applies
+    // to every leads-actions call, by design - all of them return curated
+    // { error } bodies; the fallback to error.message is unchanged.)
     let message = (data as { error?: string } | null)?.error || "";
     const ctx = (error as { context?: unknown }).context;
     if (!message && ctx && typeof (ctx as Response).clone === "function") {
@@ -60,6 +62,9 @@ export function createLeadFromConversation(workspaceId: string, conversationId: 
     lead?: unknown;
     created: boolean;
     already_linked?: boolean;
+    // F9: this call finished a link that a prior partial conversion left
+    // undone - not a fresh create and not a no-op.
+    completed_pending?: boolean;
     duplicates?: DuplicateLeadCandidate[];
     context?: ConversationContextResult;
   }>(workspaceId, "create_from_conversation", { conversation_id: conversationId, force });

@@ -12,7 +12,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
-import { seedLead } from "./leadsHelpers";
+import { seedLead, seedPipeline } from "./leadsHelpers";
 
 const ACTIONS_URL = `${SUPABASE_URL}/functions/v1/leads-actions`;
 
@@ -320,10 +320,11 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
     expect(attr!.every((a) => a.lead_id === leadA.id)).toBe(true);
   });
 
-  it("M2 (concurrent): two simultaneous link_conversation calls to two DIFFERENT leads - exactly one wins, the other gets 409", async () => {
+  it("M2 (concurrent): two simultaneous link_conversation calls to two DIFFERENT leads - exactly one wins; the loser gets NO attachments / attribution / linked-conversation activity", async () => {
     const leadA = await seedLead(ws.workspaceId, {});
     const leadB = await seedLead(ws.workspaceId, {});
-    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230031", wa_id: "27831230031" });
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230031", wa_id: "27831230031", ai_summary: "raced link" });
+    await seedMediaMessage(ws.workspaceId, conv.id, "raced-link.pdf");
     await admin.from("attribution_events").insert({
       workspace_id: ws.workspaceId, conversation_id: conv.id, event_type: "touchpoint", platform: "meta",
       occurred_at: new Date().toISOString(), source_type: "paid", attribution_method: "deterministic", attribution_confidence: "exact",
@@ -333,16 +334,26 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
       call(ownerToken, { workspace_id: ws.workspaceId, action: "link_conversation", lead_id: leadA.id, conversation_id: conv.id }),
       call(ownerToken, { workspace_id: ws.workspaceId, action: "link_conversation", lead_id: leadB.id, conversation_id: conv.id }),
     ]);
-    const statuses = [rA.status, rB.status].sort();
-    expect(statuses).toEqual([200, 409]);
+    expect([rA.status, rB.status].sort()).toEqual([200, 409]);
 
     const { data: convAfter } = await admin.from("inbox_conversations").select("lead_id").eq("id", conv.id).single();
     const winner = convAfter!.lead_id;
     expect([leadA.id, leadB.id]).toContain(winner);
     const loser = winner === leadA.id ? leadB.id : leadA.id;
+
+    // conversation.lead_id == attribution.lead_id == the one winner
     const { data: attr } = await admin.from("attribution_events").select("lead_id").eq("conversation_id", conv.id);
     expect(attr!.every((a) => a.lead_id === winner)).toBe(true);
     expect(attr!.some((a) => a.lead_id === loser)).toBe(false);
+
+    // the loser lead received nothing
+    const { count: loserAtts } = await admin.from("lead_attachments").select("id", { count: "exact", head: true }).eq("lead_id", loser);
+    expect(loserAtts).toBe(0);
+    const { data: loserLog } = await admin.from("workspace_activity_log").select("action").eq("workspace_id", ws.workspaceId).eq("target_id", loser);
+    expect((loserLog ?? []).map((l) => l.action)).not.toContain("lead_linked_conversation");
+    // the winner has the attachment exactly once
+    const { count: winnerAtts } = await admin.from("lead_attachments").select("id", { count: "exact", head: true }).eq("lead_id", winner);
+    expect(winnerAtts).toBe(1);
   });
 
   // ---- M1: concurrent conversion -----------------------------------
@@ -507,6 +518,10 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
     const retry = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
     expect(retry.status).toBe(200);
     expect(retry.body.created).toBe(false); // NOT a second creation
+    // the link itself landed on the first call (media failed AFTER it), so
+    // the retry heals only the attachment.
+    expect(retry.body.already_linked).toBe(true);
+    expect(retry.body.completed_pending).toBe(false);
     expect(retry.body.context.attachments_linked).toBe(1);
 
     const { data: leadsAfter } = await admin.from("leads").select("id").eq("created_from_conversation_id", conv.id);
@@ -678,5 +693,138 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
       urgency: "low",
       region: "KZN",
     });
+  });
+
+  // ---- F3: prototype-pollution keys never reach leads.intake ------------
+
+  it("F3: a conversation intake_payload carrying __proto__ / constructor is stored WITHOUT those keys, on both the create and link paths", async () => {
+    const poisoned = JSON.parse('{"__proto__":{"polluted":true},"constructor":{"bad":1},"legit":"value","nested":{"__proto__":{"x":1},"keep":2}}');
+
+    // create path
+    const convA = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230100", wa_id: "27831230100", intake_payload: poisoned });
+    const created = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: convA.id });
+    expect(created.status).toBe(200);
+    const { data: leadA } = await admin.from("leads").select("intake").eq("id", created.body.lead.id).single();
+    expect(Object.prototype.hasOwnProperty.call(leadA!.intake, "__proto__")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(leadA!.intake, "constructor")).toBe(false);
+    expect(leadA!.intake).toEqual({ legit: "value", nested: { keep: 2 } });
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+
+    // link path
+    const leadRow = await seedLead(ws.workspaceId, { intake: { existing: "kept" } });
+    const convB = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230101", wa_id: "27831230101", intake_payload: poisoned });
+    const linked = await call(ownerToken, { workspace_id: ws.workspaceId, action: "link_conversation", lead_id: leadRow.id, conversation_id: convB.id });
+    expect(linked.status).toBe(200);
+    const { data: leadB } = await admin.from("leads").select("intake").eq("id", leadRow.id).single();
+    expect(Object.prototype.hasOwnProperty.call(leadB!.intake, "__proto__")).toBe(false);
+    expect(leadB!.intake).toEqual({ existing: "kept", legit: "value", nested: { keep: 2 } });
+  });
+
+  // ---- F4: create_opportunity validates caller-supplied ids up front ---
+
+  it("F4: create_opportunity returns 400 (not 500) for a cross-workspace pipeline_id / stage_id / assigned_to; a same-workspace pipeline still works", async () => {
+    const lead = await seedLead(ws.workspaceId, {});
+    const foreign = await seedPipeline(other.workspaceId, { stageNames: ["New"] });
+
+    const badPipeline = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_opportunity", lead_id: lead.id, title: "x", pipeline_id: foreign.pipelineId });
+    expect(badPipeline.status).toBe(400);
+    expect(String(badPipeline.body.error)).toMatch(/pipeline/i);
+
+    const badStage = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_opportunity", lead_id: lead.id, title: "x", pipeline_stage_id: foreign.stages[0].id });
+    expect(badStage.status).toBe(400);
+
+    const badOwner = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_opportunity", lead_id: lead.id, title: "x", assigned_to: other.userId });
+    expect(badOwner.status).toBe(400);
+
+    const local = await seedPipeline(ws.workspaceId, { stageNames: ["New", "Won"] });
+    const ok = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_opportunity", lead_id: lead.id, title: "good", pipeline_id: local.pipelineId, pipeline_stage_id: local.stages[0].id });
+    expect(ok.status).toBe(200);
+    expect(ok.body.opportunity.pipeline_id).toBe(local.pipelineId);
+    // no cross-workspace opportunity was created
+    const { count } = await admin.from("opportunities").select("id", { count: "exact", head: true }).eq("lead_id", lead.id);
+    expect(count).toBe(1);
+  });
+
+  // ---- F5: check_duplicates rejects a non-UUID conversation_id ---------
+
+  it("F5: check_duplicates rejects a crafted conversation_id and still accepts a valid one", async () => {
+    const bad = await call(ownerToken, { workspace_id: ws.workspaceId, action: "check_duplicates", conversation_id: "00000000-0000-0000-0000-000000000000,status.eq.converted" });
+    expect(bad.status).toBe(400);
+    expect(String(bad.body.error)).toMatch(/valid id/i);
+
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230110", wa_id: "27831230110" });
+    const good = await call(ownerToken, { workspace_id: ws.workspaceId, action: "check_duplicates", conversation_id: conv.id });
+    expect(good.status).toBe(200);
+    expect(Array.isArray(good.body.candidates)).toBe(true);
+  });
+
+  // ---- F7: signer accepts the same path forms the trigger ties to a ws -
+
+  it("F7: sign_lead_attachment accepts a hyphenless-32-hex workspace path prefix (the trigger accepts it; the signer must not reject it)", async () => {
+    const lead = await seedLead(ws.workspaceId, {});
+    const hyphenless = ws.workspaceId.replace(/-/g, "");
+    const path = `${hyphenless}/probe/${Date.now()}-f7.pdf`;
+    await admin.storage.from("inbox-media").upload(path, new Blob([new Uint8Array([9])], { type: "application/pdf" }), { contentType: "application/pdf", upsert: true });
+    // service-role insert: the M3 trigger accepts this because Postgres ::uuid
+    // normalizes the 32-hex prefix to this workspace's id.
+    const { data: att, error } = await admin.from("lead_attachments").insert({
+      workspace_id: ws.workspaceId, lead_id: lead.id,
+      storage_bucket: "inbox-media", storage_path: path, source: "whatsapp_conversation",
+    }).select("id").single();
+    expect(error).toBeNull();
+
+    const signed = await call(ownerToken, { workspace_id: ws.workspaceId, action: "sign_lead_attachment", attachment_id: att!.id });
+    expect(signed.status).toBe(200);
+    expect(String(signed.body.url)).toContain("/storage/v1/object/sign/inbox-media/");
+  });
+
+  // ---- F8: signer's belt-and-suspenders message-path check is reachable -
+
+  it("F8: if a linked message's media_storage_path is mutated after linking, the signer refuses (defensive re-check)", async () => {
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230120", wa_id: "27831230120" });
+    const m = await seedMediaMessage(ws.workspaceId, conv.id, "f8.pdf");
+    const created = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    const { data: att } = await admin.from("lead_attachments").select("id").eq("lead_id", created.body.lead.id).single();
+
+    // healthy first
+    expect((await call(ownerToken, { workspace_id: ws.workspaceId, action: "sign_lead_attachment", attachment_id: att!.id })).status).toBe(200);
+
+    // mutate the source message's media path (still a valid in-workspace path)
+    const movedPath = `${ws.workspaceId}/${conv.id}/${Date.now()}-moved.pdf`;
+    await admin.from("inbox_messages").update({ media_storage_path: movedPath }).eq("id", m.id);
+
+    const signed = await call(ownerToken, { workspace_id: ws.workspaceId, action: "sign_lead_attachment", attachment_id: att!.id });
+    expect(signed.status).toBe(404);
+  });
+
+  // ---- F9: completed_pending distinguishes a heal-retry from a no-op ---
+
+  it("F9: response distinguishes fresh create / no-op re-run / completed-pending link", async () => {
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230130", wa_id: "27831230130", ai_summary: "done" });
+
+    // fresh create
+    const first = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(first.body.created).toBe(true);
+    expect(first.body.completed_pending).toBe(false);
+    expect(first.body.already_linked).toBe(false);
+
+    // no-op re-run of a fully-linked conversation
+    const again = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(again.body.created).toBe(false);
+    expect(again.body.already_linked).toBe(true);
+    expect(again.body.completed_pending).toBe(false);
+
+    // simulate a prior partial conversion: lead exists (via
+    // created_from_conversation_id) but the conversation is not linked.
+    await admin.from("inbox_conversations").update({ lead_id: null }).eq("id", conv.id);
+    const healed = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(healed.status).toBe(200);
+    expect(healed.body.created).toBe(false); // no second lead
+    expect(healed.body.completed_pending).toBe(true); // F9: this call finished the pending link
+    expect(healed.body.already_linked).toBe(false);
+    const { data: leads } = await admin.from("leads").select("id").eq("created_from_conversation_id", conv.id);
+    expect(leads).toHaveLength(1);
+    const { data: convAfter } = await admin.from("inbox_conversations").select("lead_id").eq("id", conv.id).single();
+    expect(convAfter!.lead_id).toBe(leads![0].id);
   });
 });
