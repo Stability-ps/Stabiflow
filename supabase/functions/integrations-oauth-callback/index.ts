@@ -26,7 +26,7 @@ import { sanitizeIntegrationError } from "../_shared/integration-providers/metaG
 import { exchangeCodeForShortLivedToken, exchangeForLongLivedToken } from "../_shared/integration-providers/metaOAuth.ts";
 import { isOauthStateValid } from "../_shared/integration-providers/oauthState.ts";
 import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
-import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
+import { createServiceClient, envVar, optionalEnvVar } from "../_shared/contentAuth.ts";
 import { redirectToApp } from "./redirectToApp.ts";
 
 // deno-lint-ignore no-explicit-any
@@ -139,11 +139,12 @@ Deno.serve(async (req: Request) => {
 
     const apiVersion = envVar("INTEGRATIONS_META_GRAPH_API_VERSION");
     const cred = { token: accessToken, apiVersion };
+    const metaAppId = optionalEnvVar("INTEGRATIONS_META_APP_ID");
 
     const summary =
       provider === "meta"
         ? await discoverAndStoreMetaResources(serviceSb, workspaceId, integrationRow.id, cred, mockMode)
-        : await discoverAndStoreWhatsAppResources(serviceSb, workspaceId, integrationRow.id, cred, mockMode);
+        : await discoverAndStoreWhatsAppResources(serviceSb, workspaceId, integrationRow.id, cred, mockMode, metaAppId);
 
     await serviceSb.from("workspace_activity_log").insert({
       workspace_id: workspaceId,

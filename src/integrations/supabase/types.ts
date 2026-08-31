@@ -3396,6 +3396,9 @@ export type Database = {
           token_expires_at: string | null
           updated_at: string
           vault_secret_id: string | null
+          webhook_subscription_checked_at: string | null
+          webhook_subscription_detail: string | null
+          webhook_subscription_status: string | null
           workspace_id: string
         }
         Insert: {
@@ -3413,6 +3416,9 @@ export type Database = {
           token_expires_at?: string | null
           updated_at?: string
           vault_secret_id?: string | null
+          webhook_subscription_checked_at?: string | null
+          webhook_subscription_detail?: string | null
+          webhook_subscription_status?: string | null
           workspace_id: string
         }
         Update: {
@@ -3430,6 +3436,9 @@ export type Database = {
           token_expires_at?: string | null
           updated_at?: string
           vault_secret_id?: string | null
+          webhook_subscription_checked_at?: string | null
+          webhook_subscription_detail?: string | null
+          webhook_subscription_status?: string | null
           workspace_id?: string
         }
         Relationships: [

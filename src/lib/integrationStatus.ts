@@ -26,6 +26,52 @@ export function presentIntegrationStatus(status: string | null, connected: boole
   return { label: "Connected", tone: "neutral", remediation: null };
 }
 
+// WhatsApp webhook subscription state (workspace_integrations
+// .webhook_subscription_status, written by discoverAndStoreWhatsAppResources
+// / integrations-connection-health). `hasRecentEvents` lets a workspace
+// that is verifiably RECEIVING inbound events read as healthy even when the
+// stored status is still 'unknown' (e.g. it connected before this feature
+// shipped) - real delivery beats a stale flag.
+export type WebhookSubscriptionPresentation = {
+  label: string;
+  tone: IntegrationTone;
+  hint: string | null;
+  /** true when the user should be nudged to run "Repair subscription". */
+  actionable: boolean;
+};
+
+export function presentWebhookSubscription(status: string | null, hasRecentEvents: boolean): WebhookSubscriptionPresentation {
+  if (status === "subscribed") {
+    return { label: "Subscribed", tone: "healthy", hint: "Inbound messages will be delivered to StabiFlow.", actionable: false };
+  }
+  if (status === "not_subscribed") {
+    return {
+      label: "Not subscribed",
+      tone: "attention",
+      hint: "This WhatsApp Business Account is not subscribed to StabiFlow's webhook - inbound messages will not arrive until it is.",
+      actionable: true,
+    };
+  }
+  if (status === "error") {
+    return {
+      label: "Check failed",
+      tone: "error",
+      hint: "StabiFlow could not confirm the webhook subscription with Meta. Try \"Repair subscription\".",
+      actionable: true,
+    };
+  }
+  // 'unknown' / null
+  if (hasRecentEvents) {
+    return { label: "Receiving events", tone: "healthy", hint: "Inbound webhook events are arriving.", actionable: false };
+  }
+  return {
+    label: "Unknown",
+    tone: "neutral",
+    hint: "StabiFlow has not confirmed the webhook subscription yet. Run \"Repair subscription\" or check connection.",
+    actionable: true,
+  };
+}
+
 export function toneClassName(tone: IntegrationTone): string {
   switch (tone) {
     case "healthy":

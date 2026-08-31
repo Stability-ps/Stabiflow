@@ -1,11 +1,15 @@
-import type { ReactNode } from "react";
-import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
-import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
+import { repairWhatsAppWebhookSubscription } from "@/lib/integrations";
+import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
 import { WhatsAppManagePanel } from "@/pages/dashboard/integrations/WhatsAppManagePanel";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
 
@@ -40,9 +44,29 @@ export default function WhatsAppSettings() {
   const canManage = roleHasPermission(role, "integration.manage");
   const canDisconnect = roleHasPermission(role, "integration.disconnect");
 
+  const queryClient = useQueryClient();
   const { data: lastEvent } = useLastWhatsAppWebhookEvent(workspaceId);
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
   const wabaId = numbers.find((n) => n.waba_id)?.waba_id ?? null;
+
+  const webhook = presentWebhookSubscription(integration.webhook_subscription_status, !!lastEvent);
+  const [repairing, setRepairing] = useState(false);
+  const handleRepair = async () => {
+    setRepairing(true);
+    try {
+      const result = await repairWhatsAppWebhookSubscription(workspaceId);
+      await queryClient.invalidateQueries({ queryKey: ["workspace-integrations", workspaceId] });
+      if (result.webhookSubscription.status === "subscribed") {
+        toast.success("Webhook subscription repaired - inbound messages will now be delivered.");
+      } else {
+        toast.error(result.webhookSubscription.detail || "Could not confirm the webhook subscription.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to repair the webhook subscription");
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -79,13 +103,25 @@ export default function WhatsAppSettings() {
             {lastEvent ? <span>{lastEvent.event_type} · {relativeTime(lastEvent.received_at)}</span> : <span className="text-muted-foreground">No inbound events received yet</span>}
           </Row>
           <Row label="Webhook subscription">
-            <span className="text-muted-foreground">Status unavailable</span>
+            <span className="inline-flex flex-wrap items-center justify-end gap-2">
+              <Badge className={toneClassName(webhook.tone)}>{webhook.label}</Badge>
+              {integration.webhook_subscription_checked_at && (
+                <span className="text-xs text-muted-foreground">checked {relativeTime(integration.webhook_subscription_checked_at)}</span>
+              )}
+              {canManage && (
+                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={handleRepair} disabled={repairing}>
+                  {repairing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                  {webhook.actionable ? "Subscribe webhook" : "Repair subscription"}
+                </Button>
+              )}
+            </span>
           </Row>
         </CardContent>
       </Card>
-      {!lastEvent && (
+      {webhook.actionable && webhook.hint && (
         <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          StabiFlow cannot confirm the webhook subscription automatically. If no conversations are arriving, verify in Meta that the WhatsApp Business Account is subscribed to this app&apos;s webhook and that the callback URL and verify token are set.
+          {webhook.hint}
+          {" "}If it stays unsubscribed after repairing, verify in Meta that the WhatsApp Business Account&apos;s callback URL and verify token are set for this app.
         </p>
       )}
 

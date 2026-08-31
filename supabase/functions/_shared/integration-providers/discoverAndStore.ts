@@ -8,6 +8,7 @@
 // discovery logic per caller).
 import { fetchAdAccounts, fetchFacebookPages, fetchInstagramForPage } from "./metaDiscovery.ts";
 import { fetchBusinesses, fetchOwnedWabas, fetchWabaPhoneNumbers, fetchWabaTemplates } from "./whatsappDiscovery.ts";
+import { subscribeWhatsAppWebhooks, type WebhookSubscriptionState } from "./whatsappWebhookSubscription.ts";
 import { upsertDiscoveredResource } from "./resourceUpsert.ts";
 import { upsertDiscoveredTemplate } from "./templateUpsert.ts";
 import type { DiscoveredWabaPhoneNumber, DiscoveredWabaTemplate, MetaCredential } from "./types.ts";
@@ -21,8 +22,14 @@ export type DiscoverySummary = {
   adAccounts: { discovered: number; new: number; collisions: number };
   whatsappNumbers: { discovered: number; new: number; collisions: number };
   whatsappTemplates: { discovered: number; new: number; collisions: number };
+  // WhatsApp only: the outcome of subscribing the discovered WABA(s) to
+  // this app's webhook (see whatsappWebhookSubscription.ts). `notApplicable`
+  // for a Meta discovery run.
+  whatsappWebhook: { status: WebhookSubscriptionState | "not_applicable"; detail: string; wabaCount: number };
   collisionDetails: Array<{ table: string; providerId: string }>;
 };
+
+const NOT_APPLICABLE_WEBHOOK = { status: "not_applicable" as const, detail: "Not applicable for a Meta connection.", wabaCount: 0 };
 
 // Dev-only fixtures (instruction #28: mock provider responses when real
 // OAuth cannot safely be completed - no Meta App is configured for this
@@ -83,6 +90,7 @@ export async function discoverAndStoreMetaResources(
     adAccounts: { discovered: 0, new: 0, collisions: 0 },
     whatsappNumbers: { discovered: 0, new: 0, collisions: 0 },
     whatsappTemplates: { discovered: 0, new: 0, collisions: 0 },
+    whatsappWebhook: NOT_APPLICABLE_WEBHOOK,
     collisionDetails: [],
   };
 
@@ -159,6 +167,9 @@ export async function discoverAndStoreWhatsAppResources(
   integrationId: string,
   cred: MetaCredential,
   mockMode: boolean,
+  // INTEGRATIONS_META_APP_ID - used only to verify the post-subscribe GET
+  // lists this app. Null is tolerated (the POST result drives the state).
+  metaAppId: string | null = null,
 ): Promise<DiscoverySummary> {
   const summary: DiscoverySummary = {
     facebookPages: { discovered: 0, new: 0, collisions: 0 },
@@ -166,6 +177,7 @@ export async function discoverAndStoreWhatsAppResources(
     adAccounts: { discovered: 0, new: 0, collisions: 0 },
     whatsappNumbers: { discovered: 0, new: 0, collisions: 0 },
     whatsappTemplates: { discovered: 0, new: 0, collisions: 0 },
+    whatsappWebhook: { status: "unknown", detail: "Not checked.", wabaCount: 0 },
     collisionDetails: [],
   };
 
@@ -239,6 +251,14 @@ export async function discoverAndStoreWhatsAppResources(
       summary.whatsappTemplates.new++;
     }
   }
+
+  // Subscribe every distinct discovered WABA to this app's webhook - the
+  // step that makes inbound messages actually arrive. Idempotent, never
+  // throws (a failure is recorded on the integration row as
+  // webhook_subscription_status='error'/'not_subscribed', and connect
+  // still succeeds - the integration is just flagged as needing repair).
+  const webhook = await subscribeWhatsAppWebhooks(serviceSb, integrationId, cred, [...wabaIds], mockMode, metaAppId);
+  summary.whatsappWebhook = { status: webhook.status, detail: webhook.detail, wabaCount: webhook.perWaba.length };
 
   return summary;
 }
