@@ -44,8 +44,9 @@ const QUALIFICATION_STATUSES = new Set(["unqualified", "qualifying", "qualified"
 // attribution_events row(s) recorded when a touchpoint first happened get
 // a downstream id filled in as the entity that touchpoint fed progresses
 // through the funnel - occurred_at and every evidence field are untouched.
-async function backfillAttribution(sb: AnySupabaseClient, column: "lead_id" | "opportunity_id" | "customer_id", value: string, matchColumn: "conversation_id" | "lead_id" | "opportunity_id", matchValue: string) {
-  await sb.from("attribution_events").update({ [column]: value }).eq(matchColumn, matchValue).is(column, null);
+async function backfillAttribution(sb: AnySupabaseClient, column: "lead_id" | "opportunity_id" | "customer_id", value: string, matchColumn: "conversation_id" | "lead_id" | "opportunity_id", matchValue: string): Promise<{ error: unknown }> {
+  const { error } = await sb.from("attribution_events").update({ [column]: value }).eq(matchColumn, matchValue).is(column, null);
+  return { error };
 }
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, targetType: string, targetId: string | null, metadata: Record<string, unknown> = {}) {
@@ -98,68 +99,107 @@ async function resolveDefaultPipelineFirstStage(sb: AnySupabaseClient, workspace
 // two DB helpers below wrap them. Nothing fabricates data, guesses an
 // ambiguous value into a typed column, or copies file bytes.
 
-/** Applies resolveSummaryAndIntake()'s decision to an EXISTING lead. */
+/** First path segment of an inbox-media object key, if it is a UUID -
+ * mirrors public.inbox_storage_path_workspace_id() so sign_lead_attachment
+ * can re-tie a stored path to a workspace before signing with the service
+ * role (which bypasses storage RLS). */
+function deriveWorkspaceFromInboxPath(path: unknown): string | null {
+  const first = typeof path === "string" ? path.split("/")[0] : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(first) ? first.toLowerCase() : null;
+}
+
+/** Applies resolveSummaryAndIntake()'s decision to an EXISTING lead.
+ * Returns the decision flags plus any write error (never swallowed). */
 async function applyConversationContext(
   sb: AnySupabaseClient,
   lead: { id: string; summary: string | null; intake: unknown },
   conversationAiSummary: string | null,
   conversationIntake: Record<string, unknown>,
   opts: { overwriteSummary?: boolean } = {},
-): Promise<{ summary_copied: boolean; summary_overwritten: boolean; summary_skipped: boolean; intake_new_keys: string[] }> {
+): Promise<{ summary_copied: boolean; summary_overwritten: boolean; summary_skipped: boolean; intake_new_keys: string[]; intake_changed: boolean; error: unknown }> {
   const decision = resolveSummaryAndIntake(lead, conversationAiSummary, conversationIntake, opts);
+  let error: unknown = null;
   if (Object.keys(decision.patch).length > 0) {
-    await sb.from("leads").update(decision.patch).eq("id", lead.id);
+    const res = await sb.from("leads").update(decision.patch).eq("id", lead.id);
+    error = res.error;
   }
   return {
     summary_copied: decision.summary_copied,
     summary_overwritten: decision.summary_overwritten,
     summary_skipped: decision.summary_skipped,
     intake_new_keys: decision.intake_new_keys,
+    intake_changed: decision.intake_changed,
+    error,
   };
 }
 
-/** Registers every inbound media object on the conversation against the
- * lead. References the EXISTING stored object - no bytes copied, no
- * re-upload. Idempotent: the (lead_id, storage_path) unique index absorbs
- * a re-run / re-link silently. Returns how many NEW links were made. */
+const ATTACHMENT_LINK_BATCH = 200; // rows per insert() call
+const ATTACHMENT_SCAN_LIMIT = 1000; // inbound media messages inspected per call
+
+/** Registers inbound media objects on the conversation against the lead as
+ * REFERENCES (no bytes copied, no re-upload). Deterministic batching: each
+ * call links the next slice of not-yet-linked media, so a retry after a
+ * partial failure finishes the job and a very media-heavy conversation is
+ * completed over successive calls rather than truncated. Idempotent via the
+ * (lead_id, storage_path) unique index. Never swallows an error. */
 async function linkConversationMediaToLead(
   sb: AnySupabaseClient,
   workspaceId: string,
   leadId: string,
   conversationId: string,
   actorId: string,
-): Promise<number> {
-  const { data: mediaMessages } = await sb
+): Promise<{ linked: number; remaining: number; error: unknown }> {
+  const { data: mediaMessages, error: scanError } = await sb
     .from("inbox_messages")
     .select("id, media_storage_path, media_mime_type, media_filename, media_size_bytes, created_at")
     .eq("conversation_id", conversationId)
     .eq("workspace_id", workspaceId)
     .eq("direction", "inbound")
     .not("media_storage_path", "is", null)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .limit(ATTACHMENT_SCAN_LIMIT);
+  if (scanError) return { linked: 0, remaining: 0, error: scanError };
 
-  let linked = 0;
-  for (const m of (mediaMessages || []) as Array<Record<string, unknown>>) {
-    const path = m.media_storage_path;
-    if (typeof path !== "string" || !path) continue;
-    const { error } = await sb.from("lead_attachments").insert({
-      workspace_id: workspaceId,
-      lead_id: leadId,
-      conversation_id: conversationId,
-      message_id: m.id,
-      storage_bucket: "inbox-media",
-      storage_path: path,
-      media_mime_type: (m.media_mime_type as string | null) ?? null,
-      media_filename: (m.media_filename as string | null) ?? null,
-      media_size_bytes: (m.media_size_bytes as number | null) ?? null,
-      source: "whatsapp_conversation",
-      received_at: (m.created_at as string | null) ?? null,
-      linked_by: actorId,
-    });
-    if (!error) linked++;
-    else if (error.code !== "23505") console.error("lead_attachments insert failed", error.message);
-  }
-  return linked;
+  const messages = ((mediaMessages || []) as Array<Record<string, unknown>>)
+    .filter((m) => typeof m.media_storage_path === "string" && (m.media_storage_path as string).length > 0);
+  if (messages.length === 0) return { linked: 0, remaining: 0, error: null };
+
+  const { data: existing, error: existingError } = await sb
+    .from("lead_attachments")
+    .select("storage_path")
+    .eq("lead_id", leadId);
+  if (existingError) return { linked: 0, remaining: 0, error: existingError };
+  const linkedPaths = new Set((existing || []).map((r: { storage_path: string }) => r.storage_path));
+
+  const unlinked = messages.filter((m) => !linkedPaths.has(m.media_storage_path as string));
+  const slice = unlinked.slice(0, ATTACHMENT_LINK_BATCH);
+  const remaining = unlinked.length - slice.length;
+  if (slice.length === 0) return { linked: 0, remaining, error: null };
+
+  const rows = slice.map((m) => ({
+    workspace_id: workspaceId,
+    lead_id: leadId,
+    conversation_id: conversationId,
+    message_id: m.id,
+    storage_bucket: "inbox-media",
+    storage_path: m.media_storage_path,
+    media_mime_type: (m.media_mime_type as string | null) ?? null,
+    media_filename: (m.media_filename as string | null) ?? null,
+    media_size_bytes: (m.media_size_bytes as number | null) ?? null,
+    source: "whatsapp_conversation",
+    received_at: (m.created_at as string | null) ?? null,
+    linked_by: actorId,
+  }));
+
+  // ignoreDuplicates -> ON CONFLICT (lead_id, storage_path) DO NOTHING, so a
+  // concurrent linker racing the same rows is absorbed; a real integrity
+  // failure (bad path/bucket -> 23514) still surfaces here, unswallowed.
+  const { data: inserted, error: insertError } = await sb
+    .from("lead_attachments")
+    .upsert(rows, { onConflict: "lead_id,storage_path", ignoreDuplicates: true })
+    .select("id");
+  if (insertError) return { linked: 0, remaining, error: insertError };
+  return { linked: (inserted || []).length, remaining, error: null };
 }
 
 Deno.serve(async (req: Request) => {
@@ -216,6 +256,13 @@ Deno.serve(async (req: Request) => {
 
   // --- lead creation -------------------------------------------------------
 
+  // Idempotent & self-healing (Phase 2 remediation H2 + M1). Every
+  // invocation: resolve the ONE canonical lead for this conversation
+  // (already-linked / a prior partial conversion / genuinely new), then
+  // run each completion step (conversation link, attribution backfill,
+  // context copy, media links, audit) only where it is still missing. A
+  // retry after any partial failure finishes the job; it never creates a
+  // second lead and never claims created:true when a step failed.
   if (action === "create_from_conversation") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.create"))) return json(req, { error: "Forbidden" }, 403);
     const conversationId = body.conversation_id;
@@ -230,65 +277,130 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (!conversation) return json(req, { error: "Conversation not found" }, 404);
 
-    if (conversation.lead_id) {
-      const { data: existingLead } = await serviceSb.from("leads").select("*").eq("id", conversation.lead_id).maybeSingle();
-      return json(req, { lead: existingLead, created: false, already_linked: true });
-    }
-
-    const phoneNormalized = normalizePhoneNumber(conversation.phone_number);
-    if (!force) {
-      const duplicates = await findDuplicateLeads(serviceSb, workspaceId, phoneNormalized, null);
-      if (duplicates.length > 0) return json(req, { duplicates, created: false });
-    }
-
-    // Phase 2: carry the conversation's context onto the brand-new lead.
-    // Nothing is being overwritten (the lead does not exist yet), so the
-    // safe typed mapping runs against empty columns and the AI summary /
-    // intake are copied verbatim. Never fabricates a summary.
     const conversationIntake = asIntakeRecord(conversation.intake_payload);
     const aiSummary = typeof conversation.ai_summary === "string" && conversation.ai_summary.trim() ? conversation.ai_summary.trim().slice(0, 2000) : null;
-    const displayName = conversation.display_name || null;
-    const typed = safeTypedLeadFields(conversationIntake, { contact_name: displayName, email: null, company_name: null, estimated_value: null });
+    const phoneNormalized = normalizePhoneNumber(conversation.phone_number);
 
-    const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
-    const { data: lead, error: leadError } = await serviceSb
-      .from("leads")
-      .insert({
-        workspace_id: workspaceId,
-        contact_name: displayName,
-        phone: conversation.phone_number,
-        phone_normalized: phoneNormalized,
-        source: "whatsapp",
-        created_from_conversation_id: conversationId,
-        created_by: actorId,
-        pipeline_id: defaultPlacement.pipelineId,
-        pipeline_stage_id: defaultPlacement.stageId,
-        summary: aiSummary,
-        intake: conversationIntake,
-        ...typed.patch,
-      })
-      .select("*")
-      .single();
-    if (leadError || !lead) return json(req, { error: "Unable to create this lead" }, 500);
+    // 1-4: resolve the canonical lead.
+    let lead: Record<string, unknown> | null = null;
+    let created = false;
+    let typedMapped: string[] = [];
 
-    await serviceSb.from("inbox_conversations").update({ lead_id: lead.id }).eq("id", conversationId);
-    await backfillAttribution(serviceSb, "lead_id", lead.id, "conversation_id", conversationId);
-    const attachmentsLinked = await linkConversationMediaToLead(serviceSb, workspaceId, lead.id, conversationId, actorId);
+    if (conversation.lead_id) {
+      const { data } = await serviceSb.from("leads").select("*").eq("id", conversation.lead_id).eq("workspace_id", workspaceId).maybeSingle();
+      lead = data ?? null;
+    }
+    if (!lead) {
+      const { data: priorByConversation } = await serviceSb.from("leads").select("*").eq("created_from_conversation_id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+      lead = priorByConversation ?? null;
+    }
+    if (!lead) {
+      if (!force) {
+        const duplicates = await findDuplicateLeads(serviceSb, workspaceId, phoneNormalized, null);
+        if (duplicates.length > 0) return json(req, { duplicates, created: false });
+      }
+      const displayName = conversation.display_name || null;
+      const typed = safeTypedLeadFields(conversationIntake, { contact_name: displayName, email: null, company_name: null, estimated_value: null });
+      const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
+      const insertRes = await serviceSb
+        .from("leads")
+        .insert({
+          workspace_id: workspaceId,
+          contact_name: displayName,
+          phone: conversation.phone_number,
+          phone_normalized: phoneNormalized,
+          source: "whatsapp",
+          created_from_conversation_id: conversationId,
+          created_by: actorId,
+          pipeline_id: defaultPlacement.pipelineId,
+          pipeline_stage_id: defaultPlacement.stageId,
+          summary: aiSummary,
+          intake: conversationIntake,
+          ...typed.patch,
+        })
+        .select("*")
+        .single();
+      if (insertRes.error) {
+        // 23505 on leads_created_from_conversation_id_key: we lost the
+        // concurrent-create race. Adopt the winner and keep going - never
+        // an unhandled 500 for the expected race.
+        if ((insertRes.error as { code?: string }).code === "23505") {
+          const { data: canonical } = await serviceSb.from("leads").select("*").eq("created_from_conversation_id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+          if (!canonical) return json(req, { error: "Unable to create this lead" }, 500);
+          lead = canonical;
+        } else {
+          return json(req, { error: "Unable to create this lead" }, 500);
+        }
+      } else {
+        lead = insertRes.data;
+        created = true;
+        typedMapped = typed.mapped;
+      }
+    }
+    if (!lead) return json(req, { error: "Unable to create this lead" }, 500);
+    const leadId = lead.id as string;
+
+    // 5: ensure conversation -> lead link. Do NOT report created:true if
+    // this fails - a retry re-enters via priorByConversation and finishes.
+    const linkedThisCall = conversation.lead_id !== leadId;
+    if (linkedThisCall) {
+      const { error: linkError } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId).eq("workspace_id", workspaceId);
+      if (linkError) return json(req, { error: "Saved the lead, but linking the conversation didn't finish. Open it again to complete." }, 500);
+    }
+
+    // 7: attribution backfill (additive, error-checked).
+    const { error: attrError } = await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
+    if (attrError) return json(req, { error: "Saved the lead, but updating attribution didn't finish. Open it again to complete." }, 500);
+
+    // 6: summary / intake context (safe deep merge, error-checked). A
+    // freshly inserted lead already carries both, so this is a no-op there;
+    // it heals a lead that pre-existed this conversation's context.
+    const ctx = await applyConversationContext(
+      serviceSb,
+      { id: leadId, summary: (lead.summary as string | null) ?? null, intake: lead.intake },
+      aiSummary,
+      conversationIntake,
+      {},
+    );
+    if (ctx.error) return json(req, { error: "Saved the lead, but copying the conversation details didn't finish. Open it again to complete." }, 500);
+
+    // 8: media attachment links (batched, error-checked).
+    const media = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
+    if (media.error) return json(req, { error: "Saved the lead, but linking the documents didn't finish. Open it again to complete." }, 500);
+
+    // 9: audit / domain events - only the work this call actually did.
     const intakeCopied = Object.keys(conversationIntake).length > 0;
-
-    await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, {
-      source: "whatsapp", conversation_id: conversationId,
-      summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typed.mapped, attachments_linked: attachmentsLinked,
-    });
-    await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", lead.id, { conversation_id: conversationId });
-    if (intakeCopied) await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", lead.id, { conversation_id: conversationId, typed_fields_mapped: typed.mapped });
-    if (attachmentsLinked > 0) await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", lead.id, { conversation_id: conversationId, count: attachmentsLinked });
-    await emitEvent("lead.created", "lead", lead.id, { entity_id: lead.id, source: "whatsapp", conversation_id: conversationId }, `lead.created:${lead.id}`);
+    if (created) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", leadId, {
+        source: "whatsapp", conversation_id: conversationId,
+        summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typedMapped, attachments_linked: media.linked,
+      });
+      await emitEvent("lead.created", "lead", leadId, { entity_id: leadId, source: "whatsapp", conversation_id: conversationId }, `lead.created:${leadId}`);
+    }
+    if (linkedThisCall) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
+    }
+    if ((created && intakeCopied) || ctx.summary_copied || ctx.summary_overwritten || ctx.intake_changed) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", leadId, { conversation_id: conversationId, typed_fields_mapped: typedMapped, intake_new_keys: ctx.intake_new_keys });
+    }
+    if (media.linked > 0) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", leadId, { conversation_id: conversationId, count: media.linked });
+    }
 
     return json(req, {
       lead,
-      created: true,
-      context: { summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typed.mapped, attachments_linked: attachmentsLinked },
+      created,
+      already_linked: !created && !linkedThisCall,
+      context: {
+        summary_copied: created ? !!aiSummary : ctx.summary_copied,
+        summary_overwritten: ctx.summary_overwritten,
+        summary_skipped: ctx.summary_skipped,
+        intake_copied: intakeCopied,
+        intake_new_keys: ctx.intake_new_keys,
+        typed_fields_mapped: typedMapped,
+        attachments_linked: media.linked,
+        attachments_remaining: media.remaining,
+      },
     });
   }
 
@@ -340,21 +452,40 @@ Deno.serve(async (req: Request) => {
     if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
     if (typeof conversationId !== "string" || !conversationId) return json(req, { error: "conversation_id is required" }, 400);
     // Phase 2: default true - carrying context is non-destructive (empty
-    // summary filled, intake merged with existing keys winning, attachments
-    // are additive). overwrite_summary is the ONE opt-in that can replace a
-    // non-empty lead summary, and must be chosen explicitly by the user.
+    // summary filled, intake deep-merged with existing values winning,
+    // attachments additive). overwrite_summary is the ONE opt-in that can
+    // replace a non-empty lead summary. Both sit behind lead.edit.
     const applyContext = body.apply_context !== false;
     const overwriteSummary = body.overwrite_summary === true;
 
     const { data: lead } = await serviceSb.from("leads").select("id, summary, intake").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
     if (!lead) return json(req, { error: "Lead not found" }, 404);
-    const { data: conversation } = await serviceSb.from("inbox_conversations").select("id, ai_summary, intake_payload").eq("id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+    const { data: conversation } = await serviceSb.from("inbox_conversations").select("id, lead_id, ai_summary, intake_payload").eq("id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
     if (!conversation) return json(req, { error: "Conversation not found" }, 404);
 
-    const { error } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId);
-    if (error) return json(req, { error: "Unable to link this conversation" }, 500);
-    await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
-    await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
+    // M2: a conversation is never silently moved between leads.
+    if (conversation.lead_id && conversation.lead_id !== leadId) {
+      return json(req, { error: "This conversation is already linked to another lead." }, 409);
+    }
+    const alreadyLinked = conversation.lead_id === leadId;
+
+    if (!alreadyLinked) {
+      // Compare-and-set: only claim an unlinked conversation. If a
+      // concurrent call linked it first, our update matches 0 rows and the
+      // re-check below turns a foreign winner into a 409.
+      const { error: linkErr } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId).eq("workspace_id", workspaceId).is("lead_id", null);
+      if (linkErr) return json(req, { error: "Unable to link this conversation" }, 500);
+      const { data: after } = await serviceSb.from("inbox_conversations").select("lead_id").eq("id", conversationId).maybeSingle();
+      if (after?.lead_id && after.lead_id !== leadId) {
+        return json(req, { error: "This conversation is already linked to another lead." }, 409);
+      }
+    }
+
+    const { error: attrErr } = await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
+    if (attrErr) return json(req, { error: "Linked the conversation, but updating attribution didn't finish. Try again to complete." }, 500);
+    if (!alreadyLinked) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
+    }
 
     let context: Record<string, unknown> | null = null;
     if (applyContext) {
@@ -365,38 +496,70 @@ Deno.serve(async (req: Request) => {
         asIntakeRecord(conversation.intake_payload),
         { overwriteSummary },
       );
-      const attachmentsLinked = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
-      context = { ...ctx, attachments_linked: attachmentsLinked };
-      if (ctx.summary_copied || ctx.summary_overwritten || ctx.intake_new_keys.length > 0) {
+      if (ctx.error) return json(req, { error: "Linked the conversation, but copying its details didn't finish. Try again to complete." }, 500);
+      const media = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
+      if (media.error) return json(req, { error: "Linked the conversation, but linking the documents didn't finish. Try again to complete." }, 500);
+      context = {
+        summary_copied: ctx.summary_copied,
+        summary_overwritten: ctx.summary_overwritten,
+        summary_skipped: ctx.summary_skipped,
+        intake_new_keys: ctx.intake_new_keys,
+        attachments_linked: media.linked,
+        attachments_remaining: media.remaining,
+      };
+      if (ctx.summary_copied || ctx.summary_overwritten || ctx.intake_changed) {
         await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", leadId, {
           conversation_id: conversationId, summary_overwritten: ctx.summary_overwritten, intake_new_keys: ctx.intake_new_keys,
         });
       }
-      if (attachmentsLinked > 0) {
-        await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", leadId, { conversation_id: conversationId, count: attachmentsLinked });
+      if (media.linked > 0) {
+        await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", leadId, { conversation_id: conversationId, count: media.linked });
       }
     }
 
-    return json(req, { ok: true, context });
+    return json(req, { ok: true, already_linked: alreadyLinked, context });
   }
 
   // Read-only: mint a short-lived signed URL for a lead attachment. The
-  // storage path never leaves the server; the attachment -> lead ->
-  // workspace chain is re-checked, and lead.view is required (a
-  // lead-viewer may not have inbox.view, so they cannot sign the
-  // inbox-media object themselves).
+  // lead_attachments row is a REFERENCE, not authority - the whole chain
+  // (bucket, path->workspace, lead, conversation, source message) is
+  // re-resolved against workspaceId before signing, because the service
+  // role bypasses storage RLS. lead.attachment.view is required (NOT
+  // lead.view - a lead viewer without it must not retrieve raw customer
+  // documents).
   if (action === "sign_lead_attachment") {
-    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.view"))) return json(req, { error: "Forbidden" }, 403);
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.attachment.view"))) {
+      return json(req, { error: "You don't have permission to open lead documents." }, 403);
+    }
     const attachmentId = body.attachment_id;
     if (typeof attachmentId !== "string" || !attachmentId) return json(req, { error: "attachment_id is required" }, 400);
+
     const { data: attachment } = await serviceSb
       .from("lead_attachments")
-      .select("id, storage_bucket, storage_path")
+      .select("id, workspace_id, lead_id, conversation_id, message_id, storage_bucket, storage_path")
       .eq("id", attachmentId)
       .eq("workspace_id", workspaceId)
       .maybeSingle();
     if (!attachment) return json(req, { error: "Attachment not found" }, 404);
-    const { data: signed, error } = await serviceSb.storage.from(attachment.storage_bucket).createSignedUrl(attachment.storage_path, 300);
+
+    if (attachment.storage_bucket !== "inbox-media") return json(req, { error: "Attachment not found" }, 404);
+    const pathWorkspace = deriveWorkspaceFromInboxPath(attachment.storage_path);
+    if (!pathWorkspace || pathWorkspace !== workspaceId.toLowerCase()) return json(req, { error: "Attachment not found" }, 404);
+
+    const { data: leadRow } = await serviceSb.from("leads").select("id").eq("id", attachment.lead_id).eq("workspace_id", workspaceId).maybeSingle();
+    if (!leadRow) return json(req, { error: "Attachment not found" }, 404);
+
+    if (attachment.conversation_id) {
+      const { data: conv } = await serviceSb.from("inbox_conversations").select("id").eq("id", attachment.conversation_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (!conv) return json(req, { error: "Attachment not found" }, 404);
+    }
+    if (attachment.message_id) {
+      const { data: msg } = await serviceSb.from("inbox_messages").select("id, media_storage_path").eq("id", attachment.message_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (!msg) return json(req, { error: "This document is no longer available." }, 404);
+      if (msg.media_storage_path !== attachment.storage_path) return json(req, { error: "Attachment not found" }, 404);
+    }
+
+    const { data: signed, error } = await serviceSb.storage.from("inbox-media").createSignedUrl(attachment.storage_path, 300);
     if (error || !signed?.signedUrl) return json(req, { error: "Unable to open this file" }, 502);
     return json(req, { url: signed.signedUrl });
   }

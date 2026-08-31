@@ -67,8 +67,10 @@ export type LeadRow = {
   estimated_value: number | null;
   summary: string | null;
   // Phase 2: the originating conversation's intake_payload, preserved
-  // verbatim. A flat key/value bag today (Phase 3 adds a real schema).
-  intake: Record<string, unknown>;
+  // verbatim (deep-merged, existing values winning, when a conversation is
+  // linked to an existing lead). Fetched by useLead() only - the leads list
+  // never renders it, so it is omitted from that projection.
+  intake?: Record<string, unknown>;
   created_from_conversation_id: string | null;
   lost_reason: string | null;
   created_at: string;
@@ -77,15 +79,19 @@ export type LeadRow = {
   lost_at: string | null;
 };
 
-const LEAD_COLUMNS =
-  "id, human_reference, contact_name, phone, email, company_name, source, source_detail, status, assigned_to, pipeline_id, pipeline_stage_id, qualification_status, qualification_notes, qualification_reason, estimated_value, summary, intake, created_from_conversation_id, lost_reason, created_at, updated_at, converted_at, lost_at";
+// The list projection deliberately omits `intake` (a potentially large
+// jsonb blob the list never renders); useLead() adds it back for the
+// detail view.
+const LEAD_LIST_COLUMNS =
+  "id, human_reference, contact_name, phone, email, company_name, source, source_detail, status, assigned_to, pipeline_id, pipeline_stage_id, qualification_status, qualification_notes, qualification_reason, estimated_value, summary, created_from_conversation_id, lost_reason, created_at, updated_at, converted_at, lost_at";
+const LEAD_DETAIL_COLUMNS = `${LEAD_LIST_COLUMNS}, intake`;
 
 export function useLeads(workspaceId: string | null) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["leads", workspaceId],
     queryFn: async (): Promise<LeadRow[]> => {
-      const { data, error } = await supabase.from("leads").select(LEAD_COLUMNS).eq("workspace_id", workspaceId as string).order("updated_at", { ascending: false }).limit(500);
+      const { data, error } = await supabase.from("leads").select(LEAD_LIST_COLUMNS).eq("workspace_id", workspaceId as string).order("updated_at", { ascending: false }).limit(500);
       if (error) throw new Error(error.message);
       return data as LeadRow[];
     },
@@ -113,7 +119,7 @@ export function useLead(leadId: string | null) {
   return useQuery({
     queryKey: ["lead", leadId],
     queryFn: async (): Promise<LeadRow | null> => {
-      const { data, error } = await supabase.from("leads").select(LEAD_COLUMNS).eq("id", leadId as string).maybeSingle();
+      const { data, error } = await supabase.from("leads").select(LEAD_DETAIL_COLUMNS).eq("id", leadId as string).maybeSingle();
       if (error) throw new Error(error.message);
       return data as LeadRow | null;
     },
@@ -147,7 +153,8 @@ export function useLeadAttachments(leadId: string | null) {
         .from("lead_attachments")
         .select("id, lead_id, conversation_id, media_mime_type, media_filename, media_size_bytes, source, received_at, created_at")
         .eq("lead_id", leadId as string)
-        .order("received_at", { ascending: true });
+        .order("received_at", { ascending: true })
+        .limit(200);
       if (error) throw new Error(error.message);
       return data as LeadAttachmentRow[];
     },

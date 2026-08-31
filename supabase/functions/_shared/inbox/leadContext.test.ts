@@ -1,5 +1,5 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { asIntakeRecord, resolveSummaryAndIntake, safeTypedLeadFields } from "./leadContext.ts";
+import { asIntakeRecord, deepMergePreferExisting, resolveSummaryAndIntake, safeTypedLeadFields } from "./leadContext.ts";
 
 // --- asIntakeRecord ---------------------------------------------------------
 
@@ -92,4 +92,63 @@ Deno.test("intake unchanged when the conversation adds no new keys", () => {
   const d = resolveSummaryAndIntake({ summary: "s", intake: { a: 1 } }, "s", { a: 2 });
   assertEquals(d.patch.intake, undefined);
   assertEquals(d.intake_new_keys, []);
+  assertEquals(d.intake_changed, false);
+});
+
+// --- deepMergePreferExisting (M4) --------------------------------------
+
+Deno.test("deep merge fills a MISSING nested key, existing scalars win", () => {
+  assertEquals(
+    deepMergePreferExisting(
+      { company: { name: "A", size: 10 } },
+      { company: { name: "B", industry: "Mining" } },
+    ),
+    { company: { name: "A", size: 10, industry: "Mining" } },
+  );
+});
+
+Deno.test("deep merge: scalar conflict at the root - existing wins", () => {
+  assertEquals(deepMergePreferExisting({ urgency: "low" }, { urgency: "high", note: "x" }), { urgency: "low", note: "x" });
+});
+
+Deno.test("deep merge: arrays are atomic - existing array wins if present, else incoming is copied", () => {
+  assertEquals(deepMergePreferExisting({ tags: ["a"] }, { tags: ["b", "c"] }), { tags: ["a"] });
+  assertEquals(deepMergePreferExisting({}, { tags: ["b", "c"] }), { tags: ["b", "c"] });
+});
+
+Deno.test("deep merge: a key present in existing as an array is NOT merged with an incoming object", () => {
+  assertEquals(deepMergePreferExisting({ x: ["keep"] }, { x: { y: 1 } }), { x: ["keep"] });
+});
+
+Deno.test("deep merge: prototype-pollution keys are dropped", () => {
+  const merged = deepMergePreferExisting({ ok: 1 }, JSON.parse('{"__proto__":{"polluted":true},"constructor":{"bad":1},"ok":2,"safe":3}')) as Record<string, unknown>;
+  assertEquals(merged, { ok: 1, safe: 3 });
+  assertEquals(({} as Record<string, unknown>).polluted, undefined);
+});
+
+Deno.test("deep merge: non-plain objects are not recursed into (existing wins)", () => {
+  const existing = { when: "2020" };
+  assertEquals(deepMergePreferExisting({ meta: existing }, { meta: { extra: 1 } }), { meta: { when: "2020", extra: 1 } });
+  // a non-plain object on the existing side is treated atomically
+  const arr: unknown = [1, 2];
+  assertEquals(deepMergePreferExisting({ v: arr }, { v: { a: 1 } }), { v: arr });
+});
+
+Deno.test("deep merge: recursion is depth-capped and does not throw on deep input", () => {
+  let deep: Record<string, unknown> = { leaf: "incoming" };
+  for (let i = 0; i < 40; i++) deep = { n: deep };
+  const out = deepMergePreferExisting({ n: { n: { n: {} } } }, deep);
+  // no throw, and the shallow existing side is preserved
+  assertEquals(typeof out, "object");
+});
+
+Deno.test("resolveSummaryAndIntake: a nested-only addition still produces patch.intake + intake_changed", () => {
+  const d = resolveSummaryAndIntake(
+    { summary: "s", intake: { company: { name: "A" } } },
+    "s",
+    { company: { industry: "Mining" } },
+  );
+  assertEquals(d.patch.intake, { company: { name: "A", industry: "Mining" } });
+  assertEquals(d.intake_changed, true);
+  assertEquals(d.intake_new_keys, []); // 'company' already existed at the top level
 });

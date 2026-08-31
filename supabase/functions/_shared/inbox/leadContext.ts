@@ -18,6 +18,50 @@ export function asIntakeRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+// --- deep merge (Phase 2 remediation M4) ----------------------------------
+// EXISTING lead values always win. Conversation intake only fills keys the
+// lead does not already have, recursively. Arrays are atomic - existing
+// wins if present, otherwise the conversation array is copied; never an
+// element-wise merge. Prototype-pollution keys are dropped, non-plain
+// objects are not recursed into, and recursion is depth-capped.
+
+const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const MAX_MERGE_DEPTH = 8;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+export function deepMergePreferExisting(existing: unknown, incoming: unknown, depth = 0): unknown {
+  if (!isPlainObject(existing) || !isPlainObject(incoming) || depth >= MAX_MERGE_DEPTH) {
+    // Existing wins whenever the lead has anything here at all; only fall
+    // back to the conversation value when the lead key is genuinely absent.
+    return existing === undefined ? incoming : existing;
+  }
+  const out: Record<string, unknown> = { ...existing };
+  for (const key of Object.keys(incoming)) {
+    if (DANGEROUS_KEYS.has(key)) continue;
+    if (!(key in out)) {
+      out[key] = incoming[key];
+    } else if (isPlainObject(out[key]) && isPlainObject(incoming[key])) {
+      out[key] = deepMergePreferExisting(out[key], incoming[key], depth + 1);
+    }
+    // otherwise: existing scalar / array / other value wins - leave as-is
+  }
+  return out;
+}
+
+/** Order-insensitive structural stringify, for cheap deep-equality. */
+export function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(",")}}`;
+}
+
 export type ExistingTypedLeadFields = {
   contact_name: string | null;
   email: string | null;
@@ -61,7 +105,10 @@ export type SummaryIntakeDecision = {
   summary_copied: boolean;
   summary_overwritten: boolean;
   summary_skipped: boolean;
+  /** Top-level keys the conversation contributed that the lead lacked. */
   intake_new_keys: string[];
+  /** True when the deep merge changed anything (incl. a nested-only add). */
+  intake_changed: boolean;
 };
 
 /** Decide what (if anything) to write to an EXISTING lead's summary/intake
@@ -88,7 +135,9 @@ export function resolveSummaryAndIntake(
 
   const existingIntake = asIntakeRecord(lead.intake);
   const intake_new_keys = Object.keys(conversationIntake).filter((k) => !(k in existingIntake));
-  if (intake_new_keys.length > 0) patch.intake = { ...conversationIntake, ...existingIntake }; // existing keys win
+  const merged = deepMergePreferExisting(existingIntake, conversationIntake) as Record<string, unknown>;
+  const intake_changed = stableStringify(merged) !== stableStringify(existingIntake);
+  if (intake_changed) patch.intake = merged; // deep merge, existing values always win
 
-  return { patch, summary_copied, summary_overwritten, summary_skipped, intake_new_keys };
+  return { patch, summary_copied, summary_overwritten, summary_skipped, intake_new_keys, intake_changed };
 }

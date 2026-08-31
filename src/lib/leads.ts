@@ -3,8 +3,20 @@ import { supabase } from "@/integrations/supabase/client";
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
-    const message = (data as { error?: string } | null)?.error || error.message || `${name} failed`;
-    throw new Error(message);
+    // Surface the edge function's curated { error } body (403/404/409/…),
+    // not the generic "non-2xx status code". supabase-js exposes the raw
+    // Response on error.context for non-2xx invocations.
+    let message = (data as { error?: string } | null)?.error || "";
+    const ctx = (error as { context?: unknown }).context;
+    if (!message && ctx && typeof (ctx as Response).clone === "function") {
+      try {
+        const parsed = await (ctx as Response).clone().json();
+        if (parsed && typeof parsed.error === "string") message = parsed.error;
+      } catch {
+        // body was not JSON - fall through to error.message
+      }
+    }
+    throw new Error(message || error.message || `${name} failed`);
   }
   if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
     throw new Error((data as { error: string }).error);

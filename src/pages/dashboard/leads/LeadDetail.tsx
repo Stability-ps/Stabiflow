@@ -42,19 +42,21 @@ const OPPORTUNITY_STATUS_TONE: Record<string, string> = {
 // conversion. Metadata comes from the RLS-scoped lead_attachments rows;
 // the file itself opens through a short-lived server-minted signed URL
 // (the storage path never reaches the client).
-function LeadDocuments({ workspaceId, leadId }: { workspaceId: string; leadId: string }) {
-  const { data: attachments } = useLeadAttachments(leadId);
+function LeadDocuments({ workspaceId, leadId, canView }: { workspaceId: string; leadId: string; canView: boolean }) {
+  const { data: attachments } = useLeadAttachments(canView ? leadId : null);
   const [openingId, setOpeningId] = useState<string | null>(null);
 
-  if (!attachments || attachments.length === 0) return null;
+  if (!canView || !attachments || attachments.length === 0) return null;
 
   const open = async (id: string) => {
     setOpeningId(id);
     try {
       const { url } = await signLeadAttachment(workspaceId, id);
-      window.open(url, "_blank", "noopener,noreferrer");
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (!w) toast.error("Allow pop-ups to open this document.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to open this file");
+      const message = error instanceof Error ? error.message : "";
+      toast.error(message || "This document couldn't be opened. It may have been removed.");
     } finally {
       setOpeningId(null);
     }
@@ -97,11 +99,12 @@ function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRe
   );
 }
 
-export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, opportunityLabel, autoOpenOpportunityForm }: {
+export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAttachments, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, opportunityLabel, autoOpenOpportunityForm }: {
   workspaceId: string;
   leadId: string;
   canEdit: boolean;
   canAssign: boolean;
+  canViewAttachments: boolean;
   canCreateOpportunity: boolean;
   canCloseOpportunity: boolean;
   canRecordRevenue: boolean;
@@ -442,7 +445,7 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
           ))}
         </section>
 
-        <LeadDocuments workspaceId={workspaceId} leadId={leadId} />
+        <LeadDocuments workspaceId={workspaceId} leadId={leadId} canView={canViewAttachments} />
 
         <section className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Notes</p>
