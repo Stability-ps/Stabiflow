@@ -11,15 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
-import { useLead, usePipelineStages } from "@/hooks/useLeads";
+import { useLead, useLeadAttachments, usePipelineStages } from "@/hooks/useLeads";
 import { useOpportunitiesForLead, useCrmNotes, useCustomerForOpportunity } from "@/hooks/useOpportunities";
+import { intakeRows, formatBytes } from "@/lib/intakeDisplay";
 import { QUALIFICATION_STATUSES, qualificationStatusLabel, validateQualificationChange, type QualificationStatus } from "@/lib/qualification";
 import { opportunityStatusLabel } from "@/lib/opportunityLifecycle";
 import { openOpportunityActionLabel, pluralizeLabel } from "@/lib/terminology";
 import {
   addCrmNote, assignLead, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
-  moveLeadStage, reopenLead, reopenOpportunity, setLeadQualification,
+  moveLeadStage, reopenLead, reopenOpportunity, setLeadQualification, signLeadAttachment,
 } from "@/lib/leads";
+import { Paperclip } from "lucide-react";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
 import { RevenueSection } from "@/components/attribution/RevenueSection";
 import { CustomerDetail } from "@/pages/dashboard/leads/CustomerDetail";
@@ -36,6 +38,55 @@ const OPPORTUNITY_STATUS_TONE: Record<string, string> = {
   lost: "bg-muted text-muted-foreground",
 };
 
+// Phase 2: documents the customer sent on WhatsApp, linked to the lead at
+// conversion. Metadata comes from the RLS-scoped lead_attachments rows;
+// the file itself opens through a short-lived server-minted signed URL
+// (the storage path never reaches the client).
+function LeadDocuments({ workspaceId, leadId, canView }: { workspaceId: string; leadId: string; canView: boolean }) {
+  const { data: attachments } = useLeadAttachments(canView ? leadId : null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+
+  if (!canView || !attachments || attachments.length === 0) return null;
+
+  const open = async (id: string) => {
+    setOpeningId(id);
+    try {
+      const { url } = await signLeadAttachment(workspaceId, id);
+      const w = window.open(url, "_blank", "noopener,noreferrer");
+      if (!w) toast.error("Allow pop-ups to open this document.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      toast.error(message || "This document couldn't be opened. It may have been removed.");
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  return (
+    <section className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">Documents ({attachments.length})</p>
+      <div className="space-y-1.5">
+        {attachments.map((a) => {
+          const size = formatBytes(a.media_size_bytes);
+          const received = a.received_at ? new Date(a.received_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : null;
+          return (
+            <div key={a.id} className="flex items-center gap-2 rounded-md border p-2 text-xs">
+              <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{a.media_filename || "Attachment"}</p>
+                <p className="text-muted-foreground">
+                  {[a.media_mime_type, size, received && `received ${received}`].filter(Boolean).join(" · ") || "From WhatsApp conversation"}
+                </p>
+              </div>
+              <Button size="sm" variant="ghost" className="h-7" disabled={openingId === a.id} onClick={() => open(a.id)}>Open</Button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRevenue, onViewCustomer }: { workspaceId: string; opportunityId: string; leadId: string; canRecordRevenue: boolean; onViewCustomer: (customerId: string) => void }) {
   const { data: customer } = useCustomerForOpportunity(opportunityId);
   return (
@@ -48,11 +99,12 @@ function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRe
   );
 }
 
-export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, opportunityLabel, autoOpenOpportunityForm }: {
+export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAttachments, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, opportunityLabel, autoOpenOpportunityForm }: {
   workspaceId: string;
   leadId: string;
   canEdit: boolean;
   canAssign: boolean;
+  canViewAttachments: boolean;
   canCreateOpportunity: boolean;
   canCloseOpportunity: boolean;
   canRecordRevenue: boolean;
@@ -266,6 +318,31 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
           )}
         </section>
 
+        {lead.summary && (
+          <section>
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Summary</p>
+            <p className="whitespace-pre-wrap rounded-md border bg-muted/30 p-2 text-sm">{lead.summary}</p>
+          </section>
+        )}
+
+        {(() => {
+          const rows = intakeRows(lead.intake);
+          if (rows.length === 0) return null;
+          return (
+            <section>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">What the customer told us</p>
+              <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 rounded-md border p-2 text-sm">
+                {rows.map((r) => (
+                  <div key={r.key} className="contents">
+                    <dt className="truncate text-muted-foreground">{r.label}</dt>
+                    <dd className="min-w-0 break-words">{r.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          );
+        })()}
+
         <section>
           <p className="mb-1 text-xs font-medium text-muted-foreground">Attribution</p>
           <AttributionSourceSummary
@@ -367,6 +444,8 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canCreateO
             </div>
           ))}
         </section>
+
+        <LeadDocuments workspaceId={workspaceId} leadId={leadId} canView={canViewAttachments} />
 
         <section className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Notes</p>

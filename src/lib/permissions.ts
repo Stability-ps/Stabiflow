@@ -73,6 +73,11 @@ export type WorkspacePermission =
   | "lead.edit"
   | "lead.assign"
   | "lead.delete"
+  // Phase 2 remediation (H1): opening a raw customer WhatsApp document
+  // attached to a lead is a dedicated authority, never implied by lead.view.
+  // Granted to owner/admin/manager/sales/support (support already handles
+  // these media in the Inbox); withheld from marketing/viewer.
+  | "lead.attachment.view"
   | "pipeline.view"
   | "pipeline.manage"
   | "opportunity.view"
@@ -118,7 +123,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
     "inbox.view", "inbox.manage",
-    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete", "lead.attachment.view",
     "pipeline.view", "pipeline.manage",
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
@@ -133,7 +138,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
     "inbox.view", "inbox.manage",
-    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete", "lead.attachment.view",
     "pipeline.view", "pipeline.manage",
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
@@ -147,7 +152,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
     "integration.view",
     "inbox.view", "inbox.manage",
-    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete", "lead.attachment.view",
     "pipeline.view", "pipeline.manage",
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
@@ -167,7 +172,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   ],
   sales: [
     "manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view",
-    "lead.view", "lead.create", "lead.edit", "lead.assign",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.attachment.view",
     "pipeline.view",
     "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
     "attribution.view", "revenue.view", "revenue.create", "revenue.edit",
@@ -176,7 +181,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   ],
   support: [
     "manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage",
-    "lead.view", "lead.create",
+    "lead.view", "lead.create", "lead.attachment.view",
     "pipeline.view",
     "opportunity.view",
     "attribution.view", "revenue.view",

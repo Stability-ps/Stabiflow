@@ -32,6 +32,7 @@ const DEFAULT_FILES = [
   "supabase/tests/campaign-journey.test.ts",
   "supabase/tests/revenue-breakdown.test.ts",
   "supabase/tests/integrations-whatsapp-webhook.test.ts",
+  "supabase/tests/conversation-crm-completion.test.ts",
 ];
 
 function localEnvFromSupabase() {

@@ -3,8 +3,22 @@ import { supabase } from "@/integrations/supabase/client";
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
-    const message = (data as { error?: string } | null)?.error || error.message || `${name} failed`;
-    throw new Error(message);
+    // Surface the edge function's curated { error } body (403/404/409/…),
+    // not the generic "non-2xx status code". supabase-js exposes the raw
+    // Response on error.context for non-2xx invocations. (F10: this applies
+    // to every leads-actions call, by design - all of them return curated
+    // { error } bodies; the fallback to error.message is unchanged.)
+    let message = (data as { error?: string } | null)?.error || "";
+    const ctx = (error as { context?: unknown }).context;
+    if (!message && ctx && typeof (ctx as Response).clone === "function") {
+      try {
+        const parsed = await (ctx as Response).clone().json();
+        if (parsed && typeof parsed.error === "string") message = parsed.error;
+      } catch {
+        // body was not JSON - fall through to error.message
+      }
+    }
+    throw new Error(message || error.message || `${name} failed`);
   }
   if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
     throw new Error((data as { error: string }).error);
@@ -33,12 +47,27 @@ export function checkDuplicateLeads(workspaceId: string, params: { phone?: strin
   });
 }
 
+export type ConversationContextResult = {
+  summary_copied?: boolean;
+  summary_overwritten?: boolean;
+  summary_skipped?: boolean;
+  intake_copied?: boolean;
+  intake_new_keys?: string[];
+  typed_fields_mapped?: string[];
+  attachments_linked?: number;
+};
+
 export function createLeadFromConversation(workspaceId: string, conversationId: string, force = false) {
-  return runLeadsAction<{ lead?: unknown; created: boolean; already_linked?: boolean; duplicates?: DuplicateLeadCandidate[] }>(
-    workspaceId,
-    "create_from_conversation",
-    { conversation_id: conversationId, force },
-  );
+  return runLeadsAction<{
+    lead?: unknown;
+    created: boolean;
+    already_linked?: boolean;
+    // F9: this call finished a link that a prior partial conversion left
+    // undone - not a fresh create and not a no-op.
+    completed_pending?: boolean;
+    duplicates?: DuplicateLeadCandidate[];
+    context?: ConversationContextResult;
+  }>(workspaceId, "create_from_conversation", { conversation_id: conversationId, force });
 }
 
 export function createLeadManual(workspaceId: string, params: {
@@ -56,8 +85,28 @@ export function createLeadManual(workspaceId: string, params: {
   });
 }
 
-export function linkLeadConversation(workspaceId: string, leadId: string, conversationId: string) {
-  return runLeadsAction<{ ok: true }>(workspaceId, "link_conversation", { lead_id: leadId, conversation_id: conversationId });
+export function linkLeadConversation(
+  workspaceId: string,
+  leadId: string,
+  conversationId: string,
+  opts: { applyContext?: boolean; overwriteSummary?: boolean } = {},
+) {
+  return runLeadsAction<{ ok: true; context: ConversationContextResult | null }>(workspaceId, "link_conversation", {
+    lead_id: leadId,
+    conversation_id: conversationId,
+    // Backend default is apply_context: true; only send the flag when the
+    // caller explicitly opts out, or opts in to overwriting the summary.
+    ...(opts.applyContext === false ? { apply_context: false } : {}),
+    ...(opts.overwriteSummary ? { overwrite_summary: true } : {}),
+  });
+}
+
+// Mint a short-lived signed URL for a lead attachment. The storage path is
+// resolved server-side (leads-actions re-checks the attachment -> lead ->
+// workspace chain and lead.view); the client only ever holds the signed
+// URL, never the raw path.
+export function signLeadAttachment(workspaceId: string, attachmentId: string) {
+  return runLeadsAction<{ url: string }>(workspaceId, "sign_lead_attachment", { attachment_id: attachmentId });
 }
 
 export function assignLead(workspaceId: string, leadId: string, staffId: string) {

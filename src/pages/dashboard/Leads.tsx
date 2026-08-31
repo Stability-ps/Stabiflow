@@ -24,6 +24,7 @@ export default function Leads() {
   const canCreate = roleHasPermission(role, "lead.create");
   const canEdit = roleHasPermission(role, "lead.edit");
   const canAssign = roleHasPermission(role, "lead.assign");
+  const canViewAttachments = roleHasPermission(role, "lead.attachment.view");
   const canManagePipelines = roleHasPermission(role, "pipeline.manage");
   const canCreateOpportunity = roleHasPermission(role, "opportunity.create");
   const canCloseOpportunity = roleHasPermission(role, "opportunity.close");
@@ -114,6 +115,7 @@ export default function Leads() {
             leadId={selectedLeadId}
             canEdit={canEdit}
             canAssign={canAssign}
+            canViewAttachments={canViewAttachments}
             canCreateOpportunity={canCreateOpportunity}
             canCloseOpportunity={canCloseOpportunity}
             canRecordRevenue={canRecordRevenue}
