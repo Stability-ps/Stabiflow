@@ -340,12 +340,30 @@ Deno.serve(async (req: Request) => {
     if (!lead) return json(req, { error: "Unable to create this lead" }, 500);
     const leadId = lead.id as string;
 
-    // 5: ensure conversation -> lead link. Do NOT report created:true if
-    // this fails - a retry re-enters via priorByConversation and finishes.
+    // 5: ensure conversation -> lead link. Compare-and-set, exactly like
+    // link_conversation: only claim a still-unlinked conversation. If a
+    // concurrent link_conversation / create_from_conversation linked it to
+    // a DIFFERENT lead while this conversion was mid-flight, do NOT
+    // overwrite that winner - stop here (curated 409) BEFORE any
+    // attribution / context / attachment / audit work touches the losing
+    // lead. A lead this call just inserted is left as a harmless unlinked
+    // orphan (dedup detection surfaces it on the next attempt); no risky
+    // cleanup, and the created_from_conversation_id unique index is
+    // untouched. Do NOT report created:true if the link didn't land - a
+    // retry re-enters via priorByConversation and finishes.
     const linkedThisCall = conversation.lead_id !== leadId;
     if (linkedThisCall) {
-      const { error: linkError } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId).eq("workspace_id", workspaceId);
+      const { error: linkError } = await serviceSb
+        .from("inbox_conversations")
+        .update({ lead_id: leadId })
+        .eq("id", conversationId)
+        .eq("workspace_id", workspaceId)
+        .is("lead_id", null);
       if (linkError) return json(req, { error: "Saved the lead, but linking the conversation didn't finish. Open it again to complete." }, 500);
+      const { data: afterLink } = await serviceSb.from("inbox_conversations").select("lead_id").eq("id", conversationId).maybeSingle();
+      if (afterLink?.lead_id !== leadId) {
+        return json(req, { error: "This conversation was linked to another lead while the conversion was in progress." }, 409);
+      }
     }
 
     // 7: attribution backfill (additive, error-checked).

@@ -380,6 +380,89 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
     expect(attr!.every((a) => a.lead_id === leadId)).toBe(true);
   });
 
+  // ---- F1: create_from_conversation vs link_conversation race ------
+
+  it("F1 (concurrent create-vs-link): the conversion never overwrites a link_conversation winner; ownership and attribution never split", async () => {
+    const leadA = await seedLead(ws.workspaceId, { summary: "existing lead A" });
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, {
+      display_name: "CvL", phone_number: "+27831230090", wa_id: "27831230090",
+      ai_summary: "raced create vs link", intake_payload: { customer_name: "CvL" },
+    });
+    await seedMediaMessage(ws.workspaceId, conv.id, "cvl.pdf");
+    await admin.from("attribution_events").insert({
+      workspace_id: ws.workspaceId, conversation_id: conv.id, event_type: "touchpoint", platform: "meta",
+      occurred_at: new Date().toISOString(), source_type: "paid", attribution_method: "deterministic", attribution_confidence: "exact",
+    });
+
+    // Genuinely concurrent: both requests are in flight before either awaits.
+    const [rCreate, rLink] = await Promise.all([
+      call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id }),
+      call(ownerToken, { workspace_id: ws.workspaceId, action: "link_conversation", lead_id: leadA.id, conversation_id: conv.id }),
+    ]);
+
+    // Exactly one lead owns the conversation, and it is a consistent value.
+    const { data: convAfter } = await admin.from("inbox_conversations").select("lead_id").eq("id", conv.id).single();
+    const winner = convAfter!.lead_id as string;
+    expect(winner).toBeTruthy();
+
+    // The unique created_from_conversation_id index still holds: <= 1 lead
+    // was ever created from this conversation.
+    const { data: createdLeads } = await admin.from("leads").select("id").eq("created_from_conversation_id", conv.id);
+    expect((createdLeads ?? []).length).toBeLessThanOrEqual(1);
+    const createLeadId = (createdLeads?.[0]?.id as string | undefined) ?? null;
+
+    expect([leadA.id, createLeadId].filter(Boolean)).toContain(winner);
+    const loser = winner === leadA.id ? createLeadId : leadA.id;
+
+    // Status shape: one linkage success + a clean 409 on the loser, OR - if
+    // link fully committed before the conversion even read the conversation,
+    // so the conversion just adopts lead A - an idempotent success on both.
+    if (winner === leadA.id && createLeadId) {
+      // link won; create_from_conversation inserted its own lead then lost.
+      expect(rLink.status).toBe(200);
+      expect(rCreate.status).toBe(409);
+      expect(String(rCreate.body.error)).toMatch(/linked to another lead while the conversion was in progress/i);
+      expect(rCreate.body.created).toBeUndefined();
+    } else if (winner === createLeadId) {
+      // create_from_conversation won.
+      expect(rCreate.status).toBe(200);
+      expect(rCreate.body.created).toBe(true);
+      expect(rLink.status).toBe(409);
+      expect(String(rLink.body.error)).toMatch(/already linked to another lead/i);
+    } else {
+      // both operations resolved to the same lead (A) -> idempotent success.
+      expect(winner).toBe(leadA.id);
+      expect(createLeadId).toBeNull();
+      expect([rCreate.status, rLink.status]).toEqual([200, 200]);
+    }
+
+    // Attribution lives ONLY on the winner - never split, never on the loser.
+    const { data: attr } = await admin.from("attribution_events").select("lead_id").eq("conversation_id", conv.id);
+    expect(attr!.length).toBeGreaterThan(0);
+    expect(attr!.every((a) => a.lead_id === winner)).toBe(true);
+    if (loser) expect(attr!.some((a) => a.lead_id === loser)).toBe(false);
+
+    // The losing lead got NO post-conflict work: not linked, no attachments,
+    // no lead_linked_conversation / lead_attachments_linked audit. (A harmless
+    // orphan lead from the create side is allowed to exist; we do not clean it
+    // up and we do not fail on it.)
+    if (loser) {
+      const { data: convsOnLoser } = await admin.from("inbox_conversations").select("id").eq("lead_id", loser);
+      expect(convsOnLoser ?? []).toHaveLength(0);
+      const { count: loserAtts } = await admin.from("lead_attachments").select("id", { count: "exact", head: true }).eq("lead_id", loser);
+      expect(loserAtts).toBe(0);
+      const { data: loserLog } = await admin.from("workspace_activity_log").select("action").eq("workspace_id", ws.workspaceId).eq("target_id", loser);
+      const loserActions = (loserLog ?? []).map((l) => l.action);
+      expect(loserActions).not.toContain("lead_linked_conversation");
+      expect(loserActions).not.toContain("lead_attachments_linked");
+    }
+
+    // The winner is fully consistent: it owns the conversation AND the attribution.
+    expect(attr!.every((a) => a.lead_id === winner)).toBe(true);
+    const { data: convFinal } = await admin.from("inbox_conversations").select("lead_id").eq("id", conv.id).single();
+    expect(convFinal!.lead_id).toBe(winner);
+  });
+
   // ---- H2: idempotent partial-failure recovery ---------------------
 
   it("H2: an attachment-link failure AFTER lead creation returns a curated error, does not claim created:true; a retry repairs the missing attachment without a second lead", async () => {
