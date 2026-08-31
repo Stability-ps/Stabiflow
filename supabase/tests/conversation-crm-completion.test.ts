@@ -57,6 +57,20 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
   const roleUser: Record<string, { userId: string; client: SupabaseClient }> = {};
   const ROLES = ["admin", "manager", "sales", "support", "marketing", "viewer"] as const;
 
+  // D-1: a conversation-originated lead must have exactly ONE logical
+  // lead_created activity + lead.created domain event once the conversion
+  // reaches a completed state, regardless of which prior step failed.
+  const leadCreatedActivityCount = async (leadId: string) => {
+    const { count } = await admin.from("workspace_activity_log").select("id", { count: "exact", head: true })
+      .eq("workspace_id", ws.workspaceId).eq("action", "lead_created").eq("target_type", "lead").eq("target_id", leadId);
+    return count ?? 0;
+  };
+  const leadCreatedEventCount = async (leadId: string) => {
+    const { count } = await admin.from("domain_events").select("id", { count: "exact", head: true })
+      .eq("workspace_id", ws.workspaceId).eq("event_type", "lead.created").eq("entity_id", leadId);
+    return count ?? 0;
+  };
+
   beforeAll(async () => {
     ws = await createTestTenant("crm-completion");
     other = await createTestTenant("crm-completion-other");
@@ -224,7 +238,7 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
     expect((after.data || []).some((m) => m.direction === "outbound")).toBe(false);
   });
 
-  it("H: the conversion writes the expected audit rows into the shared workspace_activity_log", async () => {
+  it("H / D-1 HAPPY PATH: the first-attempt conversion writes the expected audit rows and EXACTLY ONE lead_created activity + lead.created domain event", async () => {
     const conv = await seedInboxConversation(ws.workspaceId, numberId, { display_name: "Audit", phone_number: "+27831230012", wa_id: "27831230012", ai_summary: "audit check", intake_payload: { customer_name: "Audit", email: "audit@x.io" } });
     await seedMediaMessage(ws.workspaceId, conv.id, "audit.pdf");
     const r = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
@@ -235,6 +249,19 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
     expect(actions).toContain("lead_linked_conversation");
     expect(actions).toContain("lead_intake_copied");
     expect(actions).toContain("lead_attachments_linked");
+
+    expect(await leadCreatedActivityCount(leadId)).toBe(1);
+    expect(await leadCreatedEventCount(leadId)).toBe(1);
+
+    // AUTOMATION REGRESSION: the exact event the automation engine listens
+    // for is present with the right shape + dedupe key.
+    const { data: evt } = await admin.from("domain_events")
+      .select("event_type, workspace_id, entity_type, entity_id, dedupe_key, payload")
+      .eq("event_type", "lead.created").eq("entity_id", leadId).single();
+    expect(evt!.workspace_id).toBe(ws.workspaceId);
+    expect(evt!.entity_type).toBe("lead");
+    expect(evt!.dedupe_key).toBe(`lead.created:${leadId}`);
+    expect((evt!.payload as Record<string, unknown>).conversation_id).toBe(conv.id);
   });
 
   // ---- H1: dedicated lead.attachment.view permission -------------------
@@ -389,6 +416,12 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
 
     const { data: attr } = await admin.from("attribution_events").select("lead_id").eq("conversation_id", conv.id);
     expect(attr!.every((a) => a.lead_id === leadId)).toBe(true);
+
+    // D-1 CONCURRENT CREATE/CREATE: both requests converge on the canonical
+    // lead and both reach the announcement step - dedupe_key + the partial
+    // unique index collapse it to one logical event + one activity row.
+    expect(await leadCreatedActivityCount(leadId)).toBe(1);
+    expect(await leadCreatedEventCount(leadId)).toBe(1);
   });
 
   // ---- F1: create_from_conversation vs link_conversation race ------
@@ -530,6 +563,95 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
     const { data: attsAfter } = await admin.from("lead_attachments").select("storage_path").eq("lead_id", leadId);
     expect(attsAfter).toHaveLength(1);
     expect(attsAfter![0].storage_path).toBe(goodPath);
+
+    // D-1 MEDIA FAILURE -> RETRY: the first call never announced (500 before
+    // the audit block); the healing retry is the first to reach it, so it
+    // announces - exactly once.
+    expect(await leadCreatedActivityCount(leadId)).toBe(1);
+    expect(await leadCreatedEventCount(leadId)).toBe(1);
+
+    // SUCCESSFUL REPLAY: run again after recovery - counts stay at 1.
+    const replay = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(replay.status).toBe(200);
+    expect(await leadCreatedActivityCount(leadId)).toBe(1);
+    expect(await leadCreatedEventCount(leadId)).toBe(1);
+  });
+
+  it("D-1 LINK FAILURE -> RETRY: a lead that a prior attempt created but never announced (link/attribution never landed) is announced exactly once by the healing retry", async () => {
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, {
+      display_name: "LinkHeal", phone_number: "+27831230140", wa_id: "27831230140",
+      ai_summary: "link-heal", intake_payload: { customer_name: "LinkHeal" },
+    });
+    await seedMediaMessage(ws.workspaceId, conv.id, "linkheal.pdf");
+    await admin.from("attribution_events").insert({
+      workspace_id: ws.workspaceId, conversation_id: conv.id, event_type: "touchpoint", platform: "meta",
+      occurred_at: new Date().toISOString(), source_type: "paid", attribution_method: "deterministic", attribution_confidence: "exact",
+    });
+
+    // First conversion succeeds fully...
+    const first = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(first.body.created).toBe(true);
+    const leadId = first.body.lead.id as string;
+
+    // ...then reconstruct the exact DB state a FIRST ATTEMPT THAT FAILED
+    // AT THE LINK STEP leaves behind: the lead row exists
+    // (created_from_conversation_id set), but the conversation is not
+    // linked, attribution is not backfilled, no attachments, and - the
+    // point of D-1 - no lead_created activity and no lead.created event.
+    await admin.from("workspace_activity_log").delete().eq("workspace_id", ws.workspaceId).eq("target_id", leadId);
+    await admin.from("domain_events").delete().eq("workspace_id", ws.workspaceId).eq("entity_id", leadId).eq("event_type", "lead.created");
+    await admin.from("lead_attachments").delete().eq("lead_id", leadId);
+    await admin.from("attribution_events").update({ lead_id: null }).eq("conversation_id", conv.id);
+    await admin.from("inbox_conversations").update({ lead_id: null }).eq("id", conv.id);
+    expect(await leadCreatedActivityCount(leadId)).toBe(0);
+    expect(await leadCreatedEventCount(leadId)).toBe(0);
+
+    // The healing retry: finds the lead via created_from_conversation_id,
+    // re-links, re-attributes, re-copies context, re-links media, and - via
+    // the D-1 fix - is the FIRST to reach the announcement step.
+    const retry = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(retry.status).toBe(200);
+    expect(retry.body.created).toBe(false); // no second lead
+    expect(retry.body.completed_pending).toBe(true);
+
+    const { data: leadsAfter } = await admin.from("leads").select("id").eq("created_from_conversation_id", conv.id);
+    expect(leadsAfter).toHaveLength(1);
+    expect(leadsAfter![0].id).toBe(leadId);
+    const { data: convAfter } = await admin.from("inbox_conversations").select("lead_id").eq("id", conv.id).single();
+    expect(convAfter!.lead_id).toBe(leadId);
+    const { data: attr } = await admin.from("attribution_events").select("lead_id").eq("conversation_id", conv.id);
+    expect(attr!.every((a) => a.lead_id === leadId)).toBe(true);
+
+    // Exactly one logical lead_created activity + lead.created domain event.
+    expect(await leadCreatedActivityCount(leadId)).toBe(1);
+    expect(await leadCreatedEventCount(leadId)).toBe(1);
+    const { data: evt } = await admin.from("domain_events").select("dedupe_key, entity_type, payload").eq("event_type", "lead.created").eq("entity_id", leadId).single();
+    expect(evt!.dedupe_key).toBe(`lead.created:${leadId}`);
+    expect(evt!.entity_type).toBe("lead");
+    expect((evt!.payload as Record<string, unknown>).conversation_id).toBe(conv.id);
+
+    // Replay after this recovery: still exactly one of each.
+    await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(await leadCreatedActivityCount(leadId)).toBe(1);
+    expect(await leadCreatedEventCount(leadId)).toBe(1);
+  });
+
+  it("D-1: create_from_conversation for a conversation already linked to a NON-conversation-origin lead never emits a spurious lead.created", async () => {
+    // A lead created by seeding (not from any conversation), then a
+    // conversation is linked to it via link_conversation.
+    const lead = await seedLead(ws.workspaceId, {});
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831230141", wa_id: "27831230141", ai_summary: "x" });
+    expect((await call(ownerToken, { workspace_id: ws.workspaceId, action: "link_conversation", lead_id: lead.id, conversation_id: conv.id })).status).toBe(200);
+
+    // create_from_conversation now resolves the lead via conversation.lead_id.
+    // lead.created_from_conversation_id is NULL, so the D-1 gate
+    // (isConversationOriginLead) is false -> no lead.created is announced
+    // for a lead that was linked in, not created from this conversation.
+    const r = await call(ownerToken, { workspace_id: ws.workspaceId, action: "create_from_conversation", conversation_id: conv.id });
+    expect(r.status).toBe(200);
+    expect(r.body.created).toBe(false);
+    expect(await leadCreatedActivityCount(lead.id)).toBe(0);
+    expect(await leadCreatedEventCount(lead.id)).toBe(0);
   });
 
   // ---- M3: attachment signing revalidation + DB integrity ----------

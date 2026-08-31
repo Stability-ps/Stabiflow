@@ -52,7 +52,15 @@ async function backfillAttribution(sb: AnySupabaseClient, column: "lead_id" | "o
 }
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, targetType: string, targetId: string | null, metadata: Record<string, unknown> = {}) {
-  await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: targetType, target_id: targetId, metadata });
+  const { error } = await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: targetType, target_id: targetId, metadata });
+  // A duplicate-key error means this exact logical activity was already
+  // recorded (a retried request, or a concurrent sibling) - the scoped
+  // partial unique index doing its job, not a real failure. Every other
+  // error stays best-effort/silent, matching emitDomainEvent's contract:
+  // activity plumbing must never fail the caller's primary mutation.
+  if (error && !`${error.message ?? ""}`.toLowerCase().includes("duplicate key")) {
+    console.error("logActivity: insert failed", action, error.message);
+  }
 }
 
 async function findDuplicateLeads(sb: AnySupabaseClient, workspaceId: string, phoneNormalized: string | null, conversationId: string | null) {
@@ -406,9 +414,22 @@ Deno.serve(async (req: Request) => {
     const media = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
     if (media.error) return json(req, { error: "Saved the lead, but linking the documents didn't finish. Open it again to complete." }, 500);
 
-    // 9: audit / domain events - only the work this call actually did.
+    // 9: audit / domain events.
     const intakeCopied = Object.keys(conversationIntake).length > 0;
-    if (created) {
+
+    // D-1: announce creation once the conversion FIRST reaches a fully
+    // completed state - not only on the call that INSERTed the lead. Every
+    // step above returns 500 on failure BEFORE this point, so if a prior
+    // attempt failed at link / attribution / context / media, this
+    // (successful) call is the first to get here and must announce. The
+    // gate is "this lead genuinely originated from THIS conversation"
+    // (never a lead that was link_conversation'd in - that lead already
+    // has its own lead.created). Idempotent on retry AND on a concurrent
+    // sibling: domain_events.dedupe_key ('lead.created:<leadId>') and the
+    // partial unique index on workspace_activity_log(lead_created) each
+    // collapse a repeat to one logical row.
+    const isConversationOriginLead = (lead.created_from_conversation_id as string | null) === conversationId;
+    if (isConversationOriginLead) {
       await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", leadId, {
         source: "whatsapp", conversation_id: conversationId,
         summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typedMapped, attachments_linked: media.linked,
