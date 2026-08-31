@@ -79,11 +79,14 @@ export function startIntegrationConnect(workspaceId: string, provider: Integrati
   return invoke<{ url: string }>("integrations-oauth-start", { workspace_id: workspaceId, provider });
 }
 
+export type WebhookSubscriptionInfo = { status: "subscribed" | "not_subscribed" | "unknown" | "error"; detail: string; wabaCount: number };
+
 export type DiscoverySummary = {
   facebookPages: { discovered: number; new: number; collisions: number };
   instagramAccounts: { discovered: number; new: number; collisions: number };
   adAccounts: { discovered: number; new: number; collisions: number };
   whatsappNumbers: { discovered: number; new: number; collisions: number };
+  whatsappWebhook?: { status: string; detail: string; wabaCount: number };
   collisionDetails: Array<{ table: string; providerId: string }>;
 };
 
@@ -91,13 +94,32 @@ export function refreshIntegrationResources(workspaceId: string, provider: Integ
   return invoke<{ ok: true; summary: DiscoverySummary }>("integrations-discover-resources", { workspace_id: workspaceId, provider });
 }
 
+// Explicit "Subscribe webhook" / "Repair subscription" action. Server-side
+// this re-POSTs POST /{waba}/subscribed_apps for this workspace's
+// discovered WABA(s); it is integration.manage-gated in the edge function.
+export function repairWhatsAppWebhookSubscription(workspaceId: string) {
+  return invoke<{ ok: true; webhookSubscription: WebhookSubscriptionInfo }>("integrations-discover-resources", {
+    workspace_id: workspaceId,
+    provider: "whatsapp",
+    repair_webhook: true,
+  });
+}
+
 export type IntegrationResourceHealth = { type: string; id: string; label: string; healthy: boolean; category?: string; message?: string };
 
+export type ConnectionHealthResult = {
+  ok: true;
+  integration: {
+    connected: boolean;
+    healthy?: boolean;
+    status?: string;
+    webhook?: { status: "subscribed" | "not_subscribed" | "unknown" | "error"; detail: string; checked_at: string } | null;
+  };
+  resources: IntegrationResourceHealth[];
+};
+
 export function checkIntegrationConnectionHealth(workspaceId: string, provider: IntegrationProvider) {
-  return invoke<{ ok: true; integration: { connected: boolean; healthy?: boolean; status?: string }; resources: IntegrationResourceHealth[] }>(
-    "integrations-connection-health",
-    { workspace_id: workspaceId, provider },
-  );
+  return invoke<ConnectionHealthResult>("integrations-connection-health", { workspace_id: workspaceId, provider });
 }
 
 export function disconnectIntegration(workspaceId: string, provider: IntegrationProvider) {

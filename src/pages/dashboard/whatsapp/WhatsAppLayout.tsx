@@ -9,7 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { useAllWhatsAppNumbers, useWorkspaceIntegrations } from "@/hooks/useIntegrations";
 import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
-import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
+import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
 import type { WhatsAppNumber, WhatsAppOutletContext } from "@/pages/dashboard/whatsapp/whatsappOutlet";
 
 const TABS: Array<{ label: string; to: string; external?: boolean }> = [
@@ -47,6 +47,7 @@ export default function WhatsAppLayout() {
   const role = currentMembership?.role;
   const canView = roleHasPermission(role, "inbox.view");
   const canManage = roleHasPermission(role, "inbox.manage");
+  const canManageIntegration = roleHasPermission(role, "integration.manage");
 
   const { data: integrations, isLoading: integrationsLoading } = useWorkspaceIntegrations(currentWorkspaceId);
   const { data: numbers } = useAllWhatsAppNumbers(canView ? currentWorkspaceId : null);
@@ -81,6 +82,7 @@ export default function WhatsAppLayout() {
   const allNumbers = (numbers || []) as WhatsAppNumber[];
   const activeNumbers = allNumbers.filter((n) => n.is_active);
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
+  const webhook = presentWebhookSubscription(integration.webhook_subscription_status, !!lastEvent);
   const primary = activeNumbers[0] || null;
 
   const context: WhatsAppOutletContext = {
@@ -135,12 +137,22 @@ export default function WhatsAppLayout() {
         </StatusCell>
 
         <StatusCell label="Webhook subscription">
-          <span className="text-muted-foreground">Status unavailable</span>
-          <span className="mt-1 block text-xs text-muted-foreground">
-            {lastEvent ? "Events are being received." : "Verify the WhatsApp Business Account is subscribed to this app's webhook in Meta."}
-          </span>
+          <Badge className={toneClassName(webhook.tone)}>{webhook.label}</Badge>
+          {webhook.hint && <span className="mt-1 block text-xs text-muted-foreground">{webhook.hint}</span>}
         </StatusCell>
       </section>
+
+      {webhook.actionable && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>WhatsApp is connected but its webhook subscription is not confirmed - inbound messages may not arrive.</span>
+          {canManageIntegration && (
+            <Button size="sm" variant="outline" className="ml-auto h-7" onClick={() => navigate("/app/whatsapp/settings")}>
+              Fix in Settings
+            </Button>
+          )}
+        </div>
+      )}
 
       <nav aria-label="WhatsApp sections" className="flex gap-1 overflow-x-auto border-b">
         {TABS.map((tab) => (

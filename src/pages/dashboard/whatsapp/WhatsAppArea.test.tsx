@@ -35,6 +35,7 @@ const integrationSpies = vi.hoisted(() => ({
   disconnectIntegration: vi.fn(),
   refreshIntegrationResources: vi.fn(),
   checkIntegrationConnectionHealth: vi.fn(),
+  repairWhatsAppWebhookSubscription: vi.fn(),
 }));
 
 vi.mock("@/hooks/useAuth", () => ({
@@ -104,6 +105,9 @@ const CONNECTED_INTEGRATION = {
   last_health_check_status: "healthy",
   last_health_check_at: "2026-08-30T09:00:00Z",
   connected_at: "2026-08-01T00:00:00Z",
+  webhook_subscription_status: null as string | null,
+  webhook_subscription_checked_at: null as string | null,
+  webhook_subscription_detail: null as string | null,
 };
 const ACTIVE_NUMBER = {
   id: "num-1", phone_number_id: "pnid-1", display_phone_number: "+27 11 000 0000",
@@ -165,11 +169,46 @@ describe("connected state - production wiring indicators", () => {
     expect(statusRegion).toHaveTextContent("message");
   });
 
-  it("never claims the webhook subscription is healthy - shows 'Status unavailable'", () => {
+  it("reports the webhook subscription from real state: 'Receiving events' when inbound events are arriving, no warning", () => {
+    // default fixture: lastEvent is a real 'message' event
     renderArea("/app/whatsapp/inbox");
     const statusRegion = screen.getByRole("region", { name: "WhatsApp connection status" });
     expect(statusRegion).toHaveTextContent("Webhook subscription");
-    expect(statusRegion).toHaveTextContent("Status unavailable");
+    expect(statusRegion).toHaveTextContent("Receiving events");
+    expect(screen.queryByText(/webhook subscription is not confirmed/i)).not.toBeInTheDocument();
+  });
+
+  it("when the subscription is not confirmed and no events have been seen, shows 'Unknown' plus a warning strip with a Fix action (owner has integration.manage)", () => {
+    state.lastEvent = null;
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: null }];
+    renderArea("/app/whatsapp/inbox");
+    expect(screen.getByRole("region", { name: "WhatsApp connection status" })).toHaveTextContent("Unknown");
+    expect(screen.getByText(/webhook subscription is not confirmed/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fix in Settings" })).toBeInTheDocument();
+  });
+
+  it("when the subscription is explicitly 'not_subscribed', the shell shows an actionable warning", () => {
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "not_subscribed" }];
+    renderArea("/app/whatsapp/inbox");
+    const statusRegion = screen.getByRole("region", { name: "WhatsApp connection status" });
+    expect(statusRegion).toHaveTextContent("Not subscribed");
+    expect(screen.getByText(/webhook subscription is not confirmed/i)).toBeInTheDocument();
+  });
+
+  it("'subscribed' reads as healthy with no warning strip", () => {
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "subscribed" }];
+    renderArea("/app/whatsapp/inbox");
+    expect(screen.getByRole("region", { name: "WhatsApp connection status" })).toHaveTextContent("Subscribed");
+    expect(screen.queryByText(/webhook subscription is not confirmed/i)).not.toBeInTheDocument();
+  });
+
+  it("a manager (inbox.view but NOT integration.manage) sees the warning state but no repair action in the shell", () => {
+    state.role = "manager";
+    state.lastEvent = null;
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "not_subscribed" }];
+    renderArea("/app/whatsapp/inbox");
+    expect(screen.getByText(/webhook subscription is not confirmed/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Fix in Settings" })).not.toBeInTheDocument();
   });
 
   it("warns when there is no active number", () => {
@@ -258,10 +297,41 @@ describe("WhatsApp Settings child", () => {
     expect(integrationSpies.refreshIntegrationResources).not.toHaveBeenCalled();
   });
 
-  it("surfaces 'Webhook status unavailable' rather than assuming healthy, and prompts a Meta check when no events seen", () => {
+  it("shows the real webhook subscription state and a 'Subscribe webhook' action for a manager of the integration (owner has integration.manage), plus a Meta-check hint when unconfirmed", () => {
     state.lastEvent = null;
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: null }];
     renderArea("/app/whatsapp/settings");
-    expect(screen.getAllByText(/Status unavailable/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/verify in Meta that the WhatsApp Business Account is subscribed/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Webhook subscription").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Unknown/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Subscribe webhook/i })).toBeInTheDocument();
+    expect(screen.getByText(/verify in Meta that the WhatsApp Business Account/i)).toBeInTheDocument();
+  });
+
+  it("'not_subscribed' offers 'Subscribe webhook'; clicking it calls repairWhatsAppWebhookSubscription and nothing else", async () => {
+    integrationSpies.repairWhatsAppWebhookSubscription.mockResolvedValue({ ok: true, webhookSubscription: { status: "subscribed", detail: "ok", wabaCount: 1 } });
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "not_subscribed" }];
+    renderArea("/app/whatsapp/settings");
+    const btn = screen.getByRole("button", { name: /Subscribe webhook/i });
+    btn.click();
+    expect(integrationSpies.repairWhatsAppWebhookSubscription).toHaveBeenCalledWith("workspace-1");
+    expect(integrationSpies.setResourceActive).not.toHaveBeenCalled();
+    expect(integrationSpies.disconnectIntegration).not.toHaveBeenCalled();
+  });
+
+  it("a manager (no integration.manage) sees the subscription state but NO repair button in Settings", () => {
+    state.role = "manager";
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "not_subscribed" }];
+    renderArea("/app/whatsapp/settings");
+    expect(screen.getAllByText("Webhook subscription").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Subscribe webhook/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Repair subscription/i })).not.toBeInTheDocument();
+  });
+
+  it("'subscribed' reads healthy and offers 'Repair subscription' (idempotent re-check) for a manager of the integration", () => {
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "subscribed" }];
+    renderArea("/app/whatsapp/settings");
+    expect(screen.getAllByText(/Subscribed/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Repair subscription/i })).toBeInTheDocument();
+    expect(screen.queryByText(/verify in Meta that the WhatsApp Business Account/i)).not.toBeInTheDocument();
   });
 });
