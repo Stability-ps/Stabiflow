@@ -23,10 +23,11 @@ export type InboxConversationRow = {
   lead_id: string | null;
   intake_schema_id: string | null;
   intake_completed_at: string | null;
+  customer_id: string | null;
 };
 
 const CONVERSATION_COLUMNS =
-  "id, wa_id, phone_number, display_name, status, ai_enabled, inbox_status, priority_level, assigned_staff_id, assigned_staff_name, ai_summary, intake_missing_fields, intake_payload, last_inbound_at, last_outbound_at, updated_at, lead_id, intake_schema_id, intake_completed_at";
+  "id, wa_id, phone_number, display_name, status, ai_enabled, inbox_status, priority_level, assigned_staff_id, assigned_staff_name, ai_summary, intake_missing_fields, intake_payload, last_inbound_at, last_outbound_at, updated_at, lead_id, intake_schema_id, intake_completed_at, customer_id";
 
 export function useInboxConversations(workspaceId: string | null) {
   const queryClient = useQueryClient();

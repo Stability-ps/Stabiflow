@@ -34,6 +34,7 @@ const DEFAULT_FILES = [
   "supabase/tests/integrations-whatsapp-webhook.test.ts",
   "supabase/tests/conversation-crm-completion.test.ts",
   "supabase/tests/structured-intake.test.ts",
+  "supabase/tests/customer-360.test.ts",
 ];
 
 function localEnvFromSupabase() {

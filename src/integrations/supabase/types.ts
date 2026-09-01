@@ -1932,6 +1932,7 @@ export type Database = {
       }
       customers: {
         Row: {
+          assigned_to: string | null
           company_name: string | null
           created_at: string
           created_by: string | null
@@ -1942,9 +1943,12 @@ export type Database = {
           name: string
           opportunity_id: string | null
           phone: string | null
+          phone_normalized: string | null
+          status: string
           workspace_id: string
         }
         Insert: {
+          assigned_to?: string | null
           company_name?: string | null
           created_at?: string
           created_by?: string | null
@@ -1955,9 +1959,12 @@ export type Database = {
           name: string
           opportunity_id?: string | null
           phone?: string | null
+          phone_normalized?: string | null
+          status?: string
           workspace_id: string
         }
         Update: {
+          assigned_to?: string | null
           company_name?: string | null
           created_at?: string
           created_by?: string | null
@@ -1968,9 +1975,18 @@ export type Database = {
           name?: string
           opportunity_id?: string | null
           phone?: string | null
+          phone_normalized?: string | null
+          status?: string
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "customers_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "customers_created_by_fkey"
             columns: ["created_by"]
@@ -2200,6 +2216,7 @@ export type Database = {
           assigned_staff_id: string | null
           assigned_staff_name: string | null
           created_at: string
+          customer_id: string | null
           display_name: string | null
           first_staff_reply_at: string | null
           human_handoff_requested_at: string | null
@@ -2235,6 +2252,7 @@ export type Database = {
           assigned_staff_id?: string | null
           assigned_staff_name?: string | null
           created_at?: string
+          customer_id?: string | null
           display_name?: string | null
           first_staff_reply_at?: string | null
           human_handoff_requested_at?: string | null
@@ -2270,6 +2288,7 @@ export type Database = {
           assigned_staff_id?: string | null
           assigned_staff_name?: string | null
           created_at?: string
+          customer_id?: string | null
           display_name?: string | null
           first_staff_reply_at?: string | null
           human_handoff_requested_at?: string | null
@@ -2310,6 +2329,13 @@ export type Database = {
             columns: ["assigned_staff_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
             referencedColumns: ["id"]
           },
           {
@@ -4223,6 +4249,39 @@ export type Database = {
         Args: { p_name: string; p_slug: string }
         Returns: string
       }
+      customer_360: {
+        Args: { p_customer_id: string; p_workspace_id: string }
+        Returns: Json
+      }
+      customer_match_candidates: {
+        Args: { p_conversation_id: string; p_workspace_id: string }
+        Returns: {
+          company_name: string
+          customer_id: string
+          email: string
+          match_reason: string
+          match_tier: string
+          name: string
+          phone: string
+        }[]
+      }
+      customers_search: {
+        Args: { p_limit?: number; p_query?: string; p_workspace_id: string }
+        Returns: {
+          assigned_to_name: string
+          company_name: string
+          customer_since: string
+          email: string
+          id: string
+          last_interaction: string
+          name: string
+          open_opportunities: number
+          phone: string
+          revenue_by_currency: Json
+          status: string
+          total_opportunities: number
+        }[]
+      }
       ensure_default_pipeline: {
         Args: { p_created_by?: string; p_workspace_id: string }
         Returns: {
@@ -4437,6 +4496,7 @@ export type Database = {
         Returns: boolean
       }
       next_lead_reference: { Args: { p_workspace_id: string }; Returns: string }
+      normalize_phone_number: { Args: { p_raw: string }; Returns: string }
       set_workspace_integration_secret: {
         Args: { p_integration_id: string; p_secret: string }
         Returns: undefined

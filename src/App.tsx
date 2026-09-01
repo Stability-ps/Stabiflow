@@ -40,6 +40,8 @@ import FlowAI from "@/pages/dashboard/FlowAI";
 import Automations from "@/pages/dashboard/Automations";
 import Integrations from "@/pages/dashboard/Integrations";
 import Settings from "@/pages/dashboard/Settings";
+import CustomersList from "@/pages/dashboard/customers/CustomersList";
+import Customer360Page from "@/pages/dashboard/customers/Customer360";
 import Privacy from "@/pages/legal/Privacy";
 import Terms from "@/pages/legal/Terms";
 import DataDeletion from "@/pages/legal/DataDeletion";
@@ -110,6 +112,8 @@ export function AppRoutes() {
           <Route path="*" element={<Navigate to="/app/whatsapp/inbox" replace />} />
         </Route>
         <Route path="/app/leads" element={<Leads />} />
+        <Route path="/app/customers" element={<CustomersList />} />
+        <Route path="/app/customers/:customerId" element={<Customer360Page />} />
         <Route path="/app/analytics" element={<Analytics />} />
         <Route path="/app/flow-ai" element={<FlowAI />} />
         <Route path="/app/automations" element={<Automations />} />

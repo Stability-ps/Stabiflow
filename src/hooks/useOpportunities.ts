@@ -106,6 +106,20 @@ export function useCustomerForOpportunity(opportunityId: string | null) {
   });
 }
 
+/** Phase 4: the customer record for a lead (customers.lead_id), if any -
+ * the entry point from LeadDetail into Customer 360. */
+export function useCustomerForLead(leadId: string | null) {
+  return useQuery({
+    queryKey: ["customer", "lead", leadId],
+    queryFn: async (): Promise<CustomerRow | null> => {
+      const { data, error } = await supabase.from("customers").select(CUSTOMER_COLUMNS).eq("lead_id", leadId as string).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as CustomerRow | null;
+    },
+    enabled: !!leadId,
+  });
+}
+
 export function useCustomer(customerId: string | null) {
   return useQuery({
     queryKey: ["customer", customerId],
