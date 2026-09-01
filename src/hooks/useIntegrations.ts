@@ -94,7 +94,7 @@ export function useAllWhatsAppNumbers(workspaceId: string | null) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workspace_whatsapp_numbers")
-        .select("id, phone_number_id, display_phone_number, verified_name, quality_rating, platform_status, waba_id, is_active")
+        .select("id, phone_number_id, display_phone_number, verified_name, quality_rating, platform_status, waba_id, is_active, intake_schema_id")
         .eq("workspace_id", workspaceId as string)
         .order("display_phone_number", { ascending: true });
       if (error) throw new Error(error.message);

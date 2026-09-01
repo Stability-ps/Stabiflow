@@ -112,7 +112,14 @@ export type WorkspacePermission =
   | "automation.create"
   | "automation.edit"
   | "automation.enable"
-  | "automation.delete";
+  | "automation.delete"
+  // Structured Intake (Phase 3) - mirroring
+  // 20260920060000_structured_intake_schema.sql. intake.view is broad
+  // (every role - schema definitions are configuration, not customer
+  // data); intake.manage is manager-and-up, the same cutoff as
+  // pipeline.manage / automation.create.
+  | "intake.view"
+  | "intake.manage";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -129,6 +136,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
     "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
+    "intake.view", "intake.manage",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
@@ -144,6 +152,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
     "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
+    "intake.view", "intake.manage",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
@@ -158,6 +167,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
     "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
+    "intake.view", "intake.manage",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
@@ -169,6 +179,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "attribution.view", "revenue.view",
     "flow_ai.use",
     "automation.view", "automation.view_runs",
+    "intake.view",
   ],
   sales: [
     "manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view",
@@ -178,6 +189,7 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "attribution.view", "revenue.view", "revenue.create", "revenue.edit",
     "flow_ai.use",
     "automation.view", "automation.view_runs",
+    "intake.view",
   ],
   support: [
     "manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage",
@@ -187,8 +199,9 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "attribution.view", "revenue.view",
     "flow_ai.use",
     "automation.view", "automation.view_runs",
+    "intake.view",
   ],
-  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "lead.view", "pipeline.view", "opportunity.view", "attribution.view", "revenue.view", "flow_ai.use", "automation.view", "automation.view_runs"],
+  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "lead.view", "pipeline.view", "opportunity.view", "attribution.view", "revenue.view", "flow_ai.use", "automation.view", "automation.view_runs", "intake.view"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {

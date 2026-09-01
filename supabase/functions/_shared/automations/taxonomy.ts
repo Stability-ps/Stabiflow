@@ -5,6 +5,7 @@
 // (or an automation's own JSON config) never gets to invent one.
 export const EVENT_TYPES = [
   "conversation.started", "message.received", "conversation.human_takeover",
+  "conversation.intake_completed",
   "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout",
   "opportunity.created", "opportunity.stage_changed", "opportunity.won", "opportunity.lost",
   "customer.created", "revenue.recorded",
