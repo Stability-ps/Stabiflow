@@ -126,6 +126,38 @@ Deno.test("evaluateIntake: inactive fields are ignored entirely", () => {
   assertEquals(e.required_total, 1);
 });
 
+Deno.test("evaluateIntake: a schema with zero required active fields never reports complete", () => {
+  const schema: IntakeSchemaDef = {
+    id: "s",
+    fields: [
+      field({ key: "a", field_type: "text", required: false, sort_order: 1 }),
+      field({ key: "b", field_type: "text", required: false, sort_order: 2 }),
+    ],
+  };
+  // nothing answered
+  const empty = evaluateIntake(schema, {});
+  assertEquals(empty.required_total, 0);
+  assertEquals(empty.complete, false);
+  assertEquals(empty.next_question, null);
+  // every optional field answered - still not "complete" (nothing was required)
+  const filled = evaluateIntake(schema, { a: "x", b: "y" });
+  assertEquals(filled.complete, false);
+  // and the completion transition therefore never fires
+  assertEquals(resolveIntakeCompletion("c", null, filled).should_emit, false);
+});
+
+Deno.test("evaluateIntake: one required field among optionals still completes normally", () => {
+  const schema: IntakeSchemaDef = {
+    id: "s",
+    fields: [
+      field({ key: "opt", field_type: "text", required: false, sort_order: 1 }),
+      field({ key: "req", field_type: "text", required: true, sort_order: 2 }),
+    ],
+  };
+  assertEquals(evaluateIntake(schema, {}).complete, false);
+  assertEquals(evaluateIntake(schema, { req: "here" }).complete, true);
+});
+
 Deno.test("evaluateIntake: malformed payload values are safe", () => {
   const e = evaluateIntake(SCHEMA, { full_name: { nested: true }, email: ["a"], amount: "abc" });
   assertEquals(e.complete, false);

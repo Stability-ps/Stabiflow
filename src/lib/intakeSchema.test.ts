@@ -67,6 +67,16 @@ describe("evaluateIntake", () => {
     expect(e.missingRequired).toEqual(["email"]);
   });
 
+  it("a schema with no required active fields never reports complete", () => {
+    const optionalOnly: IntakeFieldDef[] = [
+      field({ key: "a", field_type: "text", required: false, sort_order: 1 }),
+      field({ key: "b", field_type: "text", required: false, sort_order: 2 }),
+    ];
+    expect(evaluateIntake(optionalOnly, {}).complete).toBe(false);
+    expect(evaluateIntake(optionalOnly, { a: "x", b: "y" }).complete).toBe(false);
+    expect(evaluateIntake(optionalOnly, {}).requiredTotal).toBe(0);
+  });
+
   it("ignores inactive fields", () => {
     const e = evaluateIntake(
       [field({ key: "a", field_type: "text", required: true, sort_order: 1 }), field({ key: "b", field_type: "text", required: true, sort_order: 2, is_active: false })],

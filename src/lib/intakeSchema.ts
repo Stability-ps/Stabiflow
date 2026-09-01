@@ -190,6 +190,10 @@ export function evaluateIntake(fields: IntakeFieldDef[], payloadFields: Record<s
     nextField,
     requiredTotal,
     requiredCollected,
-    complete: missingRequired.length === 0,
+    // Mirror of the server engine: a schema with zero required active
+    // fields never reaches a "complete" state (nothing was required, so
+    // there is nothing to complete), which keeps the progress line and the
+    // "Ask next question" control honest.
+    complete: requiredTotal > 0 && missingRequired.length === 0,
   };
 }

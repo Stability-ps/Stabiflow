@@ -227,7 +227,15 @@ export function evaluateIntake(schema: IntakeSchemaDef, payloadFields: Record<st
     next_question: nextField ? nextField.question_text : null,
     required_total: requiredTotal,
     required_collected: requiredCollected,
-    complete: missingRequired.length === 0,
+    // A schema with zero required active fields has no completion state to
+    // enter - "intake complete" means "everything I said I needed is
+    // collected", and nothing was required. Without this guard an
+    // all-optional schema would emit conversation.intake_completed on the
+    // customer's first message, before any answer exists, and fire any
+    // qualification automation wired to that trigger. A workspace that
+    // wants "any inbound = qualified" should use conversation.started /
+    // message.received instead.
+    complete: requiredTotal > 0 && missingRequired.length === 0,
   };
 }
 

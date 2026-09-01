@@ -30,6 +30,11 @@ async function callLeads(token: string, body: Record<string, unknown>) {
 /** Seed a schema + ordered fields directly (service role) - the fast path
  * for tests that only need the state, not the create_* dispatcher. */
 async function seedSchema(workspaceId: string, opts: { name?: string; isDefault?: boolean } = {}) {
+  // Only one row per workspace may carry is_default (partial unique index) -
+  // clear any existing default first, exactly as set_default_schema does.
+  if (opts.isDefault) {
+    await admin.from("workspace_intake_schemas").update({ is_default: false }).eq("workspace_id", workspaceId).eq("is_default", true);
+  }
   const { data, error } = await admin.from("workspace_intake_schemas").insert({
     workspace_id: workspaceId, name: opts.name ?? "Test intake", is_default: opts.isDefault ?? false, is_active: true,
   }).select("id").single();
@@ -280,5 +285,79 @@ describe("Phase 3 - structured intake + Ask Info", () => {
     expect(leadRow!.contact_name).toBe("Handoff Lead"); // display_name wins for contact_name
     expect(leadRow!.email).toBe("grace@example.com");
     expect(leadRow!.summary).toBe("wants equipment finance");
+  });
+
+  // --- M1: zero-required-field schema never completes ----------------
+
+  it("a schema with no required fields never emits conversation.intake_completed", async () => {
+    const schemaId = await seedSchema(ws.workspaceId, { name: "All optional" });
+    await seedField(schemaId, ws.workspaceId, { key: "pref_channel", label: "Preferred channel", question_text: "How should we reach you?", field_type: "text", required: false, sort_order: 10 });
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831240009", wa_id: "27831240009", intake_schema_id: schemaId });
+
+    const res = await callInbox(ownerToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "set_intake_answer", field_key: "pref_channel", value: "WhatsApp is fine" });
+    expect(res.status).toBe(200);
+    expect(res.body.evaluation.complete).toBe(false);
+    expect(await intakeEventCount(conv.id)).toBe(0);
+
+    const { data: row } = await admin.from("inbox_conversations").select("intake_completed_at").eq("id", conv.id).single();
+    expect(row!.intake_completed_at).toBeNull();
+
+    // ask_info also reports nothing to ask and not complete
+    const preview = await callInbox(ownerToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "ask_info", confirm: false });
+    expect(preview.body.next_question).toBeNull();
+    expect(preview.body.complete).toBe(false);
+  });
+
+  // --- M2: an in-flight conversation stays pinned to its schema -------
+
+  it("a conversation stays on the schema it started with after the workspace default changes", async () => {
+    const schemaA = await seedSchema(ws.workspaceId, { name: "Pinned A", isDefault: true });
+    await seedField(schemaA, ws.workspaceId, { key: "a_one", label: "A one", question_text: "A: first thing?", field_type: "text", required: true, sort_order: 10 });
+    await seedField(schemaA, ws.workspaceId, { key: "a_two", label: "A two", question_text: "A: second thing?", field_type: "text", required: true, sort_order: 20 });
+
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831240010", wa_id: "27831240010" });
+    // first answer resolves + pins schema A (no intake_schema_id column yet)
+    const first = await callInbox(ownerToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "set_intake_answer", field_key: "a_one", value: "answered" });
+    expect(first.status).toBe(200);
+    expect(first.body.evaluation.missing_required).toEqual(["a_two"]);
+    const { data: pinned } = await admin.from("inbox_conversations").select("intake_schema_id").eq("id", conv.id).single();
+    expect(pinned!.intake_schema_id).toBe(schemaA);
+
+    // workspace switches its default to a brand-new schema B
+    const schemaB = await seedSchema(ws.workspaceId, { name: "New default B" });
+    await seedField(schemaB, ws.workspaceId, { key: "b_one", label: "B one", question_text: "B: only thing?", field_type: "text", required: true, sort_order: 10 });
+    const setDefault = await callIntake(ownerToken, { workspace_id: ws.workspaceId, action: "set_default_schema", schema_id: schemaB });
+    expect(setDefault.status).toBe(200);
+
+    // the conversation still evaluates against A, not B
+    const preview = await callInbox(ownerToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "ask_info", confirm: false });
+    expect(preview.body.field_key).toBe("a_two");
+    // and a B-only field is rejected for this conversation
+    const wrongSchemaField = await callInbox(ownerToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "set_intake_answer", field_key: "b_one", value: "x" });
+    expect(wrongSchemaField.status).toBe(400);
+  });
+
+  // --- L2: per-number schema cannot cross workspaces ----------------
+
+  it("set_number_schema rejects a schema that belongs to another workspace", async () => {
+    const foreignSchema = await seedSchema(other.workspaceId, { name: "Not yours" });
+    const res = await callIntake(ownerToken, { workspace_id: ws.workspaceId, action: "set_number_schema", whatsapp_number_id: numberId, schema_id: foreignSchema });
+    expect(res.status).toBe(404);
+    const { data: num } = await admin.from("workspace_whatsapp_numbers").select("intake_schema_id").eq("id", numberId).single();
+    expect(num!.intake_schema_id).not.toBe(foreignSchema);
+  });
+
+  // --- L3: Ask Info / answer edit enforce inbox.manage --------------
+
+  it("ask_info and set_intake_answer refuse a caller without inbox.manage", async () => {
+    const schemaId = await seedSchema(ws.workspaceId, { name: "Perm gate" });
+    await seedField(schemaId, ws.workspaceId, { key: "thing", label: "Thing", question_text: "?", field_type: "text", required: true, sort_order: 10 });
+    const conv = await seedInboxConversation(ws.workspaceId, numberId, { phone_number: "+27831240011", wa_id: "27831240011", intake_schema_id: schemaId });
+    const salesToken = (await salesClient.auth.getSession()).data.session!.access_token;
+
+    const ask = await callInbox(salesToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "ask_info", confirm: false });
+    expect(ask.status).toBe(403);
+    const edit = await callInbox(salesToken, { workspace_id: ws.workspaceId, conversation_id: conv.id, action: "set_intake_answer", field_key: "thing", value: "y" });
+    expect(edit.status).toBe(403);
   });
 });
