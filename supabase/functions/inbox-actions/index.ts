@@ -26,7 +26,7 @@ import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompl
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer"]);
+const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer"]);
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, conversationId: string, metadata: Record<string, unknown> = {}) {
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: "inbox_conversation", target_id: conversationId, metadata });
@@ -134,7 +134,7 @@ Deno.serve(async (req: Request) => {
   // workspace by guessing/reusing an id.
   const { data: conversation } = await serviceSb
     .from("inbox_conversations")
-    .select("id,workspace_id,whatsapp_number_id,wa_id,display_name,status,ai_enabled,assigned_staff_id,inbox_status,intake_missing_fields,intake_payload,lead_id,intake_schema_id,intake_completed_at")
+    .select("id,workspace_id,whatsapp_number_id,wa_id,display_name,status,ai_enabled,assigned_staff_id,inbox_status,intake_missing_fields,intake_payload,lead_id,intake_schema_id,intake_completed_at,customer_id")
     .eq("id", conversationId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -358,6 +358,49 @@ Deno.serve(async (req: Request) => {
         next_question: evaluation.next_question,
       },
     });
+  }
+
+  // Phase 4: conversation <-> customer link. Explicit staff action
+  // (inbox.manage). Cross-workspace customer_id is rejected here AND by the
+  // inbox_conversations validate trigger. Linking additively backfills the
+  // customer_id onto this conversation's attribution touchpoints (NULL-only,
+  // never rewrites existing evidence); unlink never touches attribution.
+  if (action === "link_customer") {
+    const customerId = typeof body.customer_id === "string" ? body.customer_id : "";
+    if (!customerId) return json(req, { error: "customer_id is required" }, 400);
+
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id, name, customer_since, phone, email, company_name, status")
+      .eq("id", customerId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!customer) return json(req, { error: "Customer not found" }, 404);
+
+    const previous = (conversation as { customer_id: string | null }).customer_id ?? null;
+    if (previous && previous !== customerId && body.change !== true) {
+      return json(req, { error: "This conversation is already linked to a customer. Pass change:true to move it.", code: "already_linked" }, 409);
+    }
+    if (previous === customerId) return json(req, { ok: true, customer, unchanged: true });
+
+    const { error: updErr } = await serviceSb.from("inbox_conversations").update({ customer_id: customerId }).eq("id", conversationId);
+    if (updErr) return json(req, { error: "Unable to link this customer" }, 500);
+
+    // Additive, NULL-only - identical contract to leads-actions
+    // backfillAttribution. Existing customer_id evidence is preserved.
+    await serviceSb.from("attribution_events").update({ customer_id: customerId }).eq("conversation_id", conversationId).is("customer_id", null);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_customer_linked", conversationId, { customer_id: customerId, changed_from: previous });
+
+    return json(req, { ok: true, customer });
+  }
+
+  if (action === "unlink_customer") {
+    const previous = (conversation as { customer_id: string | null }).customer_id ?? null;
+    if (!previous) return json(req, { ok: true, unchanged: true });
+    const { error: updErr } = await serviceSb.from("inbox_conversations").update({ customer_id: null }).eq("id", conversationId);
+    if (updErr) return json(req, { error: "Unable to unlink this customer" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_customer_unlinked", conversationId, { previous_customer_id: previous });
+    return json(req, { ok: true });
   }
 
   const markHumanTakeover = async (wasAiEnabled: boolean) => {

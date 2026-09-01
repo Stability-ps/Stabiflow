@@ -17,7 +17,9 @@ import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { getInboxMediaUrl, useInboxInternalNotes, useInboxMessages, type InboxMessageRow } from "@/hooks/useInboxMessages";
 import type { InboxConversationRow } from "@/hooks/useInboxConversations";
 import { useLead, usePipelines, usePipelineStages } from "@/hooks/useLeads";
-import { useOpportunitiesForLead } from "@/hooks/useOpportunities";
+import { useOpportunitiesForLead, useCustomer } from "@/hooks/useOpportunities";
+import { useCustomerMatchCandidates, useCustomersSearch } from "@/hooks/useCustomers";
+import { linkConversationCustomer, unlinkConversationCustomer } from "@/lib/customer";
 import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
 import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
@@ -438,6 +440,10 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         <AttributionSourceSummary workspaceId={workspaceId} targetType="conversation" targetId={conversation.id} compact fallbackLabel="Direct WhatsApp - no ad referral." />
       </div>
 
+      {roleHasPermission(role, "opportunity.view") && (
+        <ConversationCustomerPanel workspaceId={workspaceId} conversation={conversation} canManage={canManage} onChanged={invalidate} />
+      )}
+
       {(canCreateLead || canViewLead) && (
         <div className="space-y-2 border-b bg-muted/20 p-2">
           {conversation.lead_id ? (
@@ -762,6 +768,116 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// --- Phase 4: conversation <-> customer -----------------------------------
+function ConversationCustomerPanel({ workspaceId, conversation, canManage, onChanged }: {
+  workspaceId: string;
+  conversation: InboxConversationRow;
+  canManage: boolean;
+  onChanged: () => void;
+}) {
+  const navigate = useNavigate();
+  const { data: customer } = useCustomer(conversation.customer_id);
+  const { data: candidates } = useCustomerMatchCandidates(workspaceId, conversation.id, !conversation.customer_id);
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [q, setQ] = useState("");
+  const { data: searchResults } = useCustomersSearch(picking ? workspaceId : null, q);
+
+  const doLink = async (customerId: string, change = false) => {
+    setBusy(true);
+    try {
+      await linkConversationCustomer(workspaceId, conversation.id, customerId, change);
+      setPicking(false); setQ("");
+      onChanged();
+      toast.success("Customer linked");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to link customer");
+    } finally { setBusy(false); }
+  };
+  const doUnlink = async () => {
+    setBusy(true);
+    try {
+      await unlinkConversationCustomer(workspaceId, conversation.id);
+      onChanged();
+      toast.success("Customer unlinked");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to unlink customer");
+    } finally { setBusy(false); }
+  };
+
+  if (conversation.customer_id) {
+    return (
+      <div className="space-y-1.5 border-b bg-muted/20 p-2 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="secondary">Customer</Badge>
+          <span className="font-medium">{customer?.name || "..."}</span>
+          {customer && <span className="text-muted-foreground">since {new Date(customer.customer_since).toLocaleDateString()}</span>}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => navigate(`/app/customers/${conversation.customer_id}`)}>Open Customer 360</Button>
+          {canManage && <Button size="sm" variant="ghost" className="h-7" onClick={() => setPicking((v) => !v)}>Change</Button>}
+          {canManage && <Button size="sm" variant="ghost" className="h-7 text-destructive" disabled={busy} onClick={doUnlink}>Unlink</Button>}
+        </div>
+        {picking && (
+          <div className="space-y-1 rounded-md border bg-background p-2">
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers..." className="w-full rounded border bg-background px-2 py-1 text-xs" />
+            {(searchResults || []).slice(0, 6).map((c) => (
+              <button key={c.id} disabled={busy} className="flex w-full items-center justify-between rounded px-1.5 py-1 text-left hover:bg-muted" onClick={() => doLink(c.id, true)}>
+                <span>{c.name}</span><span className="text-muted-foreground">{c.phone || c.email || ""}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const exact = (candidates || []).filter((c) => c.match_tier === "exact");
+  const possible = (candidates || []).filter((c) => c.match_tier === "possible");
+
+  return (
+    <div className="space-y-1.5 border-b bg-muted/20 p-2 text-xs">
+      {exact.length > 0 && (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+          <p className="font-medium">Existing customer found</p>
+          {exact.map((c) => (
+            <div key={c.customer_id} className="mt-1 flex items-center justify-between gap-2">
+              <span>{c.name} <span className="text-muted-foreground">- {c.match_reason}</span></span>
+              {canManage && <Button size="sm" variant="outline" className="h-7" disabled={busy} onClick={() => doLink(c.customer_id)}>Link</Button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {possible.length > 0 && (
+        <div className="rounded-md border p-2">
+          <p className="font-medium text-muted-foreground">Possible match{possible.length > 1 ? "es" : ""}</p>
+          {possible.map((c) => (
+            <div key={c.customer_id} className="mt-1 flex items-center justify-between gap-2">
+              <span>{c.name} <span className="text-muted-foreground">- {c.match_reason}</span></span>
+              {canManage && <Button size="sm" variant="ghost" className="h-7" disabled={busy} onClick={() => doLink(c.customer_id)}>Link anyway</Button>}
+            </div>
+          ))}
+        </div>
+      )}
+      {canManage && (
+        <div>
+          <Button size="sm" variant="ghost" className="h-7" onClick={() => setPicking((v) => !v)}>Link customer</Button>
+          {picking && (
+            <div className="mt-1 space-y-1 rounded-md border bg-background p-2">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers..." className="w-full rounded border bg-background px-2 py-1 text-xs" />
+              {(searchResults || []).slice(0, 6).map((c) => (
+                <button key={c.id} disabled={busy} className="flex w-full items-center justify-between rounded px-1.5 py-1 text-left hover:bg-muted" onClick={() => doLink(c.id)}>
+                  <span>{c.name}</span><span className="text-muted-foreground">{c.phone || c.email || ""}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

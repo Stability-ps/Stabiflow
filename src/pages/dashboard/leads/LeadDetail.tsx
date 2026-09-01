@@ -12,7 +12,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { useLead, useLeadAttachments, usePipelineStages } from "@/hooks/useLeads";
-import { useOpportunitiesForLead, useCrmNotes, useCustomerForOpportunity } from "@/hooks/useOpportunities";
+import { useOpportunitiesForLead, useCrmNotes, useCustomerForOpportunity, useCustomerForLead } from "@/hooks/useOpportunities";
 import { intakeRows, formatBytes } from "@/lib/intakeDisplay";
 import { QUALIFICATION_STATUSES, qualificationStatusLabel, validateQualificationChange, type QualificationStatus } from "@/lib/qualification";
 import { opportunityStatusLabel } from "@/lib/opportunityLifecycle";
@@ -117,6 +117,7 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
   const { data: opportunities } = useOpportunitiesForLead(leadId);
   const { data: notes } = useCrmNotes("lead", leadId);
   const { data: stages } = usePipelineStages(workspaceId, lead?.pipeline_id ?? null);
+  const { data: leadCustomer } = useCustomerForLead(leadId);
 
   const [busy, setBusy] = useState(false);
   const [qualificationStatus, setQualificationStatus] = useState<QualificationStatus | null>(null);
@@ -296,6 +297,11 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
           <Badge variant="secondary" className={LEAD_STATUS_TONE[lead.status]}>{lead.status}</Badge>
         </div>
         <SheetDescription>{lead.human_reference}</SheetDescription>
+        {leadCustomer && (
+          <Link to={`/app/customers/${leadCustomer.id}`} className="text-xs font-medium text-primary underline underline-offset-2">
+            Open Customer 360 - {leadCustomer.name}
+          </Link>
+        )}
       </SheetHeader>
 
       <div className="mt-4 space-y-6">

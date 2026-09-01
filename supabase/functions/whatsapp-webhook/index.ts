@@ -139,6 +139,36 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
   await sb.from("inbox_conversations").update({ last_outbound_at: new Date().toISOString() }).eq("id", conversationId);
 }
 
+// Phase 4: deterministic returning-customer auto-link. Sets
+// inbox_conversations.customer_id ONLY when exactly one workspace-local
+// customer has the exact normalised phone. Additively backfills the
+// customer_id onto this conversation's attribution touchpoints (NULL-only).
+// Never throws - a failure here just leaves the conversation unlinked.
+async function autoLinkCustomerByPhone(sb: AnySupabaseClient, workspaceId: string, conversationId: string, rawPhone: string | null) {
+  try {
+    const digits = (rawPhone ?? "").replace(/\D/g, "");
+    if (digits.length < 7) return;
+    const normalized = `+${digits}`;
+    const { data: matches } = await sb
+      .from("customers")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("phone_normalized", normalized)
+      .limit(2);
+    if (!matches || matches.length !== 1) return; // 0 or ambiguous -> leave unlinked
+    const customerId = matches[0].id as string;
+    const { error } = await sb.from("inbox_conversations").update({ customer_id: customerId }).eq("id", conversationId).is("customer_id", null);
+    if (error) return;
+    await sb.from("attribution_events").update({ customer_id: customerId }).eq("conversation_id", conversationId).is("customer_id", null);
+    await sb.from("workspace_activity_log").insert({
+      workspace_id: workspaceId, actor_user_id: null, action: "inbox_conversation_customer_autolinked",
+      target_type: "inbox_conversation", target_id: conversationId, metadata: { customer_id: customerId, evidence: "exact_phone" },
+    });
+  } catch (err) {
+    console.error("whatsapp-webhook: customer auto-link failed", err instanceof Error ? err.message : err);
+  }
+}
+
 async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
   const { data: numberRow } = await sb
     .from("workspace_whatsapp_numbers")
@@ -205,6 +235,11 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
       payload: { entity_id: conversation.id, wa_id: event.waId },
       dedupeKey: `conversation.started:${conversation.id}`,
     });
+    // Phase 4 returning-customer recognition: auto-link ONLY when identity
+    // is deterministic and unambiguous - exactly one customer in THIS
+    // workspace with the exact normalised phone. Zero -> leave unlinked;
+    // more than one -> leave for staff choice (never silently pick).
+    await autoLinkCustomerByPhone(sb, numberRow.workspace_id, conversation.id, normalizePhone(event.waId));
   }
 
   let mime = event.mime;

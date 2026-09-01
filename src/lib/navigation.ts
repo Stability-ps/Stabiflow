@@ -1,5 +1,5 @@
 import {
-  BarChart3, FileText, LayoutDashboard, Megaphone, MessageCircle, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
+  BarChart3, Contact, FileText, LayoutDashboard, Megaphone, MessageCircle, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
 } from "lucide-react";
 
 export type NavChild = {
@@ -40,6 +40,7 @@ export const NAV_ITEMS: NavItem[] = [
     ],
   },
   { label: "Leads", path: "/app/leads", icon: Users },
+  { label: "Customers", path: "/app/customers", icon: Contact },
   { label: "Analytics", path: "/app/analytics", icon: BarChart3 },
   { label: "Flow AI", path: "/app/flow-ai", icon: Sparkles },
   { label: "Automations", path: "/app/automations", icon: Workflow },
