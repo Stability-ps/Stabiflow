@@ -109,4 +109,55 @@ describe("Leads/Pipelines/Opportunities/Customers tenant isolation (release bloc
     expect(error).toBeTruthy();
     expect(error?.message).toMatch(/lead_id must belong to the same workspace/);
   });
+
+  // --- workspace_lead_counters: RLS enabled, no policies (Security Advisor
+  // "RLS Disabled in Public" fix, 20260921060000) ------------------------
+  // The table is internal bookkeeping - written only by the SECURITY
+  // DEFINER next_lead_reference() via the leads BEFORE INSERT trigger. With
+  // RLS on and no policies, NO direct client can read or write it (not even
+  // its own workspace's user), while lead-number generation is unaffected.
+
+  it("workspace_lead_counters is not directly readable by any authenticated client - not even its own workspace's", async () => {
+    // leadB was seeded in beforeAll, so workspace B already has a counter row.
+    const viaOwner = await workspaceB.client.from("workspace_lead_counters").select("*").eq("workspace_id", workspaceB.workspaceId);
+    expect(viaOwner.error).toBeNull();
+    expect(viaOwner.data).toEqual([]);
+
+    const viaOther = await workspaceA.client.from("workspace_lead_counters").select("*").eq("workspace_id", workspaceB.workspaceId);
+    expect(viaOther.error).toBeNull();
+    expect(viaOther.data).toEqual([]);
+
+    // The row genuinely exists (service role bypasses RLS).
+    const { data: real } = await admin.from("workspace_lead_counters").select("last_value").eq("workspace_id", workspaceB.workspaceId).single();
+    expect(Number(real!.last_value)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("a direct authenticated client cannot tamper with workspace_lead_counters, and the value genuinely never changes", async () => {
+    const { data: before } = await admin.from("workspace_lead_counters").select("last_value").eq("workspace_id", workspaceB.workspaceId).single();
+
+    const upd = await workspaceB.client.from("workspace_lead_counters").update({ last_value: 999999 }).eq("workspace_id", workspaceB.workspaceId).select();
+    expect(upd.data ?? []).toEqual([]);
+    const del = await workspaceB.client.from("workspace_lead_counters").delete().eq("workspace_id", workspaceB.workspaceId).select();
+    expect(del.data ?? []).toEqual([]);
+
+    const { data: after } = await admin.from("workspace_lead_counters").select("last_value").eq("workspace_id", workspaceB.workspaceId).single();
+    expect(after!.last_value).toBe(before!.last_value);
+  });
+
+  it("lead-number generation still works with RLS enabled on the counter", async () => {
+    const pattern = /^LEAD-\d{6}$/;
+    const first = await seedLead(workspaceA.workspaceId, { contact_name: "Counter Test 1" });
+    expect(pattern.test(first.human_reference)).toBe(true);
+
+    const second = await seedLead(workspaceA.workspaceId, { contact_name: "Counter Test 2" });
+    expect(pattern.test(second.human_reference)).toBe(true);
+    expect(second.human_reference).not.toBe(first.human_reference);
+
+    const firstN = Number(first.human_reference.slice(5));
+    const secondN = Number(second.human_reference.slice(5));
+    expect(secondN).toBe(firstN + 1);
+
+    const { data: counter } = await admin.from("workspace_lead_counters").select("last_value").eq("workspace_id", workspaceA.workspaceId).single();
+    expect(Number(counter!.last_value)).toBe(secondN);
+  });
 });
