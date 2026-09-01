@@ -21,7 +21,9 @@ import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
 import { applyStatusUpdate, incomingStatuses } from "../_shared/inbox/whatsappStatus.ts";
 import { normalizePhone, parseInboundMessageEvents, type InboundMessageEvent } from "../_shared/inbox/webhookMessageParser.ts";
 import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
-import { generateAIReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
+import { generateAIReply, generateStructuredReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
+import { evaluateIntake, mergeExtractedFields, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
+import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
 import { REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
@@ -37,7 +39,7 @@ function text(body: string, status = 200) {
   return new Response(body, { status, headers: { "Content-Type": "text/plain" } });
 }
 
-type NumberRow = { id: string; workspace_id: string; integration_id: string; phone_number_id: string };
+type NumberRow = { id: string; workspace_id: string; integration_id: string; phone_number_id: string; intake_schema_id: string | null };
 
 async function resolveCredential(sb: AnySupabaseClient, numberRow: NumberRow): Promise<WhatsAppSendCredential | null> {
   const { data: integration } = await sb.from("workspace_integrations").select("id,status").eq("id", numberRow.integration_id).maybeSingle();
@@ -140,7 +142,7 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
 async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
   const { data: numberRow } = await sb
     .from("workspace_whatsapp_numbers")
-    .select("id,workspace_id,integration_id,phone_number_id")
+    .select("id,workspace_id,integration_id,phone_number_id,intake_schema_id")
     .eq("phone_number_id", event.phoneNumberId)
     .eq("is_active", true)
     .maybeSingle();
@@ -186,7 +188,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   const { data: conversation, error: conversationError } = await sb
     .from("inbox_conversations")
     .upsert(patch, { onConflict: "whatsapp_number_id,wa_id" })
-    .select("id,workspace_id,status,ai_enabled,intake_payload,intake_missing_fields")
+    .select("id,workspace_id,status,ai_enabled,lead_id,intake_payload,intake_missing_fields,intake_schema_id,intake_completed_at")
     .single();
   if (conversationError || !conversation) {
     console.error("whatsapp-webhook: conversation upsert failed", conversationError?.message);
@@ -291,6 +293,74 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   const history = ([...(rows || [])].reverse()) as ConversationHistoryMessage[];
   const { data: workspaceRow } = await sb.from("workspaces").select("name").eq("id", numberRow.workspace_id).maybeSingle();
   const businessName = workspaceRow?.name || "our team";
+
+  // Phase 3: when the workspace has an active intake schema, the AI works
+  // to that schema - extracting only its fields, asking the single next
+  // missing question, and driving the conversation.intake_completed event.
+  // A workspace with no schema falls through to the unchanged legacy path
+  // below (zero behaviour change).
+  const schema = await resolveActiveIntakeSchema(sb, numberRow.workspace_id, {
+    conversationSchemaId: (conversation.intake_schema_id as string | null) ?? null,
+    numberSchemaId: numberRow.intake_schema_id,
+  });
+  if (schema) {
+    const { fields: currentFields } = readIntakePayload(conversation.intake_payload);
+    const preEval = evaluateIntake(schema, currentFields);
+
+    let sr;
+    try {
+      sr = await generateStructuredReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, currentFields, schema, preEval);
+    } catch (aiError) {
+      console.error("whatsapp-webhook: structured AI reply failed", aiError instanceof Error ? aiError.message : aiError);
+      return;
+    }
+
+    if (sr.human_handoff_requested) {
+      await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversation.id);
+      await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+      return;
+    }
+
+    const merged = mergeExtractedFields(schema, currentFields, sr.fields);
+    const postEval = evaluateIntake(schema, merged.fields);
+    const summaryAnswer = postEval.collected.find((c) => c.key === "summary" || c.key === "interest_summary");
+    await sb.from("inbox_conversations").update({
+      intake_payload: writeIntakePayload(schema.id, merged.fields),
+      intake_missing_fields: postEval.missing_required,
+      intake_schema_id: schema.id,
+      ...(typeof summaryAnswer?.value === "string" ? { ai_summary: summaryAnswer.value } : {}),
+    }).eq("id", conversation.id);
+
+    // Completion transition: stamp exactly once (race-safe conditional
+    // UPDATE), and emit only if THIS call won the stamp. emitDomainEvent's
+    // own dedupe_key unique index is the second line of defence.
+    const decision = resolveIntakeCompletion(conversation.id, conversation.intake_completed_at as string | null, postEval);
+    if (decision.should_emit) {
+      const { data: stamped } = await sb
+        .from("inbox_conversations")
+        .update({ intake_completed_at: new Date().toISOString() })
+        .eq("id", conversation.id)
+        .is("intake_completed_at", null)
+        .select("id")
+        .maybeSingle();
+      if (stamped) {
+        await emitDomainEvent(sb, {
+          workspaceId: numberRow.workspace_id,
+          eventType: "conversation.intake_completed",
+          entityType: "inbox_conversation",
+          entityId: conversation.id,
+          payload: { entity_id: conversation.id, conversation_id: conversation.id, schema_id: schema.id, lead_id: (conversation.lead_id as string | null) ?? null },
+          dedupeKey: decision.dedupe_key,
+        });
+      }
+    }
+
+    let structuredAnswer = cleanReply(sr.reply);
+    if (containsInventedPersonalIdentity(structuredAnswer)) structuredAnswer = "I'm an AI-assisted assistant here to help. How can we help you today?";
+    if (containsFalseActionClaim(structuredAnswer)) structuredAnswer = "Thanks for the details - a team member will follow up on this.";
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, structuredAnswer || "Thanks for reaching out - how can we help?");
+    return;
+  }
 
   let ai;
   try {

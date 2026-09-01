@@ -24,6 +24,9 @@ import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from
 import { roleHasPermission } from "@/lib/permissions";
 import { createLeadFromConversation, createOpportunity, linkLeadConversation, type DuplicateLeadCandidate } from "@/lib/leads";
 import { intakeRows } from "@/lib/intakeDisplay";
+import { previewAskInfo, sendAskInfo, setIntakeAnswer, type AskInfoPreview } from "@/lib/intake";
+import { useIntakeSchemas, resolveConversationSchema } from "@/hooks/useIntakeSchemas";
+import { evaluateIntake, readIntakePayload } from "@/lib/intakeSchema";
 import { qualificationStatusLabel } from "@/lib/qualification";
 import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
 import { openOpportunityActionLabel } from "@/lib/terminology";
@@ -99,6 +102,20 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const ownerName = lead?.assigned_to ? (members || []).find((m) => m.user_id === lead.assigned_to)?.profile?.full_name || "Assigned" : null;
   const latestOpportunity = (leadOpportunities || [])[0] || null;
 
+  // Phase 3: structured intake. When the workspace has an active schema
+  // that governs this conversation, show collected / missing / needs-
+  // clarification against it and drive the real Ask Info flow.
+  const { data: intakeData } = useIntakeSchemas(canManage ? workspaceId : null);
+  const { schema: intakeSchema, fields: intakeFields } = useMemo(
+    () => resolveConversationSchema(intakeData, conversation.intake_schema_id),
+    [intakeData, conversation.intake_schema_id],
+  );
+  const intakeEval = useMemo(() => {
+    if (!intakeSchema || intakeFields.length === 0) return null;
+    const source = conversation.lead_id && lead ? lead.intake : conversation.intake_payload;
+    return evaluateIntake(intakeFields, readIntakePayload(source).fields);
+  }, [intakeSchema, intakeFields, conversation.lead_id, conversation.intake_payload, lead]);
+
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -108,6 +125,10 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const [creatingLead, setCreatingLead] = useState(false);
   const [leadDuplicates, setLeadDuplicates] = useState<DuplicateLeadCandidate[] | null>(null);
   const [copyContextOnLink, setCopyContextOnLink] = useState(true);
+  const [askInfoPreview, setAskInfoPreview] = useState<AskInfoPreview | null>(null);
+  const [askingInfo, setAskingInfo] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
 
   // Create-opportunity dialog (Part D) - reuses the existing
   // leads-actions create_opportunity path, never a second workflow.
@@ -251,9 +272,57 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
     }
   };
 
+  // No active schema: keep the Phase-D behaviour of dropping a canned
+  // "here's what we still need" draft into the reply box for staff to edit.
   const handleAskMissingInfo = () => {
     const draft = buildMissingInfoReply(conversation.intake_missing_fields || []);
     if (draft) setReplyText(draft);
+  };
+
+  // Active schema: real Ask Info. Step 1 - fetch the EXACT next question
+  // (never sends). Step 2 (dialog confirm) - send it through the same safe
+  // path as a staff reply.
+  const handleAskNextQuestion = async () => {
+    setAskingInfo(true);
+    try {
+      const preview = await previewAskInfo(workspaceId, conversation.id);
+      if (!preview.next_question) {
+        toast.info(preview.complete ? "Every required detail is already collected." : "There's no question to ask right now.");
+        return;
+      }
+      setAskInfoPreview(preview);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to work out the next question");
+    } finally {
+      setAskingInfo(false);
+    }
+  };
+
+  const handleConfirmAskInfo = async () => {
+    setAskingInfo(true);
+    try {
+      const result = await sendAskInfo(workspaceId, conversation.id);
+      setAskInfoPreview(null);
+      invalidate();
+      if (result.delivery_status === "failed") toast.error(result.warning || "The question was saved but could not be delivered");
+      else toast.success("Question sent");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send the question");
+    } finally {
+      setAskingInfo(false);
+    }
+  };
+
+  const handleCorrectAnswer = async (fieldKey: string, value: unknown) => {
+    setEditingKey(null);
+    try {
+      await setIntakeAnswer(workspaceId, conversation.id, fieldKey, value);
+      invalidate();
+      if (conversation.lead_id) queryClient.invalidateQueries({ queryKey: ["lead", conversation.lead_id] });
+      toast.success("Answer updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update that answer");
+    }
   };
 
   const handleAddNote = async () => {
@@ -446,6 +515,58 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
             {conversation.ai_enabled ? <Bot className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
             {aiHumanStatusText(conversation)}
           </p>
+
+          {intakeEval && (
+            <div className="mb-2 rounded-md border bg-background p-2 text-xs">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="font-medium text-muted-foreground">What we've learned</span>
+                <span className="text-muted-foreground">
+                  {intakeEval.requiredCollected} of {intakeEval.requiredTotal} required details collected
+                  {conversation.intake_completed_at && " · complete"}
+                </span>
+              </div>
+              <ul className="space-y-0.5">
+                {intakeEval.rows.map((r) => (
+                  <li key={r.key} className="flex items-baseline gap-1.5">
+                    <span aria-hidden className={
+                      r.status === "collected" ? "text-emerald-600" : r.status === "needs_clarification" ? "text-amber-600" : "text-muted-foreground"
+                    }>
+                      {r.status === "collected" ? "✓" : r.status === "needs_clarification" ? "!" : "○"}
+                    </span>
+                    <span className="text-muted-foreground">{r.label}{r.required ? "" : " (optional)"}</span>
+                    {editingKey === r.key ? (
+                      <span className="flex min-w-0 flex-1 items-center gap-1">
+                        <input
+                          autoFocus
+                          value={editingValue}
+                          onChange={(e) => setEditingValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") handleCorrectAnswer(r.key, editingValue); if (e.key === "Escape") setEditingKey(null); }}
+                          className="min-w-0 flex-1 rounded border bg-background px-1 py-0.5 text-xs"
+                        />
+                        <button className="text-emerald-600" onClick={() => handleCorrectAnswer(r.key, editingValue)}>Save</button>
+                        <button className="text-muted-foreground" onClick={() => setEditingKey(null)}>Cancel</button>
+                      </span>
+                    ) : (
+                      <span className="min-w-0 flex-1 break-words">
+                        {r.status === "collected"
+                          ? (Array.isArray(r.value) ? r.value.join(", ") : String(r.value))
+                          : r.status === "needs_clarification"
+                            ? <span className="text-amber-600">Needs clarification</span>
+                            : <span className="text-muted-foreground">Missing</span>}
+                        <button
+                          className="ml-1.5 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                          onClick={() => { setEditingKey(r.key); setEditingValue(r.status === "collected" && !Array.isArray(r.value) ? String(r.value) : ""); }}
+                        >
+                          edit
+                        </button>
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-2">
             <Select value={conversation.assigned_staff_id || ""} onValueChange={handleAssign} disabled={busy}>
               <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Assign to..." /></SelectTrigger>
@@ -458,9 +579,15 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
             ) : (
               <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirmReturnToAI(true)}>Return to AI</Button>
             )}
-            <Button size="sm" variant="outline" disabled={!conversation.intake_missing_fields?.length} onClick={handleAskMissingInfo}>
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask missing info
-            </Button>
+            {intakeSchema ? (
+              <Button size="sm" variant="outline" disabled={askingInfo || !intakeEval?.nextField} onClick={handleAskNextQuestion}>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask next question
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" disabled={!conversation.intake_missing_fields?.length} onClick={handleAskMissingInfo}>
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask missing info
+              </Button>
+            )}
             {conversation.inbox_status === "resolved" ? (
               <Button size="sm" variant="outline" disabled={busy} onClick={handleReopen}>Reopen chat</Button>
             ) : (
@@ -562,6 +689,27 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleReturnToAI}>Return to AI</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!askInfoPreview} onOpenChange={(open) => !open && setAskInfoPreview(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send this question to the customer?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p className="rounded-md border bg-muted/40 p-2 text-sm text-foreground">{askInfoPreview?.next_question}</p>
+                <p>
+                  It will be sent on WhatsApp{askInfoPreview?.field_label ? ` to collect “${askInfoPreview.field_label}”` : ""}. Nothing is sent until you confirm.
+                  {askInfoPreview?.requires_template && " The 24-hour window is closed - use an approved template from the conversation instead."}
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={askingInfo}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmAskInfo} disabled={askingInfo || askInfoPreview?.requires_template}>Send question</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

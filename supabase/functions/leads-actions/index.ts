@@ -15,7 +15,7 @@ import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, 
 import { normalizePhoneNumber } from "../_shared/phone.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 import type { EventType } from "../_shared/automations/taxonomy.ts";
-import { resolveSummaryAndIntake, safeTypedLeadFields, sanitizeIntake } from "../_shared/inbox/leadContext.ts";
+import { intakeFieldsView, resolveSummaryAndIntake, safeTypedLeadFields, sanitizeIntake } from "../_shared/inbox/leadContext.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -328,7 +328,7 @@ Deno.serve(async (req: Request) => {
         if (duplicates.length > 0) return json(req, { duplicates, created: false });
       }
       const displayName = conversation.display_name || null;
-      const typed = safeTypedLeadFields(conversationIntake, { contact_name: displayName, email: null, company_name: null, estimated_value: null });
+      const typed = safeTypedLeadFields(intakeFieldsView(conversationIntake), { contact_name: displayName, email: null, company_name: null, estimated_value: null });
       const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
       const insertRes = await serviceSb
         .from("leads")

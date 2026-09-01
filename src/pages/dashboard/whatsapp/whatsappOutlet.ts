@@ -10,6 +10,7 @@ export type WhatsAppNumber = {
   platform_status: string | null;
   waba_id: string | null;
   is_active: boolean;
+  intake_schema_id: string | null;
 };
 
 export type WhatsAppOutletContext = {

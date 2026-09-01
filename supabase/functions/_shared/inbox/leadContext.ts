@@ -20,6 +20,16 @@ export function asIntakeRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+/** Phase 3: an intake payload may now be the structured shape
+ * { schema_id, fields: {...} } or a Phase-2 flat bag. This returns the flat
+ * answer view for typed-column mapping; the full object is still what gets
+ * stored on leads.intake (schema_id + fields preserved). */
+export function intakeFieldsView(intake: unknown): Record<string, unknown> {
+  const record = asIntakeRecord(intake);
+  const inner = record.fields;
+  return inner && typeof inner === "object" && !Array.isArray(inner) ? (inner as Record<string, unknown>) : record;
+}
+
 // --- deep merge (Phase 2 remediation M4) ----------------------------------
 // EXISTING lead values always win. Conversation intake only fills keys the
 // lead does not already have, recursively. Arrays are atomic - existing

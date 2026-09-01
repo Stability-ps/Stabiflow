@@ -2205,8 +2205,10 @@ export type Database = {
           human_handoff_requested_at: string | null
           id: string
           inbox_status: string
+          intake_completed_at: string | null
           intake_missing_fields: string[]
           intake_payload: Json
+          intake_schema_id: string | null
           last_inbound_at: string | null
           last_outbound_at: string | null
           last_staff_reply_at: string | null
@@ -2238,8 +2240,10 @@ export type Database = {
           human_handoff_requested_at?: string | null
           id?: string
           inbox_status?: string
+          intake_completed_at?: string | null
           intake_missing_fields?: string[]
           intake_payload?: Json
+          intake_schema_id?: string | null
           last_inbound_at?: string | null
           last_outbound_at?: string | null
           last_staff_reply_at?: string | null
@@ -2271,8 +2275,10 @@ export type Database = {
           human_handoff_requested_at?: string | null
           id?: string
           inbox_status?: string
+          intake_completed_at?: string | null
           intake_missing_fields?: string[]
           intake_payload?: Json
+          intake_schema_id?: string | null
           last_inbound_at?: string | null
           last_outbound_at?: string | null
           last_staff_reply_at?: string | null
@@ -2304,6 +2310,13 @@ export type Database = {
             columns: ["assigned_staff_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversations_intake_schema_id_fkey"
+            columns: ["intake_schema_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_intake_schemas"
             referencedColumns: ["id"]
           },
           {
@@ -3422,6 +3435,123 @@ export type Database = {
           },
         ]
       }
+      workspace_intake_fields: {
+        Row: {
+          config: Json
+          created_at: string
+          field_type: string
+          help_text: string | null
+          id: string
+          is_active: boolean
+          key: string
+          label: string
+          question_text: string
+          required: boolean
+          schema_id: string
+          sort_order: number
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          field_type: string
+          help_text?: string | null
+          id?: string
+          is_active?: boolean
+          key: string
+          label: string
+          question_text: string
+          required?: boolean
+          schema_id: string
+          sort_order?: number
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          field_type?: string
+          help_text?: string | null
+          id?: string
+          is_active?: boolean
+          key?: string
+          label?: string
+          question_text?: string
+          required?: boolean
+          schema_id?: string
+          sort_order?: number
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_intake_fields_schema_id_fkey"
+            columns: ["schema_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_intake_schemas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_intake_fields_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_intake_schemas: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          is_default: boolean
+          name: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_intake_schemas_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_intake_schemas_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_integration_oauth_states: {
         Row: {
           created_at: string
@@ -3824,6 +3954,7 @@ export type Database = {
           created_at: string
           display_phone_number: string | null
           id: string
+          intake_schema_id: string | null
           integration_id: string
           is_active: boolean
           phone_number_id: string
@@ -3839,6 +3970,7 @@ export type Database = {
           created_at?: string
           display_phone_number?: string | null
           id?: string
+          intake_schema_id?: string | null
           integration_id: string
           is_active?: boolean
           phone_number_id: string
@@ -3854,6 +3986,7 @@ export type Database = {
           created_at?: string
           display_phone_number?: string | null
           id?: string
+          intake_schema_id?: string | null
           integration_id?: string
           is_active?: boolean
           phone_number_id?: string
@@ -3865,6 +3998,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workspace_whatsapp_numbers_intake_schema_id_fkey"
+            columns: ["intake_schema_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_intake_schemas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workspace_whatsapp_numbers_integration_id_fkey"
             columns: ["integration_id"]

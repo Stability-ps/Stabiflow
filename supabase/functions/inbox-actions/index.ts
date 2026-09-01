@@ -20,14 +20,68 @@ import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/worksp
 import { describeTemplateEligibilityError, validateTemplateEligibility } from "../_shared/inbox/templateValidation.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
+import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
+import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note"]);
+const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer"]);
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, conversationId: string, metadata: Record<string, unknown> = {}) {
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: "inbox_conversation", target_id: conversationId, metadata });
+}
+
+type IntakeConversation = {
+  id: string;
+  workspace_id: string;
+  whatsapp_number_id: string;
+  lead_id: string | null;
+  intake_schema_id: string | null;
+  intake_completed_at: string | null;
+  intake_payload: unknown;
+};
+
+// Phase 3: resolve the active schema for a conversation + evaluate it
+// against the stored answers. Shared by ask_info and set_intake_answer.
+async function loadIntakeContext(sb: AnySupabaseClient, conversation: IntakeConversation) {
+  const { data: numberRow } = await sb.from("workspace_whatsapp_numbers").select("intake_schema_id").eq("id", conversation.whatsapp_number_id).maybeSingle();
+  const schema = await resolveActiveIntakeSchema(sb, conversation.workspace_id, {
+    conversationSchemaId: conversation.intake_schema_id,
+    numberSchemaId: (numberRow?.intake_schema_id as string | null) ?? null,
+  });
+  const { fields } = readIntakePayload(conversation.intake_payload);
+  const evaluation = schema ? evaluateIntake(schema, fields) : null;
+  return { schema, fields, evaluation };
+}
+
+// Stamp intake_completed_at exactly once (race-safe conditional UPDATE) and
+// emit conversation.intake_completed only if this call won the stamp. The
+// dedupe_key (identical to the whatsapp-webhook path) is the second guard.
+async function stampAndEmitIntakeCompletion(
+  sb: AnySupabaseClient,
+  conversation: IntakeConversation,
+  evaluation: NonNullable<Awaited<ReturnType<typeof loadIntakeContext>>["evaluation"]>,
+  schemaId: string,
+) {
+  const decision = resolveIntakeCompletion(conversation.id, conversation.intake_completed_at, evaluation);
+  if (!decision.should_emit) return;
+  const { data: stamped } = await sb
+    .from("inbox_conversations")
+    .update({ intake_completed_at: new Date().toISOString() })
+    .eq("id", conversation.id)
+    .is("intake_completed_at", null)
+    .select("id")
+    .maybeSingle();
+  if (!stamped) return;
+  await emitDomainEvent(sb, {
+    workspaceId: conversation.workspace_id,
+    eventType: "conversation.intake_completed",
+    entityType: "inbox_conversation",
+    entityId: conversation.id,
+    payload: { entity_id: conversation.id, conversation_id: conversation.id, schema_id: schemaId, lead_id: conversation.lead_id ?? null },
+    dedupeKey: decision.dedupe_key,
+  });
 }
 
 async function resolveCredential(sb: AnySupabaseClient, whatsappNumberId: string): Promise<WhatsAppSendCredential | null> {
@@ -80,7 +134,7 @@ Deno.serve(async (req: Request) => {
   // workspace by guessing/reusing an id.
   const { data: conversation } = await serviceSb
     .from("inbox_conversations")
-    .select("id,workspace_id,whatsapp_number_id,wa_id,display_name,status,ai_enabled,assigned_staff_id,inbox_status,intake_missing_fields,intake_payload")
+    .select("id,workspace_id,whatsapp_number_id,wa_id,display_name,status,ai_enabled,assigned_staff_id,inbox_status,intake_missing_fields,intake_payload,lead_id,intake_schema_id,intake_completed_at")
     .eq("id", conversationId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -171,6 +225,139 @@ Deno.serve(async (req: Request) => {
     if (error) return json(req, { error: "Unable to save that note" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "inbox_internal_note_added", conversationId, { mentioned_staff_ids: mentioned });
     return json(req, { ok: true });
+  }
+
+  // Phase 3: Real Ask Info. Two-step - a preview call (confirm falsy)
+  // returns the EXACT question that would be sent and never sends
+  // anything; a confirm:true call sends it through the same safe path as a
+  // staff reply (workspace-active gate, connected credential, 24-hour
+  // window - a closed window returns 409 so the caller uses the approved
+  // template flow). Deliberately does NOT flip ai_enabled / force human
+  // takeover: Ask Info nudges the AI-owned intake flow along.
+  if (action === "ask_info") {
+    const intakeConversation = conversation as unknown as IntakeConversation;
+    const { schema, evaluation } = await loadIntakeContext(serviceSb, intakeConversation);
+    if (!schema || !evaluation) {
+      return json(req, { ok: true, has_schema: false, next_question: null, complete: false });
+    }
+    if (!evaluation.next_field) {
+      return json(req, { ok: true, has_schema: true, next_question: null, complete: evaluation.complete });
+    }
+
+    const nextQuestion = evaluation.next_field.question_text;
+    const fieldKey = evaluation.next_field.key;
+    const fieldLabel = evaluation.next_field.label;
+    const confirm = body.confirm === true;
+
+    const window = await resolveMessagingWindow(serviceSb, conversationId);
+    if (!confirm) {
+      return json(req, {
+        ok: true,
+        has_schema: true,
+        next_question: nextQuestion,
+        field_key: fieldKey,
+        field_label: fieldLabel,
+        window_state: window.state,
+        requires_template: window.state !== "open",
+        complete: evaluation.complete,
+      });
+    }
+
+    const statusGate = await assertWorkspaceActive(serviceSb, workspaceId);
+    if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
+
+    const cred = await resolveCredential(serviceSb, conversation.whatsapp_number_id);
+    if (!cred) return json(req, { error: "WhatsApp is not connected for this workspace" }, 409);
+
+    if (window.state !== "open") {
+      return json(req, {
+        error: "24-hour messaging window closed. Send an approved template, or wait for the customer to message again.",
+        code: "messaging_window_closed",
+        window_state: window.state,
+      }, 409);
+    }
+
+    const cleaned = cleanReply(nextQuestion);
+    const { data: pendingRow, error: pendingError } = await serviceSb.from("inbox_messages").insert({
+      workspace_id: workspaceId,
+      conversation_id: conversationId,
+      direction: "outbound",
+      sender_type: "ai",
+      message_type: "text",
+      content: cleaned,
+      delivery_status: "sending",
+    }).select("id").single();
+    if (pendingError || !pendingRow) return json(req, { error: "Unable to save this question" }, 500);
+
+    if (isBlockedWhatsAppMockSend(req)) console.warn("inbox-actions: mock-mode flag is on but caller is not the test harness - sending for real");
+    const provider = resolveWhatsAppSendMockMode(req) ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+    let providerMessageId: string | null = null;
+    let deliveryStatus = "submitted";
+    let warning: string | null = null;
+    try {
+      providerMessageId = await provider.sendText(cred, conversation.wa_id, cleaned);
+    } catch (sendError) {
+      deliveryStatus = "failed";
+      warning = sanitizeIntegrationError(sendError).message;
+    }
+    await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, delivery_status: deliveryStatus }).eq("id", pendingRow.id);
+    await serviceSb.from("inbox_conversations").update({ last_outbound_at: nowIso }).eq("id", conversationId);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_ask_info_sent", conversationId, { field_key: fieldKey, delivery_status: deliveryStatus });
+
+    return json(req, { ok: true, delivery_status: deliveryStatus, warning, next_question: nextQuestion, field_key: fieldKey });
+  }
+
+  // Phase 3: staff manually sets / corrects a structured answer (PDF: "Edit/
+  // correct answer where permissions allow"). Validates against the field's
+  // type, writes the canonical { schema_id, fields } payload, recomputes
+  // the missing set, and drives the same one-shot
+  // conversation.intake_completed transition the webhook does.
+  if (action === "set_intake_answer") {
+    const fieldKey = typeof body.field_key === "string" ? body.field_key.trim() : "";
+    if (!fieldKey) return json(req, { error: "field_key is required" }, 400);
+    const rawValue = "value" in body ? body.value : null;
+
+    const intakeConversation = conversation as unknown as IntakeConversation;
+    const { schema, fields } = await loadIntakeContext(serviceSb, intakeConversation);
+    if (!schema) return json(req, { error: "This workspace has no active intake schema" }, 409);
+    const fieldDef = schema.fields.find((f) => f.key === fieldKey);
+    if (!fieldDef) return json(req, { error: "That field is not in the active intake schema" }, 400);
+
+    const nextFields = { ...fields };
+    const clearing = rawValue === null || rawValue === undefined || rawValue === "";
+    if (clearing) {
+      delete nextFields[fieldKey];
+    } else {
+      const coerced = coerceFieldValue(fieldDef, rawValue);
+      if (coerced.status !== "ok") {
+        return json(req, { error: "That value isn't valid for this field", code: "invalid_field_value", reason: coerced.status === "invalid" ? coerced.reason : "empty" }, 400);
+      }
+      nextFields[fieldKey] = coerced.value;
+    }
+
+    const evaluation = evaluateIntake(schema, nextFields);
+    const { error: updateError } = await serviceSb.from("inbox_conversations").update({
+      intake_payload: writeIntakePayload(schema.id, nextFields),
+      intake_missing_fields: evaluation.missing_required,
+      intake_schema_id: schema.id,
+    }).eq("id", conversationId);
+    if (updateError) return json(req, { error: "Unable to save that answer" }, 500);
+
+    await stampAndEmitIntakeCompletion(serviceSb, { ...intakeConversation, intake_schema_id: schema.id }, evaluation, schema.id);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_intake_answer_set", conversationId, { field_key: fieldKey, cleared: clearing });
+
+    return json(req, {
+      ok: true,
+      evaluation: {
+        collected: evaluation.collected,
+        missing_required: evaluation.missing_required,
+        invalid: evaluation.invalid,
+        required_total: evaluation.required_total,
+        required_collected: evaluation.required_collected,
+        complete: evaluation.complete,
+        next_question: evaluation.next_question,
+      },
+    });
   }
 
   const markHumanTakeover = async (wasAiEnabled: boolean) => {

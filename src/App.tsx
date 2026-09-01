@@ -33,6 +33,7 @@ import WhatsAppInbox from "@/pages/dashboard/whatsapp/Inbox";
 import WhatsAppContacts from "@/pages/dashboard/whatsapp/Contacts";
 import WhatsAppTemplates from "@/pages/dashboard/whatsapp/Templates";
 import WhatsAppSettings from "@/pages/dashboard/whatsapp/Settings";
+import WhatsAppIntake from "@/pages/dashboard/whatsapp/Intake";
 import Leads from "@/pages/dashboard/Leads";
 import Analytics from "@/pages/dashboard/Analytics";
 import FlowAI from "@/pages/dashboard/FlowAI";
@@ -104,6 +105,7 @@ export function AppRoutes() {
           <Route path="inbox" element={<WhatsAppInbox />} />
           <Route path="contacts" element={<WhatsAppContacts />} />
           <Route path="templates" element={<WhatsAppTemplates />} />
+          <Route path="intake" element={<WhatsAppIntake />} />
           <Route path="settings" element={<WhatsAppSettings />} />
           <Route path="*" element={<Navigate to="/app/whatsapp/inbox" replace />} />
         </Route>
