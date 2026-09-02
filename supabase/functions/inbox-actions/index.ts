@@ -26,7 +26,22 @@ import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompl
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer"]);
+const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag"]);
+
+const PRIORITY_LEVELS = new Set(["normal", "high", "urgent"]);
+
+// Phase 8: when inbox-actions is called BY the automation worker (under the
+// creator's impersonated token) it passes _automation_context. It only
+// affects audit metadata + outbound send idempotency + the "don't force a
+// human takeover for an automated template" behaviour - never the
+// permission check (that already ran against the impersonated caller).
+type AutomationCtx = { runId: string; automationId: string; actionIndex: number };
+function parseAutomationContext(raw: unknown): AutomationCtx | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.runId !== "string" || typeof r.automationId !== "string" || typeof r.actionIndex !== "number") return null;
+  return { runId: r.runId, automationId: r.automationId, actionIndex: r.actionIndex };
+}
 
 async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, conversationId: string, metadata: Record<string, unknown> = {}) {
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: "inbox_conversation", target_id: conversationId, metadata });
@@ -163,7 +178,7 @@ Deno.serve(async (req: Request) => {
   // workspace by guessing/reusing an id.
   const { data: conversation } = await serviceSb
     .from("inbox_conversations")
-    .select("id,workspace_id,whatsapp_number_id,wa_id,display_name,status,ai_enabled,assigned_staff_id,inbox_status,intake_missing_fields,intake_payload,lead_id,intake_schema_id,intake_completed_at,customer_id")
+    .select("id,workspace_id,whatsapp_number_id,wa_id,display_name,status,ai_enabled,assigned_staff_id,assigned_staff_name,inbox_status,priority_level,human_handoff_requested_at,intake_missing_fields,intake_payload,lead_id,intake_schema_id,intake_completed_at,customer_id")
     .eq("id", conversationId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -172,6 +187,76 @@ Deno.serve(async (req: Request) => {
   const { data: actorProfile } = await serviceSb.from("profiles").select("full_name").eq("id", actorId).maybeSingle();
   const actorName = actorProfile?.full_name?.trim() || "Staff";
   const nowIso = new Date().toISOString();
+  const automationCtx = parseAutomationContext(body._automation_context);
+  const automationMeta = automationCtx ? { source: "automation", automation_id: automationCtx.automationId, automation_run_id: automationCtx.runId } : {};
+
+  // --- Phase 8: set_priority ---------------------------------------------
+  if (action === "set_priority") {
+    const priority = typeof body.priority === "string" ? body.priority : "";
+    if (!PRIORITY_LEVELS.has(priority)) return json(req, { error: "priority must be one of normal, high, urgent" }, 400);
+    if (conversation.priority_level === priority) {
+      return json(req, { ok: true, unchanged: true }); // idempotent no-op
+    }
+    const previous = conversation.priority_level;
+    const { error } = await serviceSb.from("inbox_conversations").update({ priority_level: priority }).eq("id", conversationId);
+    if (error) return json(req, { error: "Unable to set the conversation priority" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_priority_set", conversationId, { ...automationMeta, previous_priority: previous, new_priority: priority });
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "conversation.priority_changed", entityType: "inbox_conversation", entityId: conversationId,
+      payload: { entity_id: conversationId, conversation_id: conversationId, previous_priority: previous, new_priority: priority },
+      dedupeKey: `conversation.priority_changed:${conversationId}:${nowIso}`,
+    });
+    return json(req, { ok: true, previous_priority: previous, new_priority: priority });
+  }
+
+  // --- Phase 8: set_handoff (deliberate hand to a human) ---------------
+  // Reuses the EXACT human-takeover transition every other path uses -
+  // status/ai_enabled/human_handoff_requested_at + the open handoff alert +
+  // the conversation.human_takeover event (the authoritative transition) -
+  // so Phase-5 SLA starts naturally. Idempotent: a conversation already in
+  // human handoff is left untouched (its SLA clock is not reset).
+  if (action === "set_handoff") {
+    if (conversation.status === "human_handoff" && conversation.ai_enabled === false) {
+      return json(req, { ok: true, unchanged: true });
+    }
+    const wasAiEnabled = conversation.ai_enabled;
+    const { error } = await serviceSb.from("inbox_conversations").update({
+      status: "human_handoff",
+      ai_enabled: false,
+      ...(conversation.human_handoff_requested_at ? {} : { human_handoff_requested_at: nowIso }),
+      inbox_status: conversation.assigned_staff_id ? "assigned" : "unassigned",
+    }).eq("id", conversationId);
+    if (error) return json(req, { error: "Unable to hand this conversation to a human" }, 500);
+    await serviceSb.from("inbox_alerts").insert({
+      workspace_id: workspaceId, conversation_id: conversationId, alert_type: "human_handoff", severity: "warning",
+      title: "Conversation handed to a human", body: `${conversation.display_name || conversation.wa_id} needs a human reply.`,
+      assigned_staff_id: conversation.assigned_staff_id,
+    }).then(() => {}, () => {}); // 23505 = an open handoff alert already exists; fine
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_handoff_set", conversationId, automationMeta);
+    if (wasAiEnabled) {
+      await emitDomainEvent(serviceSb, {
+        workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
+        payload: { entity_id: conversationId, conversation_id: conversationId, by: automationCtx ? "automation" : "staff" },
+        dedupeKey: `conversation.human_takeover:${conversationId}:${nowIso}`,
+      });
+    }
+    return json(req, { ok: true });
+  }
+
+  // --- Phase 8: add_tag ------------------------------------------------
+  if (action === "add_tag") {
+    const rawTag = typeof body.tag === "string" ? body.tag.trim() : "";
+    if (!rawTag || rawTag.length > 60) return json(req, { error: "tag must be 1-60 characters" }, 400);
+    const { error } = await serviceSb.from("inbox_conversation_tags").insert({
+      workspace_id: workspaceId, conversation_id: conversationId, tag: rawTag,
+      source: automationCtx ? "automation" : "staff", created_by: actorId,
+    });
+    // 23505 from the (workspace, conversation, lower(tag)) unique index just
+    // means the tag is already there - a success, not an error.
+    if (error && error.code !== "23505") return json(req, { error: "Unable to add this tag" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_tag_added", conversationId, { ...automationMeta, tag: rawTag, already_present: error?.code === "23505" });
+    return json(req, { ok: true, tag: rawTag, already_present: error?.code === "23505" });
+  }
 
   if (action === "assign") {
     const staffId = body.staff_id;
@@ -515,14 +600,43 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, delivery_status: deliveryStatus, warning });
   }
 
-  // action === "reply_template" - the ONLY send path allowed outside the
-  // 24-hour window (and always allowed inside it too - Meta doesn't
-  // forbid a template send just because free-form is also available).
+  // action === "reply_template" (staff) or "request_document" (Phase 8) -
+  // the ONLY send path allowed outside the 24-hour window (and always
+  // allowed inside it too - Meta doesn't forbid a template send just
+  // because free-form is also available). request_document is a thin
+  // wrapper: an optional document_field_key that must exist in the
+  // conversation's pinned intake schema, then the exact same safe send.
   const templateId = body.template_id;
   const rawParameters = Array.isArray(body.parameters) ? body.parameters : [];
   const parameters = rawParameters.filter((p): p is string => typeof p === "string");
   if (typeof templateId !== "string" || !templateId) return json(req, { error: "template_id is required" }, 400);
   if (parameters.length !== rawParameters.length) return json(req, { error: "All template parameters must be strings" }, 400);
+
+  // Phase 8 request_document: if a field_key is given it must be a real
+  // key in THIS conversation's pinned intake schema (never a free-form /
+  // cross-workspace name).
+  if (action === "request_document" && typeof body.document_field_key === "string" && body.document_field_key) {
+    const fieldKey = body.document_field_key;
+    const schema = await resolveActiveIntakeSchema(serviceSb, workspaceId, {
+      conversationSchemaId: (conversation.intake_schema_id as string | null) ?? null,
+      numberSchemaId: null,
+    });
+    if (!schema || !schema.fields.some((f) => f.key === fieldKey && f.is_active !== false)) {
+      return json(req, { error: `"${fieldKey}" is not a field in this conversation's intake schema`, code: "unknown_intake_field" }, 422);
+    }
+  }
+
+  // Phase 8 send idempotency: a retried automation run re-executes its
+  // actions from the top - if THIS run+action already produced an outbound
+  // row, do not send again.
+  if (automationCtx) {
+    const { data: already } = await serviceSb.from("inbox_messages")
+      .select("id, delivery_status")
+      .eq("automation_run_id", automationCtx.runId)
+      .eq("automation_action_index", automationCtx.actionIndex)
+      .maybeSingle();
+    if (already) return json(req, { ok: true, delivery_status: already.delivery_status, deduped: true });
+  }
 
   const templateStatusGate = await assertWorkspaceActive(serviceSb, workspaceId);
   if (!templateStatusGate.allowed) return json(req, workspaceSuspendedBody(templateStatusGate.status), 403);
@@ -563,19 +677,42 @@ Deno.serve(async (req: Request) => {
     warning = sanitizeIntegrationError(sendError).message;
   }
 
-  await serviceSb.from("inbox_messages").insert({
+  const { error: msgInsertError } = await serviceSb.from("inbox_messages").insert({
     workspace_id: workspaceId,
     conversation_id: conversationId,
     provider_message_id: providerMessageId,
     direction: "outbound",
-    sender_type: "staff",
+    // An automation-sent template is a system message, not a staff reply -
+    // it does not stamp a staff sender or (below) force a human takeover.
+    sender_type: automationCtx ? "system" : "staff",
     message_type: "template",
     content: renderedContent,
     delivery_status: deliveryStatus,
-    staff_sender_id: actorId,
-    staff_sender_name: actorName,
+    staff_sender_id: automationCtx ? null : actorId,
+    staff_sender_name: automationCtx ? null : actorName,
+    automation_run_id: automationCtx?.runId ?? null,
+    automation_action_index: automationCtx?.actionIndex ?? null,
   });
+  if (msgInsertError) {
+    // A 23505 here means a concurrent request for the SAME (run, action)
+    // already recorded the outbound row - the send just happened twice at
+    // the provider, which is the known bounded risk this index minimises,
+    // not a client-facing failure. Any other insert error IS a failure.
+    if (msgInsertError.code !== "23505") return json(req, { error: "The message was sent but could not be recorded", code: "ledger_write_failed" }, 500);
+  }
 
+  if (automationCtx) {
+    // Proactive automated outreach - keep the AI running, don't assign,
+    // don't force human_handoff. Just record the outbound timestamp.
+    await serviceSb.from("inbox_conversations").update({ last_outbound_at: nowIso }).eq("id", conversationId);
+    await logActivity(serviceSb, workspaceId, actorId, action === "request_document" ? "inbox_automation_document_requested" : "inbox_automation_template_sent", conversationId, {
+      ...automationMeta, template_id: templateId, template_name: template!.name, delivery_status: deliveryStatus,
+      ...(action === "request_document" && typeof body.document_field_key === "string" ? { field_key: body.document_field_key } : {}),
+    });
+    return json(req, { ok: true, delivery_status: deliveryStatus, warning });
+  }
+
+  // Staff template send - unchanged: this IS a human takeover.
   const wasAiEnabledForTemplate = conversation.ai_enabled;
   const assignedToSelfForTemplate = conversation.assigned_staff_id ? {} : { assigned_staff_id: actorId, assigned_staff_name: actorName, assigned_at: nowIso, assigned_by: actorId };
   await serviceSb.from("inbox_conversations").update({

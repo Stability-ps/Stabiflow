@@ -2207,6 +2207,58 @@ export type Database = {
           },
         ]
       }
+      inbox_conversation_tags: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          source: string
+          tag: string
+          workspace_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          source?: string
+          tag: string
+          workspace_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          source?: string
+          tag?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_conversation_tags_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversation_tags_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_conversation_tags_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_conversations: {
         Row: {
           ai_enabled: boolean
@@ -2434,6 +2486,8 @@ export type Database = {
         Row: {
           ai_media_processed_at: string | null
           ai_media_status: string | null
+          automation_action_index: number | null
+          automation_run_id: string | null
           content: string | null
           conversation_id: string
           created_at: string
@@ -2456,6 +2510,8 @@ export type Database = {
         Insert: {
           ai_media_processed_at?: string | null
           ai_media_status?: string | null
+          automation_action_index?: number | null
+          automation_run_id?: string | null
           content?: string | null
           conversation_id: string
           created_at?: string
@@ -2478,6 +2534,8 @@ export type Database = {
         Update: {
           ai_media_processed_at?: string | null
           ai_media_status?: string | null
+          automation_action_index?: number | null
+          automation_run_id?: string | null
           content?: string | null
           conversation_id?: string
           created_at?: string
@@ -2498,6 +2556,13 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "inbox_messages_automation_run_id_fkey"
+            columns: ["automation_run_id"]
+            isOneToOne: false
+            referencedRelation: "automation_runs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "inbox_messages_conversation_id_fkey"
             columns: ["conversation_id"]

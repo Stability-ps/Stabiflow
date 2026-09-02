@@ -33,7 +33,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
 import { seedLead, seedPipeline } from "./leadsHelpers";
-import { seedWhatsAppSetup } from "./inboxHelpers";
+import { seedWhatsAppSetup, seedInboxConversation, seedInboxMessage } from "./inboxHelpers";
 
 const AUTOMATIONS_ACTIONS_URL = `${SUPABASE_URL}/functions/v1/automations-actions`;
 const AUTOMATIONS_TICK_URL = `${SUPABASE_URL}/functions/v1/automations-tick`;
@@ -469,6 +469,127 @@ describe("Automation Engine (Phase J, release blocker)", () => {
       expect(runs).toHaveLength(1);
 
       await admin.from("automations").delete().eq("id", automationId);
+    });
+  });
+
+  // ==================================================================
+  // Phase 8 - WhatsApp automation parity (tick-driven: idle sweep,
+  // enriched conditions, the new conversation events + actions running
+  // through automations-tick). The action SURFACES themselves are unit +
+  // local-integration tested in whatsapp-automation-parity.test.ts; this
+  // block proves the engine wires them end to end.
+  // ==================================================================
+  describe("Phase 8 - WhatsApp automation parity", () => {
+    let numberId: string;
+
+    beforeAll(async () => {
+      numberId = (await seedWhatsAppSetup(workspace.workspaceId)).id;
+      const integrationId = (await admin.from("workspace_whatsapp_numbers").select("integration_id").eq("id", numberId).single()).data!.integration_id;
+      await admin.rpc("set_workspace_integration_secret", { p_integration_id: integrationId, p_secret: "mock-whatsapp-token-not-a-real-credential" });
+    });
+
+    async function enable(body: Record<string, unknown>): Promise<string> {
+      const created = await callAutomationsActions(ownerToken, { workspace_id: workspace.workspaceId, action: "create", ...body });
+      const id = created.body.automation.id as string;
+      const enabled = await callAutomationsActions(ownerToken, { workspace_id: workspace.workspaceId, action: "set_status", automation_id: id, status: "enabled" });
+      expect(enabled.status).toBe(200);
+      return id;
+    }
+    async function idleEventCount(conversationId: string) {
+      const { count } = await admin.from("domain_events").select("id", { count: "exact", head: true }).eq("event_type", "conversation.idle_timeout").eq("entity_id", conversationId);
+      return count ?? 0;
+    }
+
+    it("conversation.idle_timeout: emits once past the threshold, stays one across ticks, and a new inbound message opens a fresh episode", async () => {
+      const automationId = await enable({ name: "Idle notify", trigger_event_type: "conversation.idle_timeout", idle_timeout_minutes: 60, actions: [{ action_type: "create_notification", action_config: { title: "Customer went quiet" } }] });
+      try {
+        const conv = await seedInboxConversation(workspace.workspaceId, numberId, { last_inbound_at: new Date(Date.now() - 90 * 60_000).toISOString(), inbox_status: "assigned" });
+        const fresh = await seedInboxConversation(workspace.workspaceId, numberId, { last_inbound_at: new Date(Date.now() - 5 * 60_000).toISOString(), inbox_status: "assigned" });
+
+        await tick();
+        expect(await idleEventCount(conv.id)).toBe(1);      // over threshold
+        expect(await idleEventCount(fresh.id)).toBe(0);     // under threshold
+        await tick(); await tick();
+        expect(await idleEventCount(conv.id)).toBe(1);      // same episode, not re-emitted
+
+        // a new inbound message moves last_inbound_at -> a NEW episode next tick
+        await admin.from("inbox_conversations").update({ last_inbound_at: new Date(Date.now() - 5 * 60_000).toISOString() }).eq("id", conv.id);
+        await tick();
+        expect(await idleEventCount(conv.id)).toBe(1);      // now under threshold again - still just the one prior episode
+        await admin.from("inbox_conversations").update({ last_inbound_at: new Date(Date.now() - 120 * 60_000).toISOString() }).eq("id", conv.id);
+        await tick();
+        expect(await idleEventCount(conv.id)).toBe(2);      // fresh episode (different last_inbound_at -> different dedupe key)
+      } finally {
+        await admin.from("automations").delete().eq("id", automationId);
+      }
+    });
+
+    it("conversation.document_received drives an automation, and a media_mime_type condition on the enriched payload is honoured", async () => {
+      const passId = await enable({ name: "PDF received", trigger_event_type: "conversation.document_received", conditions: [{ field: "message.media_mime_type", operator: "eq", value: "application/pdf" }], actions: [{ action_type: "create_notification", action_config: { title: "PDF in" } }] });
+      const failId = await enable({ name: "PNG received", trigger_event_type: "conversation.document_received", conditions: [{ field: "message.media_mime_type", operator: "eq", value: "image/png" }], actions: [{ action_type: "create_notification", action_config: { title: "PNG in" } }] });
+      try {
+        const conv = await seedInboxConversation(workspace.workspaceId, numberId, { status: "human_handoff", ai_enabled: false });
+        const msg = await seedInboxMessage(workspace.workspaceId, conv.id, { direction: "inbound", sender_type: "customer", message_type: "document", media_mime_type: "application/pdf" });
+        // synthesize the same event Phase 6's webhook emits
+        await admin.from("domain_events").insert({
+          workspace_id: workspace.workspaceId, event_type: "conversation.document_received", entity_type: "inbox_conversation", entity_id: conv.id,
+          payload: { entity_id: conv.id, conversation_id: conv.id, message_id: msg, mime: "application/pdf" },
+          dedupe_key: `conversation.document_received:test-${conv.id}`,
+        });
+        await tick();
+        const { data: runs } = await admin.from("automation_runs").select("automation_id, status").in("automation_id", [passId, failId]);
+        const pass = runs!.find((r) => r.automation_id === passId);
+        const fail = runs!.find((r) => r.automation_id === failId);
+        expect(pass!.status === "succeeded" || pass!.status === "partial").toBe(true);
+        expect(fail!.status).toBe("skipped_conditions_not_met");
+      } finally {
+        await admin.from("automations").delete().in("id", [passId, failId]);
+      }
+    });
+
+    it("an intake.<field> condition resolves against the pinned intake payload", async () => {
+      const automationId = await enable({ name: "High risk urgent", trigger_event_type: "conversation.intake_completed", conditions: [{ field: "intake.risk", operator: "eq", value: "high" }], actions: [{ action_type: "set_conversation_priority", action_config: { priority: "urgent" } }] });
+      try {
+        const conv = await seedInboxConversation(workspace.workspaceId, numberId, {
+          intake_payload: { schema_id: null, fields: { risk: "high" } }, intake_completed_at: new Date().toISOString(), priority_level: "normal",
+        });
+        await admin.from("domain_events").insert({
+          workspace_id: workspace.workspaceId, event_type: "conversation.intake_completed", entity_type: "inbox_conversation", entity_id: conv.id,
+          payload: { entity_id: conv.id, conversation_id: conv.id }, dedupe_key: `conversation.intake_completed:test-${conv.id}`,
+        });
+        await tick();
+        const { data: after } = await admin.from("inbox_conversations").select("priority_level").eq("id", conv.id).single();
+        expect(after!.priority_level).toBe("urgent");
+        const { count } = await admin.from("domain_events").select("id", { count: "exact", head: true }).eq("event_type", "conversation.priority_changed").eq("entity_id", conv.id);
+        expect(count).toBe(1);
+      } finally {
+        await admin.from("automations").delete().eq("id", automationId);
+      }
+    });
+
+    it("send_whatsapp_template through the engine is a system message, and a retry tick never doubles it", async () => {
+      const { data: tpl } = await admin.from("whatsapp_message_templates").insert({
+        workspace_id: workspace.workspaceId,
+        integration_id: (await admin.from("workspace_whatsapp_numbers").select("integration_id").eq("id", numberId).single()).data!.integration_id,
+        waba_id: "waba-1", provider_template_id: `pj8-${Date.now()}`, name: "follow_up", language: "en_US", category: "UTILITY",
+        provider_status: "APPROVED", components: [{ type: "BODY", text: "Following up." }],
+      }).select("id").single();
+      const automationId = await enable({ name: "Idle followup", trigger_event_type: "conversation.idle_timeout", idle_timeout_minutes: 60, actions: [{ action_type: "send_whatsapp_template", action_config: { template_id: tpl!.id } }] });
+      try {
+        const conv = await seedInboxConversation(workspace.workspaceId, numberId, { last_inbound_at: new Date(Date.now() - 120 * 60_000).toISOString(), status: "active", ai_enabled: true });
+        await seedInboxMessage(workspace.workspaceId, conv.id, { created_at: new Date(Date.now() - 120 * 60_000).toISOString() });
+        await tick(); // emits idle event + creates run
+        await tick(); // executes run
+        await tick(); // retry-safe: must NOT send again
+        const { data: msgs } = await admin.from("inbox_messages").select("sender_type, message_type, automation_run_id").eq("conversation_id", conv.id).eq("direction", "outbound");
+        expect(msgs).toHaveLength(1);
+        expect(msgs![0].sender_type).toBe("system");
+        expect(msgs![0].automation_run_id).toBeTruthy();
+        const { data: after } = await admin.from("inbox_conversations").select("ai_enabled, status").eq("id", conv.id).single();
+        expect(after!.ai_enabled).toBe(true); // automated outreach does not lock the AI
+      } finally {
+        await admin.from("automations").delete().eq("id", automationId);
+      }
     });
   });
 

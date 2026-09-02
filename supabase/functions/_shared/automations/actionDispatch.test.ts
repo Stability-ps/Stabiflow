@@ -107,6 +107,71 @@ Deno.test("dispatchAction's create_notification writes directly to the notificat
   assertEquals(inserted[0].related_entity_id, "lead-1");
 });
 
+// --- Phase 8: WhatsApp automation-parity actions -----------------------
+
+async function runNew(actionType: string, actionConfig: Record<string, unknown>, entityId: string | null, respond: () => Response) {
+  let url = "";
+  let body: Record<string, unknown> = {};
+  const result = await withMockedFetch(
+    (u, init) => { url = u; body = JSON.parse((init?.body as string) ?? "{}"); return respond(); },
+    () => dispatchAction({
+      // deno-lint-ignore no-explicit-any
+      actionType: actionType as any,
+      actionConfig,
+      event: { entityType: "inbox_conversation", entityId, payload: { entity_id: entityId, message_id: "msg-9" } },
+      workspaceId: "ws-1",
+      accessToken: "tok",
+      serviceClient: fakeServiceClient([]),
+      actorUserId: "user-1",
+      automationContext: { runId: "run-1", automationId: "auto-1", correlationId: "corr-1", depth: 0, actionIndex: 2 },
+    }),
+  );
+  return { url, body, result };
+}
+
+Deno.test("set_conversation_priority -> inbox-actions set_priority, conversation from the triggering event, automation context forwarded", async () => {
+  const { url, body, result } = await runNew("set_conversation_priority", { priority: "urgent" }, "conv-1", () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  assertEquals(result.status, "succeeded");
+  assertEquals(url.endsWith("/functions/v1/inbox-actions"), true);
+  assertEquals(body.action, "set_priority");
+  assertEquals(body.conversation_id, "conv-1");
+  assertEquals(body.priority, "urgent");
+  assertEquals((body._automation_context as Record<string, unknown>).actionIndex, 2);
+});
+
+Deno.test("set_conversation_handoff -> inbox-actions set_handoff", async () => {
+  const { body, result } = await runNew("set_conversation_handoff", {}, "conv-2", () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  assertEquals(result.status, "succeeded");
+  assertEquals(body.action, "set_handoff");
+  assertEquals(body.conversation_id, "conv-2");
+});
+
+Deno.test("send_whatsapp_template parses comma parameters and routes to reply_template", async () => {
+  const { body, result } = await runNew("send_whatsapp_template", { template_id: "tpl-1", parameters: "Acme, invoice" }, "conv-3", () => new Response(JSON.stringify({ ok: true, delivery_status: "submitted" }), { status: 200 }));
+  assertEquals(result.status, "succeeded");
+  assertEquals(body.action, "reply_template");
+  assertEquals(body.template_id, "tpl-1");
+  assertEquals(body.parameters, ["Acme", "invoice"]);
+});
+
+Deno.test("a WhatsApp send with delivery_status 'failed' is a FAILED step, never a green run", async () => {
+  const { result } = await runNew("send_whatsapp_template", { template_id: "tpl-1" }, "conv-4", () => new Response(JSON.stringify({ ok: true, delivery_status: "failed", warning: "provider rejected" }), { status: 200 }));
+  assertEquals(result.status, "failed");
+});
+
+Deno.test("request_document forwards field_key as document_field_key", async () => {
+  const { body } = await runNew("request_document", { template_id: "tpl-2", field_key: "proof_of_address" }, "conv-5", () => new Response(JSON.stringify({ ok: true, delivery_status: "submitted" }), { status: 200 }));
+  assertEquals(body.action, "request_document");
+  assertEquals(body.document_field_key, "proof_of_address");
+});
+
+Deno.test("add_tag -> inbox-actions add_tag", async () => {
+  const { body, result } = await runNew("add_tag", { tag: "needs-review" }, "conv-6", () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+  assertEquals(result.status, "succeeded");
+  assertEquals(body.action, "add_tag");
+  assertEquals(body.tag, "needs-review");
+});
+
 Deno.test("dispatchAction rejects an unknown action_type safely rather than throwing", async () => {
   // deno-lint-ignore no-explicit-any
   const result = await dispatchAction({

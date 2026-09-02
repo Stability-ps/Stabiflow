@@ -23,7 +23,14 @@ const ACTION_REQUIRED_PERMISSION: Record<string, string> = {
   create_internal_note: "lead.edit",
   create_notification: "automation.enable",
   request_flow_ai_analysis: "flow_ai.use",
+  set_conversation_priority: "inbox.manage",
+  set_conversation_handoff: "inbox.manage",
+  send_whatsapp_template: "inbox.manage",
+  request_document: "inbox.manage",
+  add_tag: "inbox.manage",
 };
+
+const IDLE_TRIGGERS = new Set(["lead.idle_timeout", "conversation.idle_timeout"]);
 
 type ConditionInput = { field: string; operator: string; value: unknown };
 type ActionInput = { action_type: string; action_config: Record<string, unknown> };
@@ -80,9 +87,9 @@ Deno.serve(async (req: Request) => {
     const triggerEventType = body.trigger_event_type;
     if (!name) return json(req, { error: "name is required" }, 400);
     if (typeof triggerEventType !== "string" || !isEventType(triggerEventType)) return json(req, { error: "A valid trigger_event_type is required" }, 400);
-    const idleTimeoutMinutes = triggerEventType === "lead.idle_timeout" ? Number(body.idle_timeout_minutes) : null;
-    if (triggerEventType === "lead.idle_timeout" && (!idleTimeoutMinutes || idleTimeoutMinutes <= 0)) {
-      return json(req, { error: "idle_timeout_minutes is required and must be positive for a lead.idle_timeout trigger" }, 400);
+    const idleTimeoutMinutes = IDLE_TRIGGERS.has(triggerEventType) ? Number(body.idle_timeout_minutes) : null;
+    if (IDLE_TRIGGERS.has(triggerEventType) && (!idleTimeoutMinutes || idleTimeoutMinutes <= 0)) {
+      return json(req, { error: `idle_timeout_minutes is required and must be positive for a ${triggerEventType} trigger` }, 400);
     }
     if (body.conditions !== undefined && !validateConditions(body.conditions)) return json(req, { error: "Invalid conditions" }, 400);
     if (body.actions !== undefined && !validateActions(body.actions)) return json(req, { error: "At least one valid action is required" }, 400);

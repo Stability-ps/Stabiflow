@@ -3,6 +3,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePipelines, usePipelineStages } from "@/hooks/useLeads";
+import { useInboxTemplates, approvedTemplates } from "@/hooks/useInboxTemplates";
 import type { AutomationActionType } from "@/lib/automations";
 
 type Member = { user_id: string; profile: { full_name: string | null } | null };
@@ -26,6 +27,64 @@ export function ActionConfigFields({ workspaceId, actionType, config, onChange, 
   const pipelineId = (config.pipeline_id as string) || "";
   const { data: pipelines } = usePipelines(workspaceId);
   const { data: stages } = usePipelineStages(workspaceId, pipelineId || null);
+  const { data: allTemplates } = useInboxTemplates(workspaceId);
+  const templates = approvedTemplates(allTemplates);
+
+  if (actionType === "set_conversation_priority") {
+    return (
+      <div>
+        <Label className="text-xs">Priority</Label>
+        <Select value={(config.priority as string) || ""} onValueChange={(v) => set("priority", v)}>
+          <SelectTrigger><SelectValue placeholder="Choose a priority" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="normal">Normal</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="urgent">Urgent</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
+  if (actionType === "set_conversation_handoff") {
+    return <p className="text-xs text-muted-foreground">Turns AI off for this conversation and hands it to your team, exactly like a staff takeover. Starts the human-response SLA clock.</p>;
+  }
+
+  if (actionType === "add_tag") {
+    return (
+      <div>
+        <Label className="text-xs">Tag</Label>
+        <Input value={(config.tag as string) || ""} onChange={(e) => set("tag", e.target.value)} placeholder="e.g. needs-review" maxLength={60} />
+      </div>
+    );
+  }
+
+  if (actionType === "send_whatsapp_template" || actionType === "request_document") {
+    return (
+      <div className="space-y-2">
+        <div>
+          <Label className="text-xs">Approved WhatsApp template</Label>
+          <Select value={(config.template_id as string) || ""} onValueChange={(v) => set("template_id", v)}>
+            <SelectTrigger><SelectValue placeholder={templates.length ? "Choose a template" : "No approved templates yet"} /></SelectTrigger>
+            <SelectContent>
+              {templates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">Template values (comma-separated, in order)</Label>
+          <Input value={(config.parameters as string) || ""} onChange={(e) => set("parameters", e.target.value)} placeholder="Optional - e.g. Acme, invoice" />
+        </div>
+        {actionType === "request_document" && (
+          <div>
+            <Label className="text-xs">Intake field (optional)</Label>
+            <Input value={(config.field_key as string) || ""} onChange={(e) => set("field_key", e.target.value)} placeholder="e.g. proof_of_address" />
+            <p className="mt-1 text-xs text-muted-foreground">If set, must be a field in the conversation's intake schema.</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (actionType === "create_lead") {
     return (

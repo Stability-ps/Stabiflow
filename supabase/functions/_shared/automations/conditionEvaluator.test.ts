@@ -39,6 +39,28 @@ Deno.test("evaluateConditions fails closed on an unrecognized operator rather th
   assertEquals(result.allPassed, false);
 });
 
+Deno.test("evaluateConditions supports the Phase-8 enriched conversation/message/intake sub-objects", () => {
+  const payload = {
+    conversation: { status: "human_handoff", priority: "urgent", intake_completed: true },
+    message: { direction: "inbound", media_mime_type: "application/pdf" },
+    intake: { risk: "high", budget: 7500 },
+  };
+  assertEquals(evaluateConditions([{ field: "conversation.priority", operator: "eq", value: "urgent" }], payload).allPassed, true);
+  assertEquals(evaluateConditions([{ field: "message.media_mime_type", operator: "eq", value: "application/pdf" }], payload).allPassed, true);
+  assertEquals(evaluateConditions([{ field: "intake.risk", operator: "eq", value: "high" }], payload).allPassed, true);
+  assertEquals(evaluateConditions([{ field: "intake.budget", operator: "gte", value: 5000 }], payload).allPassed, true);
+  assertEquals(evaluateConditions([{ field: "intake.budget", operator: "gte", value: 10000 }], payload).allPassed, false);
+});
+
+Deno.test("evaluateConditions never resolves a prototype-pollution style path to a real object", () => {
+  const payload = { intake: { risk: "high" } };
+  // __proto__ / constructor / prototype keys resolve to undefined, so any
+  // operator against them fails closed (is_not_null -> false).
+  assertEquals(evaluateConditions([{ field: "intake.__proto__.polluted", operator: "is_not_null", value: null }], payload).allPassed, false);
+  assertEquals(evaluateConditions([{ field: "constructor.name", operator: "eq", value: "Object" }], payload).allPassed, false);
+  assertEquals(evaluateConditions([{ field: "intake.__proto__", operator: "is_null", value: null }], payload).allPassed, true);
+});
+
 Deno.test("evaluateConditions records a per-condition result for observability (automation_runs.conditions_result)", () => {
   const { results } = evaluateConditions([{ field: "source", operator: "eq", value: "whatsapp" }], { source: "meta" });
   assertEquals(results, [{ field: "source", operator: "eq", expected: "whatsapp", actual: "meta", passed: false }]);
