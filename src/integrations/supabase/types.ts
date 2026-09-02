@@ -2432,6 +2432,8 @@ export type Database = {
       }
       inbox_messages: {
         Row: {
+          ai_media_processed_at: string | null
+          ai_media_status: string | null
           content: string | null
           conversation_id: string
           created_at: string
@@ -2452,6 +2454,8 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          ai_media_processed_at?: string | null
+          ai_media_status?: string | null
           content?: string | null
           conversation_id: string
           created_at?: string
@@ -2472,6 +2476,8 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          ai_media_processed_at?: string | null
+          ai_media_status?: string | null
           content?: string | null
           conversation_id?: string
           created_at?: string
@@ -3917,6 +3923,7 @@ export type Database = {
       }
       workspace_settings: {
         Row: {
+          ai_multimodal_enabled: boolean
           business_description: string | null
           contact_email: string | null
           contact_phone: string | null
@@ -3935,6 +3942,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          ai_multimodal_enabled?: boolean
           business_description?: string | null
           contact_email?: string | null
           contact_phone?: string | null
@@ -3953,6 +3961,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          ai_multimodal_enabled?: boolean
           business_description?: string | null
           contact_email?: string | null
           contact_phone?: string | null

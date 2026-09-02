@@ -19,6 +19,7 @@ async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T
 export const EVENT_TYPES = [
   "conversation.started", "message.received", "conversation.human_takeover",
   "conversation.intake_completed", "conversation.handoff_sla_overdue",
+  "conversation.document_received",
   "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout",
   "opportunity.created", "opportunity.stage_changed", "opportunity.won", "opportunity.lost",
   "customer.created", "revenue.recorded",
@@ -45,6 +46,7 @@ export const EVENT_TYPE_LABELS: Record<AutomationEventType, string> = {
   "conversation.human_takeover": "Staff takes over a conversation from AI",
   "conversation.intake_completed": "A conversation's intake is completed",
   "conversation.handoff_sla_overdue": "A human handoff is overdue (SLA breached)",
+  "conversation.document_received": "A customer sends a document or image",
   "lead.created": "A lead is created",
   "lead.qualified": "A lead is marked qualified",
   "lead.stage_changed": "A lead moves pipeline stage",
