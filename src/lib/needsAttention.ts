@@ -11,6 +11,7 @@ export type NeedsAttentionKind =
   | "priority_conversation"
   | "message_failed"
   | "handoff_sla_overdue"
+  | "ai_usage_limit_reached"
   | "campaign_failed"
   | "integration_unhealthy"
   | "automation_failed"

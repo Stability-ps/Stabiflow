@@ -31,7 +31,15 @@ import {
   type AiMediaStatus,
   type MediaInputPart,
 } from "../_shared/inbox/multimodalMedia.ts";
-import { estimateCost } from "../_shared/flowAi/usage.ts";
+import { estimateCost, getPlatformTokenUsageSince, getWorkspaceFeatureTokenUsageSince } from "../_shared/flowAi/usage.ts";
+import {
+  decideInboxAiBudget,
+  INBOX_AI_FEATURE,
+  INBOX_AI_CAP_KEY,
+  resolveInboxAiCap,
+  utcDayStartIso,
+  utcMonthStartIso,
+} from "../_shared/inbox/inboxAiBudget.ts";
 import { evaluateIntake, mergeExtractedFields, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
 import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
@@ -222,7 +230,7 @@ async function recordInboxAiUsage(
   model: string,
   usage: AiUsage,
   latencyMs: number,
-  status: "success" | "error",
+  status: "success" | "error" | "blocked_quota",
 ) {
   try {
     await sb.from("ai_usage_events").insert({
@@ -241,6 +249,55 @@ async function recordInboxAiUsage(
   } catch (err) {
     console.error("whatsapp-webhook: failed to record Inbox AI usage", err instanceof Error ? err.message : err);
   }
+}
+
+// Phase 7: the workspace is over its Inbox AI allowance for this UTC month
+// (or the platform daily ceiling is hit). NO OpenAI call has been made and
+// none will be. Move the conversation into the SAME human-handoff path
+// everything else uses, record ONE unresolved operational alert (deduped by
+// the existing partial unique index), log a zero-token blocked_quota usage
+// row (so "how often did we hit the cap" is answerable without inventing
+// token usage), and emit the detect-only domain event. No customer message.
+async function pauseConversationForAiLimit(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  conversationId: string,
+  model: string,
+  scope: "workspace_cap" | "platform_ceiling",
+) {
+  const nowIso = new Date().toISOString();
+  const { data: conv } = await sb
+    .from("inbox_conversations")
+    .select("human_handoff_requested_at, display_name, wa_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+
+  await sb.from("inbox_conversations").update({
+    status: "human_handoff",
+    ai_enabled: false,
+    ...(conv?.human_handoff_requested_at ? {} : { human_handoff_requested_at: nowIso }),
+  }).eq("id", conversationId);
+
+  const who = conv?.display_name || conv?.wa_id || "This customer";
+  await sb.from("inbox_alerts").insert({
+    workspace_id: workspaceId,
+    conversation_id: conversationId,
+    alert_type: "ai_usage_limit_reached",
+    severity: "warning",
+    title: "AI paused - workspace usage limit reached",
+    body: `${who}'s conversation was handed to staff because this workspace reached its monthly Inbox AI usage limit. Raise the limit in WhatsApp settings, or reply as normal.`,
+  }).then(() => {}, () => {}); // 23505 from the partial unique index = alert already open; fine
+
+  await recordInboxAiUsage(sb, workspaceId, model, { inputTokens: 0, outputTokens: 0 }, 0, "blocked_quota");
+
+  await emitDomainEvent(sb, {
+    workspaceId,
+    eventType: "conversation.ai_limit_reached",
+    entityType: "inbox_conversation",
+    entityId: conversationId,
+    payload: { entity_id: conversationId, conversation_id: conversationId, scope },
+    dedupeKey: `conversation.ai_limit_reached:${conversationId}:${utcMonthStartIso(new Date())}`,
+  });
 }
 
 async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
@@ -404,6 +461,29 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   if (event.kind === "text" && requestsHumanHandoff(event.text)) {
     await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: nowIso2 }).eq("id", conversation.id);
     await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+    return;
+  }
+
+  // Phase 7: Inbox AI cost governance. Runs AFTER the human-control gate and
+  // the no-AI fast paths (greeting, explicit human request) above, and
+  // BEFORE any OpenAI work - incl. the OpenAI-config check, the multimodal
+  // storage download and the model call. Over the monthly Inbox AI
+  // allowance (or the platform daily ceiling) -> NO OpenAI call, no
+  // fabricated reply, the conversation moves to the existing human-handoff
+  // path, and ONE unresolved alert records why. Soft ceiling, same contract
+  // as Flow AI (see inboxAiBudget.ts for the bounded-overshoot note).
+  const { data: billingRow } = await sb.from("workspace_billing").select("limits").eq("workspace_id", numberRow.workspace_id).maybeSingle();
+  const inboxCap = resolveInboxAiCap(
+    (billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY],
+    Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"),
+  );
+  const inboxUsed = await getWorkspaceFeatureTokenUsageSince(sb, numberRow.workspace_id, INBOX_AI_FEATURE, utcMonthStartIso(new Date()));
+  const platformCeilingRaw = Number(Deno.env.get("FLOW_AI_PLATFORM_DAILY_TOKEN_CEILING")?.trim());
+  const platformCeiling = Number.isFinite(platformCeilingRaw) && platformCeilingRaw > 0 ? platformCeilingRaw : null;
+  const platformUsed = platformCeiling !== null ? await getPlatformTokenUsageSince(sb, utcDayStartIso(new Date())) : null;
+  const budget = decideInboxAiBudget({ workspaceUsed: inboxUsed, workspaceCap: inboxCap, platformUsed, platformCeiling });
+  if (!budget.allowed) {
+    await pauseConversationForAiLimit(sb, numberRow.workspace_id, conversation.id, Deno.env.get("OPENAI_WHATSAPP_MODEL")?.trim() || "unknown", budget.scope);
     return;
   }
 

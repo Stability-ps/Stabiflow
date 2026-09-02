@@ -11,7 +11,9 @@ import { roleHasPermission } from "@/lib/permissions";
 import { workspaceRoleRank } from "@/lib/workspaceRoles";
 import { useWorkspaceSlaSettings, updateWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { useWorkspaceAiSettings, updateWorkspaceAiSettings } from "@/hooks/useWorkspaceAiSettings";
+import { useInboxAiUsage, updateInboxAiCap } from "@/hooks/useInboxAiUsage";
 import { AI_MEDIA_SUPPORTED_FORMATS } from "@/lib/multimodalMedia";
+import { INBOX_AI_CAP_MAX, INBOX_AI_CAP_MIN, usagePercent } from "@/lib/inboxAiBudget";
 import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
 import { repairWhatsAppWebhookSubscription } from "@/lib/integrations";
 import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
@@ -68,6 +70,36 @@ export default function WhatsAppSettings() {
       setSavingSla(false);
     }
   };
+  const canManageBilling = roleHasPermission(role, "manage_billing");
+  const { data: inboxAiUsage } = useInboxAiUsage(workspaceId);
+  const [capInput, setCapInput] = useState<string>("");
+  const [savingCap, setSavingCap] = useState(false);
+  useEffect(() => {
+    if (inboxAiUsage && capInput === "") setCapInput(inboxAiUsage.overrideCap != null ? String(inboxAiUsage.overrideCap) : "");
+  }, [inboxAiUsage, capInput]);
+  const saveCap = async (raw: string) => {
+    const trimmed = raw.trim();
+    let cap: number | null = null;
+    if (trimmed !== "") {
+      const n = Math.trunc(Number(trimmed));
+      if (!Number.isFinite(n) || n < INBOX_AI_CAP_MIN || n > INBOX_AI_CAP_MAX) {
+        toast.error(`Enter a whole number between ${INBOX_AI_CAP_MIN} and ${INBOX_AI_CAP_MAX}, or leave blank for the platform default.`);
+        return;
+      }
+      cap = n;
+    }
+    setSavingCap(true);
+    try {
+      await updateInboxAiCap(workspaceId, cap);
+      await queryClient.invalidateQueries({ queryKey: ["inbox-ai-usage", workspaceId] });
+      toast.success(cap == null ? "Inbox AI limit set to the platform default" : "Inbox AI monthly limit saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to save the Inbox AI limit");
+    } finally {
+      setSavingCap(false);
+    }
+  };
+
   const { data: aiSettings } = useWorkspaceAiSettings(workspaceId);
   const [savingAi, setSavingAi] = useState(false);
   const saveMultimodal = async (enabled: boolean) => {
@@ -225,6 +257,48 @@ export default function WhatsAppSettings() {
             Images: {AI_MEDIA_SUPPORTED_FORMATS.images.join(", ")} &nbsp;·&nbsp; Documents: {AI_MEDIA_SUPPORTED_FORMATS.documents.join(", ")}
           </p>
           {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Inbox AI monthly usage limit</CardTitle></CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <p className="text-sm text-muted-foreground">
+            StabiFlow pauses Inbox AI when this workspace reaches its monthly limit. Customer messages continue to arrive and are handed to staff - no automatic reply is sent.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="number"
+              min={INBOX_AI_CAP_MIN}
+              max={INBOX_AI_CAP_MAX}
+              placeholder="Platform default"
+              value={capInput}
+              disabled={!canManageBilling || savingCap}
+              onChange={(e) => setCapInput(e.target.value)}
+              className="h-8 w-40"
+            />
+            <span className="text-sm text-muted-foreground">tokens / month</span>
+            {canManageBilling && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={savingCap || capInput === (inboxAiUsage?.overrideCap != null ? String(inboxAiUsage.overrideCap) : "")}
+                onClick={() => saveCap(capInput)}
+              >
+                Save
+              </Button>
+            )}
+          </div>
+          {inboxAiUsage?.overrideCap == null && (
+            <p className="text-xs text-muted-foreground">Currently using the platform default limit. Enter a number to set a workspace-specific limit; clear it to go back to the default.</p>
+          )}
+          {inboxAiUsage?.overrideCap != null && inboxAiUsage.usedThisMonth != null && (
+            <p className="text-xs text-muted-foreground">
+              Used this month: {inboxAiUsage.usedThisMonth.toLocaleString()} / {inboxAiUsage.overrideCap.toLocaleString()} tokens
+              {" "}({usagePercent(inboxAiUsage.usedThisMonth, inboxAiUsage.overrideCap)}%)
+            </p>
+          )}
+          {!canManageBilling && <p className="text-xs text-muted-foreground">Only the workspace owner can change AI usage limits.</p>}
         </CardContent>
       </Card>
 

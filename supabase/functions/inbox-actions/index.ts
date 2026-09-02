@@ -50,6 +50,17 @@ async function resolveSlaAlert(sb: AnySupabaseClient, workspaceId: string, conve
   }
 }
 
+// Phase 7: an explicit Return to AI clears the "AI paused - usage limit
+// reached" alert for this conversation. A plain staff reply does NOT (the
+// conversation is still human-controlled and the pause still stands until
+// someone deliberately hands it back). Conversation-resolve already clears
+// every open alert, so it needs no special-casing here.
+async function resolveAiLimitAlert(sb: AnySupabaseClient, conversationId: string, actorId: string, nowIso: string) {
+  await sb.from("inbox_alerts")
+    .update({ is_resolved: true, resolved_at: nowIso, resolved_by: actorId })
+    .eq("conversation_id", conversationId).eq("alert_type", "ai_usage_limit_reached").eq("is_resolved", false);
+}
+
 type IntakeConversation = {
   id: string;
   workspace_id: string;
@@ -205,6 +216,7 @@ Deno.serve(async (req: Request) => {
     if (error) return json(req, { error: "Unable to return this conversation to AI" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_returned_to_ai", conversationId, { previous_staff_id: conversation.assigned_staff_id });
     await resolveSlaAlert(serviceSb, workspaceId, conversationId, actorId, nowIso);
+    await resolveAiLimitAlert(serviceSb, conversationId, actorId, nowIso);
     return json(req, { ok: true });
   }
 

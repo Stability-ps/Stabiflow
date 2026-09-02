@@ -4512,6 +4512,10 @@ export type Database = {
       }
       next_lead_reference: { Args: { p_workspace_id: string }; Returns: string }
       normalize_phone_number: { Args: { p_raw: string }; Returns: string }
+      set_workspace_inbox_ai_cap: {
+        Args: { p_cap?: number; p_workspace_id: string }
+        Returns: number
+      }
       set_workspace_integration_secret: {
         Args: { p_integration_id: string; p_secret: string }
         Returns: undefined
