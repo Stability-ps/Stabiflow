@@ -3923,6 +3923,8 @@ export type Database = {
           created_at: string
           currency: string
           feature_flags: Json
+          handoff_sla_enabled: boolean
+          handoff_sla_minutes: number
           id: string
           industry: string | null
           logo_path: string | null
@@ -3939,6 +3941,8 @@ export type Database = {
           created_at?: string
           currency?: string
           feature_flags?: Json
+          handoff_sla_enabled?: boolean
+          handoff_sla_minutes?: number
           id?: string
           industry?: string | null
           logo_path?: string | null
@@ -3955,6 +3959,8 @@ export type Database = {
           created_at?: string
           currency?: string
           feature_flags?: Json
+          handoff_sla_enabled?: boolean
+          handoff_sla_minutes?: number
           id?: string
           industry?: string | null
           logo_path?: string | null
@@ -4501,6 +4507,7 @@ export type Database = {
         Args: { p_integration_id: string; p_secret: string }
         Returns: undefined
       }
+      sla_sweep: { Args: never; Returns: Json }
       workspace_assets_path_workspace_id: {
         Args: { p_name: string }
         Returns: string

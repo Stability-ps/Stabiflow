@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { Inbox as InboxIcon } from "lucide-react";
 import { inboxStatusLabel, priorityLabel } from "@/lib/inboxPresentation";
 import type { InboxConversationRow } from "@/hooks/useInboxConversations";
+import { computeSlaState, type SlaSettings } from "@/lib/slaState";
 
 export type InboxFilter = "all" | "unassigned" | "assigned" | "waiting_client" | "resolved" | "unread";
 
@@ -34,7 +35,7 @@ function priorityTone(priority: string): string {
   return "";
 }
 
-export function ConversationList({ conversations, unreadIds, selectedId, onSelect, filter, onFilterChange, search, onSearchChange }: {
+export function ConversationList({ conversations, unreadIds, selectedId, onSelect, filter, onFilterChange, search, onSearchChange, slaSettings }: {
   conversations: InboxConversationRow[];
   unreadIds: Set<string>;
   selectedId: string | null;
@@ -43,6 +44,7 @@ export function ConversationList({ conversations, unreadIds, selectedId, onSelec
   onFilterChange: (filter: InboxFilter) => void;
   search: string;
   onSearchChange: (value: string) => void;
+  slaSettings?: SlaSettings | null;
 }) {
   const filtered = conversations.filter((c) => {
     if (filter === "unread" && !unreadIds.has(c.id)) return false;
@@ -110,6 +112,9 @@ export function ConversationList({ conversations, unreadIds, selectedId, onSelec
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <Badge variant="secondary" className={statusTone(c.inbox_status)}>{inboxStatusLabel(c.inbox_status)}</Badge>
                     {c.priority_level !== "normal" && <Badge variant="secondary" className={priorityTone(c.priority_level)}>{priorityLabel(c.priority_level)}</Badge>}
+                    {computeSlaState(c, slaSettings).phase === "overdue" && (
+                      <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">Overdue</Badge>
+                    )}
                     {unread && <span className="h-2 w-2 rounded-full bg-primary" aria-label="Unread" />}
                   </div>
                 </div>

@@ -20,6 +20,8 @@ import { useLead, usePipelines, usePipelineStages } from "@/hooks/useLeads";
 import { useOpportunitiesForLead, useCustomer } from "@/hooks/useOpportunities";
 import { useCustomerMatchCandidates, useCustomersSearch } from "@/hooks/useCustomers";
 import { linkConversationCustomer, unlinkConversationCustomer } from "@/lib/customer";
+import { useWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
+import { computeSlaState } from "@/lib/slaState";
 import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
 import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
@@ -90,6 +92,8 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const role = currentMembership?.role;
+  const { data: slaSettings } = useWorkspaceSlaSettings(workspaceId);
+  const slaState = useMemo(() => computeSlaState(conversation, slaSettings), [conversation, slaSettings]);
   const canCreateLead = roleHasPermission(role, "lead.create");
   const canViewLead = roleHasPermission(role, "lead.view");
   const canCreateOpportunity = roleHasPermission(role, "opportunity.create");
@@ -434,6 +438,16 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>
         {conversation.priority_level !== "normal" && <Badge variant="secondary">{priorityLabel(conversation.priority_level)}</Badge>}
         <Badge variant={windowState === "open" ? "outline" : "destructive"}>{messagingWindowLabel(windowState)}</Badge>
+        {slaState.applicable && (
+          <Badge variant={slaState.phase === "overdue" ? "destructive" : "outline"}>
+            {slaState.phase === "overdue"
+              ? `Overdue by ${slaState.minutesOverdue} min`
+              : slaState.phase === "due_soon"
+                ? `Human response due in ${slaState.minutesRemaining} min`
+                : `Waiting for staff · due in ${slaState.minutesRemaining} min`}
+            {conversation.assigned_staff_name ? ` · ${conversation.assigned_staff_name}` : ""}
+          </Badge>
+        )}
       </div>
 
       <div className="border-b p-2">

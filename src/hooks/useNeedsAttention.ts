@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import type { NeedsAttentionItem, NeedsAttentionKind } from "@/lib/needsAttention";
 import { dedupeNeedsAttention, sortNeedsAttention } from "@/lib/needsAttention";
+import { computeSlaState, type SlaSettings } from "@/lib/slaState";
 
 // Composes the Needs Attention list from existing, RLS-protected tables -
 // NOT a persisted notifications store. Every query is workspace-filtered
@@ -31,6 +32,7 @@ const ALERT_META: Record<string, { kind: NeedsAttentionKind; title: string }> = 
   customer_reply: { kind: "customer_reply", title: "Customer replied" },
   high_priority: { kind: "priority_conversation", title: "Priority conversation waiting" },
   message_failed: { kind: "message_failed", title: "A message failed to send" },
+  handoff_sla_overdue: { kind: "handoff_sla_overdue", title: "Customer waiting for a human response" },
 };
 
 function toSeverity(raw: string | null): NeedsAttentionItem["severity"] {
@@ -103,6 +105,9 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
               .lt("created_at", new Date(Date.now() - 86_400_000).toISOString())
               .order("created_at", { ascending: true }).limit(15)
           : Promise.resolve({ data: [], error: null }),
+        canInbox
+          ? supabase.from("workspace_settings").select("handoff_sla_minutes, handoff_sla_enabled").eq("workspace_id", wid).limit(1)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       const alerts = value(settled[0] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
@@ -110,6 +115,14 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
       const integrations = value(settled[2] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
       const failedRuns = value(settled[3] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
       const unownedLeads = value(settled[4] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
+      const slaRows = value(settled[5] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
+      const slaRow = ("data" in slaRows && slaRows.data.length > 0)
+        ? (slaRows.data[0] as { handoff_sla_minutes?: number; handoff_sla_enabled?: boolean })
+        : null;
+      const slaSettings: SlaSettings = {
+        handoff_sla_minutes: slaRow?.handoff_sla_minutes ?? 10,
+        handoff_sla_enabled: slaRow?.handoff_sla_enabled ?? true,
+      };
       for (const s of [alerts, failedCampaigns, integrations, failedRuns, unownedLeads]) {
         if ("failed" in s) partialFailure = true;
       }
@@ -118,14 +131,15 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
       if ("data" in alerts && alerts.data.length > 0) {
         const rows = alerts.data as Array<{ id: string; alert_type: string; severity: string | null; title: string | null; conversation_id: string; created_at: string }>;
         const convIds = [...new Set(rows.map((r) => r.conversation_id))];
-        let convState = new Map<string, { status: string; priority_level: string; ai_enabled: boolean }>();
+        type ConvS = { status: string; priority_level: string; ai_enabled: boolean; inbox_status: string; human_handoff_requested_at: string | null; last_staff_reply_at: string | null; assigned_staff_name: string | null };
+        let convState = new Map<string, ConvS>();
         try {
           const { data: convs, error } = await supabase
             .from("inbox_conversations")
-            .select("id, status, priority_level, ai_enabled")
+            .select("id, status, priority_level, ai_enabled, inbox_status, human_handoff_requested_at, last_staff_reply_at, assigned_staff_name")
             .eq("workspace_id", wid).in("id", convIds);
           if (error) throw error;
-          convState = new Map(((convs || []) as Array<{ id: string; status: string; priority_level: string; ai_enabled: boolean }>).map((c) => [c.id, c]));
+          convState = new Map(((convs || []) as Array<ConvS & { id: string }>).map((c) => [c.id, c]));
         } catch {
           partialFailure = true;
         }
@@ -139,12 +153,19 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
           // high/urgent needs no priority attention.
           if (meta.kind === "human_takeover" && cs && (cs.status !== "human_handoff" || cs.ai_enabled)) continue;
           if (meta.kind === "priority_conversation" && cs && cs.priority_level !== "high" && cs.priority_level !== "urgent") continue;
+          let slaDescription: string | null = null;
+          if (meta.kind === "handoff_sla_overdue") {
+            if (!cs) continue;
+            const st = computeSlaState(cs, slaSettings);
+            if (st.phase !== "overdue") continue; // recovered - stale item drops off
+            slaDescription = `${st.minutesOverdue} min overdue` + (cs.assigned_staff_name ? ` · waiting for ${cs.assigned_staff_name}` : "");
+          }
           items.push({
             id: `alert:${a.id}`,
             kind: meta.kind,
             severity: toSeverity(a.severity),
             title: meta.title,
-            description: a.title || "A conversation needs your attention.",
+            description: slaDescription || a.title || "A conversation needs your attention.",
             occurredAt: a.created_at,
             targetType: "conversation",
             targetId: a.conversation_id,
