@@ -37,6 +37,7 @@ const DEFAULT_FILES = [
   "supabase/tests/customer-360.test.ts",
   "supabase/tests/whatsapp-sla-escalation.test.ts",
   "supabase/tests/inbox-ai-multimodal.test.ts",
+  "supabase/tests/inbox-ai-cost-governance.test.ts",
 ];
 
 function localEnvFromSupabase() {

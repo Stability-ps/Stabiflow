@@ -53,6 +53,26 @@ export async function getWorkspaceTokenUsageSince(serviceClient: AnySupabaseClie
   return (data ?? []).reduce((sum: number, row: { total_tokens: number }) => sum + (row.total_tokens ?? 0), 0);
 }
 
+// Phase 7: the workspace-month usage sum for ONE feature only (e.g.
+// 'whatsapp_inbox_ai'), so the Inbox AI cap never counts Flow AI usage and
+// vice-versa. Same select+reduce shape as getWorkspaceTokenUsageSince;
+// backed by ai_usage_events_workspace_feature_created_idx.
+export async function getWorkspaceFeatureTokenUsageSince(
+  serviceClient: AnySupabaseClient,
+  workspaceId: string,
+  feature: string,
+  since: string,
+): Promise<number> {
+  const { data, error } = await serviceClient
+    .from("ai_usage_events")
+    .select("total_tokens")
+    .eq("workspace_id", workspaceId)
+    .eq("feature", feature)
+    .gte("created_at", since);
+  if (error) throw new Error(`Failed to read workspace AI usage: ${error.message}`);
+  return (data ?? []).reduce((sum: number, row: { total_tokens: number }) => sum + (row.total_tokens ?? 0), 0);
+}
+
 export async function getPlatformTokenUsageSince(serviceClient: AnySupabaseClient, since: string): Promise<number> {
   const { data, error } = await serviceClient
     .from("ai_usage_events")

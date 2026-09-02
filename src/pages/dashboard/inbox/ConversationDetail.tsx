@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { AlertTriangle, ArrowLeft, Bot, Briefcase, CheckCircle2, Paperclip, Send, Sparkles, UserCheck, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -108,6 +109,25 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const role = currentMembership?.role;
   const { data: slaSettings } = useWorkspaceSlaSettings(workspaceId);
   const slaState = useMemo(() => computeSlaState(conversation, slaSettings), [conversation, slaSettings]);
+  // Phase 7: an honest "why" for an AI-limit pause - distinct from a normal
+  // handoff or a provider error. Present only while the cap alert is open.
+  const { data: aiLimitPaused } = useQuery({
+    queryKey: ["conversation-ai-limit-alert", conversation.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("inbox_alerts")
+        .select("id")
+        .eq("conversation_id", conversation.id)
+        .eq("alert_type", "ai_usage_limit_reached")
+        .eq("is_resolved", false)
+        .limit(1);
+      return (data ?? []).length > 0;
+    },
+    enabled: !conversation.ai_enabled,
+  });
+  const aiStatusText = aiLimitPaused
+    ? "AI paused - this workspace has reached its monthly Inbox AI usage limit. New customer messages are handed to staff. Use “Return to AI” once the limit is raised or the month resets."
+    : aiHumanStatusText(conversation);
   const canCreateLead = roleHasPermission(role, "lead.create");
   const canViewLead = roleHasPermission(role, "lead.view");
   const canCreateOpportunity = roleHasPermission(role, "opportunity.create");
@@ -547,7 +567,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         <div className="border-b bg-muted/30 p-3">
           <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             {conversation.ai_enabled ? <Bot className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-            {aiHumanStatusText(conversation)}
+            {aiStatusText}
           </p>
 
           {intakeEval && (

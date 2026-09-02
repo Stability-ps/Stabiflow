@@ -33,6 +33,7 @@ const ALERT_META: Record<string, { kind: NeedsAttentionKind; title: string }> = 
   high_priority: { kind: "priority_conversation", title: "Priority conversation waiting" },
   message_failed: { kind: "message_failed", title: "A message failed to send" },
   handoff_sla_overdue: { kind: "handoff_sla_overdue", title: "Customer waiting for a human response" },
+  ai_usage_limit_reached: { kind: "ai_usage_limit_reached", title: "Inbox AI paused - workspace usage limit reached" },
 };
 
 function toSeverity(raw: string | null): NeedsAttentionItem["severity"] {
