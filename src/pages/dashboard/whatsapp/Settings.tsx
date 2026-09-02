@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { workspaceRoleRank } from "@/lib/workspaceRoles";
 import { useWorkspaceSlaSettings, updateWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
+import { useWorkspaceAiSettings, updateWorkspaceAiSettings } from "@/hooks/useWorkspaceAiSettings";
+import { AI_MEDIA_SUPPORTED_FORMATS } from "@/lib/multimodalMedia";
 import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
 import { repairWhatsAppWebhookSubscription } from "@/lib/integrations";
 import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
@@ -64,6 +66,20 @@ export default function WhatsAppSettings() {
       toast.error(e instanceof Error ? e.message : "Unable to save SLA settings");
     } finally {
       setSavingSla(false);
+    }
+  };
+  const { data: aiSettings } = useWorkspaceAiSettings(workspaceId);
+  const [savingAi, setSavingAi] = useState(false);
+  const saveMultimodal = async (enabled: boolean) => {
+    setSavingAi(true);
+    try {
+      await updateWorkspaceAiSettings(workspaceId, { ai_multimodal_enabled: enabled });
+      await queryClient.invalidateQueries({ queryKey: ["workspace-ai-settings", workspaceId] });
+      toast.success(enabled ? "AI attachment reading enabled" : "AI attachment reading disabled");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to save AI settings");
+    } finally {
+      setSavingAi(false);
     }
   };
   const { data: lastEvent } = useLastWhatsAppWebhookEvent(workspaceId);
@@ -185,6 +201,29 @@ export default function WhatsAppSettings() {
               )}
             </span>
           </div>
+          {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">AI document understanding</CardTitle></CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={aiSettings?.ai_multimodal_enabled ?? false}
+              disabled={!canManageWorkspace || savingAi}
+              onChange={(e) => saveMultimodal(e.target.checked)}
+            />
+            <span>Allow AI to read customer attachments</span>
+          </label>
+          <p className="text-sm text-muted-foreground">
+            When enabled, StabiFlow may send supported customer images and PDFs to the configured AI provider to understand the enquiry and collect intake information. Supported attachments are sent securely to that provider for analysis. Leave this off if you do not want customer attachments shared with the AI provider.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Images: {AI_MEDIA_SUPPORTED_FORMATS.images.join(", ")} &nbsp;·&nbsp; Documents: {AI_MEDIA_SUPPORTED_FORMATS.documents.join(", ")}
+          </p>
           {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
         </CardContent>
       </Card>

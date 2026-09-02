@@ -22,6 +22,7 @@ import { useCustomerMatchCandidates, useCustomersSearch } from "@/hooks/useCusto
 import { linkConversationCustomer, unlinkConversationCustomer } from "@/lib/customer";
 import { useWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { computeSlaState } from "@/lib/slaState";
+import { aiMediaBadge } from "@/lib/multimodalMedia";
 import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
 import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
@@ -60,6 +61,19 @@ function MessageBubble({ message }: { message: InboxMessageRow }) {
               )
             ) : (
               <p className="flex items-center gap-1 text-xs opacity-70"><Paperclip className="h-3 w-3" /> Loading attachment...</p>
+            )}
+            {isInbound && aiMediaBadge(message.ai_media_status) && (
+              <span
+                className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  aiMediaBadge(message.ai_media_status)!.tone === "ok"
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : aiMediaBadge(message.ai_media_status)!.tone === "warn"
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {aiMediaBadge(message.ai_media_status)!.label}
+              </span>
             )}
           </div>
         )}

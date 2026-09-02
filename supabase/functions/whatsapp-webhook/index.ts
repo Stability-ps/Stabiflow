@@ -21,7 +21,17 @@ import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
 import { applyStatusUpdate, incomingStatuses } from "../_shared/inbox/whatsappStatus.ts";
 import { normalizePhone, parseInboundMessageEvents, type InboundMessageEvent } from "../_shared/inbox/webhookMessageParser.ts";
 import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
-import { generateAIReply, generateStructuredReply, mergeExtracted, missingFields, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
+import { generateAIReply, generateStructuredReply, mergeExtracted, missingFields, type AiUsage, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
+import {
+  AI_MEDIA_MAX_BYTES,
+  buildMediaInputPart,
+  classifyAiMedia,
+  modelSupportsMultimodal,
+  type AiMediaMessage,
+  type AiMediaStatus,
+  type MediaInputPart,
+} from "../_shared/inbox/multimodalMedia.ts";
+import { estimateCost } from "../_shared/flowAi/usage.ts";
 import { evaluateIntake, mergeExtractedFields, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
 import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
@@ -169,6 +179,70 @@ async function autoLinkCustomerByPhone(sb: AnySupabaseClient, workspaceId: strin
   }
 }
 
+// Phase 6: resolve the ONE current inbound attachment into an OpenAI
+// Responses API media input part, re-validating everything against the
+// authoritative record (never a caller-supplied path). Returns the honest
+// ai_media_status regardless of outcome. Never throws - a media failure
+// degrades to text-only, it must not lose the inbound message.
+async function resolveAiMediaPart(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  model: string,
+  multimodalEnabled: boolean,
+  msg: AiMediaMessage,
+): Promise<{ parts: MediaInputPart[]; status: AiMediaStatus }> {
+  if (!multimodalEnabled || !modelSupportsMultimodal(model)) return { parts: [], status: "not_requested" };
+
+  const decision = classifyAiMedia(msg, workspaceId);
+  if (!decision.eligible) return { parts: [], status: decision.status };
+
+  try {
+    const { data: blob, error } = await sb.storage.from("inbox-media").download(decision.storagePath);
+    if (error || !blob) {
+      console.error("whatsapp-webhook: AI media download failed", error?.message ?? "no blob");
+      return { parts: [], status: "failed" };
+    }
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (bytes.byteLength > AI_MEDIA_MAX_BYTES) return { parts: [], status: "too_large" };
+    const part = buildMediaInputPart(decision.mime, bytes, msg.media_filename ?? null);
+    return { parts: [part], status: "processed" };
+  } catch (err) {
+    console.error("whatsapp-webhook: AI media processing error", err instanceof Error ? err.message : err);
+    return { parts: [], status: "failed" };
+  }
+}
+
+// Phase 6: measure every Inbox AI call in the EXISTING ai_usage_events
+// ledger (feature = whatsapp_inbox_ai). Never throws - usage accounting
+// must not fail the reply. conversation_id stays null: that column FKs
+// ai_conversations (Flow AI), not inbox_conversations.
+async function recordInboxAiUsage(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  model: string,
+  usage: AiUsage,
+  latencyMs: number,
+  status: "success" | "error",
+) {
+  try {
+    await sb.from("ai_usage_events").insert({
+      workspace_id: workspaceId,
+      conversation_id: null,
+      user_id: null,
+      feature: "whatsapp_inbox_ai",
+      provider: "openai",
+      model,
+      input_tokens: Math.max(0, usage.inputTokens || 0),
+      output_tokens: Math.max(0, usage.outputTokens || 0),
+      estimated_cost: estimateCost(model, usage.inputTokens || 0, usage.outputTokens || 0),
+      latency_ms: latencyMs,
+      status,
+    });
+  } catch (err) {
+    console.error("whatsapp-webhook: failed to record Inbox AI usage", err instanceof Error ? err.message : err);
+  }
+}
+
 async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
   const { data: numberRow } = await sb
     .from("workspace_whatsapp_numbers")
@@ -298,6 +372,22 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     dedupeKey: `message.received:${event.messageId}`,
   });
 
+  // Phase 6: a SUPPORTED customer attachment was RECEIVED (not "understood
+  // by AI" - that is ai_media_status). Fires on a supported image/PDF
+  // regardless of whether our own storage upload then succeeded; deduped
+  // per provider message so a webhook retry never re-emits. Downstream
+  // automations can wire "when a document is received -> notify staff".
+  if ((event.kind === "image" || event.kind === "document") && ALLOWED_INBOUND_MEDIA_MIME_TYPES.has(mime || "")) {
+    await emitDomainEvent(sb, {
+      workspaceId: numberRow.workspace_id,
+      eventType: "conversation.document_received",
+      entityType: "inbox_conversation",
+      entityId: conversation.id,
+      payload: { entity_id: conversation.id, conversation_id: conversation.id, message_id: inboundMessage?.id ?? null, mime, filename: event.filename ?? null, stored: !!storagePath },
+      dedupeKey: `conversation.document_received:${event.messageId}`,
+    });
+  }
+
   if (!cred) return; // no connected/working credential - leave for staff, cannot auto-reply
   if (!conversation.ai_enabled || conversation.status === "human_handoff") return; // human control is active - AI stays silent
   if (event.kind === "unsupported") {
@@ -329,6 +419,41 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   const { data: workspaceRow } = await sb.from("workspaces").select("name").eq("id", numberRow.workspace_id).maybeSingle();
   const businessName = workspaceRow?.name || "our team";
 
+  // Phase 6: multimodal. Only the CURRENT inbound attachment is ever
+  // considered - old documents are never re-sent (multimodalMedia.ts
+  // policy). Requires the workspace's explicit opt-in AND a model that can
+  // read image/PDF; anything else stays text-only and honest.
+  const { data: aiSettings } = await sb.from("workspace_settings").select("ai_multimodal_enabled").eq("workspace_id", numberRow.workspace_id).maybeSingle();
+  const multimodalEnabled = aiSettings?.ai_multimodal_enabled === true;
+  const currentMediaMsg: AiMediaMessage | null = (event.kind === "image" || event.kind === "document")
+    ? {
+        id: inboundMessage?.id ?? "",
+        direction: "inbound",
+        sender_type: "customer",
+        message_type: event.kind,
+        media_mime_type: mime,
+        media_size_bytes: size,
+        media_storage_path: storagePath,
+        media_filename: event.filename ?? null,
+      }
+    : null;
+  const mm = currentMediaMsg
+    ? await resolveAiMediaPart(sb, numberRow.workspace_id, openaiModel, multimodalEnabled, currentMediaMsg)
+    : { parts: [] as MediaInputPart[], status: "not_requested" as AiMediaStatus };
+
+  // Persist the honest per-message outcome (only for an actual attachment).
+  // "processed" is provisional here - if the AI call itself then throws it
+  // is downgraded to "failed" below, so the UI never says "AI read" for a
+  // call that never completed.
+  const writeMediaStatus = async (status: AiMediaStatus) => {
+    if (!currentMediaMsg?.id) return;
+    await sb.from("inbox_messages").update({
+      ai_media_status: status,
+      ai_media_processed_at: status === "processed" ? new Date().toISOString() : null,
+    }).eq("id", currentMediaMsg.id);
+  };
+  if (currentMediaMsg && mm.status !== "processed") await writeMediaStatus(mm.status);
+
   // Phase 3: when the workspace has an active intake schema, the AI works
   // to that schema - extracting only its fields, asking the single next
   // missing question, and driving the conversation.intake_completed event.
@@ -343,12 +468,17 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     const preEval = evaluateIntake(schema, currentFields);
 
     let sr;
+    const startedAt = Date.now();
     try {
-      sr = await generateStructuredReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, currentFields, schema, preEval);
+      sr = await generateStructuredReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, currentFields, schema, preEval, { mediaParts: mm.parts });
     } catch (aiError) {
       console.error("whatsapp-webhook: structured AI reply failed", aiError instanceof Error ? aiError.message : aiError);
+      if (mm.status === "processed") await writeMediaStatus("failed"); // an attachment was attached but the call never completed - never claim "AI read"
+      await recordInboxAiUsage(sb, numberRow.workspace_id, openaiModel, { inputTokens: 0, outputTokens: 0 }, Date.now() - startedAt, "error");
       return;
     }
+    if (mm.status === "processed") await writeMediaStatus("processed");
+    await recordInboxAiUsage(sb, numberRow.workspace_id, openaiModel, sr.usage, Date.now() - startedAt, "success");
 
     if (sr.human_handoff_requested) {
       await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversation.id);
@@ -398,12 +528,17 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   }
 
   let ai;
+  const legacyStartedAt = Date.now();
   try {
-    ai = await generateAIReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, (conversation.intake_payload || {}) as Record<string, unknown>);
+    ai = await generateAIReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, (conversation.intake_payload || {}) as Record<string, unknown>, { mediaParts: mm.parts });
   } catch (aiError) {
     console.error("whatsapp-webhook: AI reply generation failed", aiError instanceof Error ? aiError.message : aiError);
+    if (mm.status === "processed") await writeMediaStatus("failed");
+    await recordInboxAiUsage(sb, numberRow.workspace_id, openaiModel, { inputTokens: 0, outputTokens: 0 }, Date.now() - legacyStartedAt, "error");
     return;
   }
+  if (mm.status === "processed") await writeMediaStatus("processed");
+  await recordInboxAiUsage(sb, numberRow.workspace_id, openaiModel, ai.usage, Date.now() - legacyStartedAt, "success");
 
   if (ai.human_handoff_requested) {
     await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversation.id);
