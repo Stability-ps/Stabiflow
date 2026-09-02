@@ -32,6 +32,24 @@ async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: 
   await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: "inbox_conversation", target_id: conversationId, metadata });
 }
 
+// Phase 5: a qualifying human action (staff reply / return-to-AI) clears an
+// open handoff-SLA-overdue alert immediately - the minute-by-minute sweep
+// would also catch it, this just makes the Needs Attention item disappear
+// the moment the human acts. Writes one handoff_sla_resolved activity row
+// only when an alert actually transitioned (never on every call).
+async function resolveSlaAlert(sb: AnySupabaseClient, workspaceId: string, conversationId: string, actorId: string, nowIso: string) {
+  const { data } = await sb.from("inbox_alerts")
+    .update({ is_resolved: true, resolved_at: nowIso, resolved_by: actorId })
+    .eq("conversation_id", conversationId).eq("alert_type", "handoff_sla_overdue").eq("is_resolved", false)
+    .select("id");
+  if (data && data.length > 0) {
+    await sb.from("workspace_activity_log").insert({
+      workspace_id: workspaceId, actor_user_id: actorId, action: "handoff_sla_resolved",
+      target_type: "inbox_conversation", target_id: conversationId, metadata: { by: "staff_action" },
+    });
+  }
+}
+
 type IntakeConversation = {
   id: string;
   workspace_id: string;
@@ -186,6 +204,7 @@ Deno.serve(async (req: Request) => {
     }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to return this conversation to AI" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_returned_to_ai", conversationId, { previous_staff_id: conversation.assigned_staff_id });
+    await resolveSlaAlert(serviceSb, workspaceId, conversationId, actorId, nowIso);
     return json(req, { ok: true });
   }
 
@@ -478,6 +497,7 @@ Deno.serve(async (req: Request) => {
     }).eq("id", conversationId);
 
     await logActivity(serviceSb, workspaceId, actorId, "inbox_staff_reply_sent", conversationId, { delivery_status: deliveryStatus, provider_message_id: providerMessageId });
+    await resolveSlaAlert(serviceSb, workspaceId, conversationId, actorId, nowIso);
     await markHumanTakeover(wasAiEnabled);
 
     return json(req, { ok: true, delivery_status: deliveryStatus, warning });
@@ -556,6 +576,7 @@ Deno.serve(async (req: Request) => {
   }).eq("id", conversationId);
 
   await logActivity(serviceSb, workspaceId, actorId, "inbox_staff_template_sent", conversationId, { template_id: templateId, template_name: template!.name, delivery_status: deliveryStatus, provider_message_id: providerMessageId });
+  await resolveSlaAlert(serviceSb, workspaceId, conversationId, actorId, nowIso);
   await markHumanTakeover(wasAiEnabledForTemplate);
 
   return json(req, { ok: true, delivery_status: deliveryStatus, warning });

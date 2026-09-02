@@ -10,6 +10,7 @@ export type NeedsAttentionKind =
   | "customer_reply"
   | "priority_conversation"
   | "message_failed"
+  | "handoff_sla_overdue"
   | "campaign_failed"
   | "integration_unhealthy"
   | "automation_failed"

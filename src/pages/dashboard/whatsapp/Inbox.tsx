@@ -6,6 +6,7 @@ import { useInboxConversationReads, useInboxConversations, isConversationUnread 
 import { ConversationList, type InboxFilter } from "@/pages/dashboard/inbox/ConversationList";
 import { ConversationDetail } from "@/pages/dashboard/inbox/ConversationDetail";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
+import { useWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 
 // The WhatsApp conversation dashboard - split view (list + detail). The
 // parent WhatsAppLayout owns the permission and "is WhatsApp connected"
@@ -20,6 +21,7 @@ export default function WhatsAppInbox() {
 
   const { data: conversations, isLoading: conversationsLoading } = useInboxConversations(workspaceId);
   const { data: reads } = useInboxConversationReads(workspaceId);
+  const { data: slaSettings } = useWorkspaceSlaSettings(workspaceId);
 
   const [selectedId, setSelectedId] = useState<string | null>(preselectId);
   const [filter, setFilter] = useState<InboxFilter>("all");
@@ -62,6 +64,7 @@ export default function WhatsAppInbox() {
             onFilterChange={setFilter}
             search={search}
             onSearchChange={setSearch}
+            slaSettings={slaSettings}
           />
         </div>
         <div className={`min-w-0 flex-1 ${mobileShowDetail ? "block" : "hidden md:block"}`}>

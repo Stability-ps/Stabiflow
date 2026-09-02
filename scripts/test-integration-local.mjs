@@ -35,6 +35,7 @@ const DEFAULT_FILES = [
   "supabase/tests/conversation-crm-completion.test.ts",
   "supabase/tests/structured-intake.test.ts",
   "supabase/tests/customer-360.test.ts",
+  "supabase/tests/whatsapp-sla-escalation.test.ts",
 ];
 
 function localEnvFromSupabase() {

@@ -1,12 +1,15 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
+import { workspaceRoleRank } from "@/lib/workspaceRoles";
+import { useWorkspaceSlaSettings, updateWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
 import { repairWhatsAppWebhookSubscription } from "@/lib/integrations";
 import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
@@ -43,8 +46,26 @@ export default function WhatsAppSettings() {
   const role = currentMembership?.role;
   const canManage = roleHasPermission(role, "integration.manage");
   const canDisconnect = roleHasPermission(role, "integration.disconnect");
+  const canManageWorkspace = workspaceRoleRank(role) >= workspaceRoleRank("admin");
 
   const queryClient = useQueryClient();
+  const { data: sla } = useWorkspaceSlaSettings(workspaceId);
+  const [slaMinutes, setSlaMinutes] = useState<string>("");
+  const [savingSla, setSavingSla] = useState(false);
+  useEffect(() => { if (sla && slaMinutes === "") setSlaMinutes(String(sla.handoff_sla_minutes)); }, [sla, slaMinutes]);
+
+  const saveSla = async (patch: { handoff_sla_minutes?: number; handoff_sla_enabled?: boolean }) => {
+    setSavingSla(true);
+    try {
+      await updateWorkspaceSlaSettings(workspaceId, patch);
+      await queryClient.invalidateQueries({ queryKey: ["workspace-sla-settings", workspaceId] });
+      toast.success("SLA settings saved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to save SLA settings");
+    } finally {
+      setSavingSla(false);
+    }
+  };
   const { data: lastEvent } = useLastWhatsAppWebhookEvent(workspaceId);
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
   const wabaId = numbers.find((n) => n.waba_id)?.waba_id ?? null;
@@ -124,6 +145,49 @@ export default function WhatsAppSettings() {
           {" "}If it stays unsubscribed after repairing, verify in Meta that the WhatsApp Business Account&apos;s callback URL and verify token are set for this app.
         </p>
       )}
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Human response SLA</CardTitle></CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <p className="text-sm text-muted-foreground">
+            StabiFlow will flag conversations that are still waiting for a human response after this time - they appear in Needs Attention and get an &ldquo;Overdue&rdquo; badge in the Inbox.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={sla?.handoff_sla_enabled ?? true}
+                disabled={!canManageWorkspace || savingSla}
+                onChange={(e) => saveSla({ handoff_sla_enabled: e.target.checked })}
+              />
+              SLA tracking enabled
+            </label>
+            <span className="flex items-center gap-2 text-sm">
+              <Input
+                type="number"
+                min={1}
+                max={1440}
+                value={slaMinutes}
+                disabled={!canManageWorkspace || savingSla || !(sla?.handoff_sla_enabled ?? true)}
+                onChange={(e) => setSlaMinutes(e.target.value)}
+                className="h-8 w-20"
+              />
+              minutes
+              {canManageWorkspace && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={savingSla || slaMinutes === "" || Number(slaMinutes) === (sla?.handoff_sla_minutes ?? 10)}
+                  onClick={() => saveSla({ handoff_sla_minutes: Number(slaMinutes) })}
+                >
+                  Save
+                </Button>
+              )}
+            </span>
+          </div>
+          {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
+        </CardContent>
+      </Card>
 
       <div className="rounded-lg border p-4">
         <WhatsAppManagePanel
