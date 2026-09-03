@@ -18,7 +18,7 @@ const TABS: Array<{ label: string; to: string; external?: boolean }> = [
   { label: "Templates", to: "/app/whatsapp/templates" },
   { label: "Intake", to: "/app/whatsapp/intake" },
   { label: "Automations", to: "/app/automations?trigger=conversation", external: true },
-  { label: "Analytics", to: "/app/analytics?whatsapp", external: true },
+  { label: "Analytics", to: "/app/whatsapp/analytics" },
   { label: "Settings", to: "/app/whatsapp/settings" },
 ];
 

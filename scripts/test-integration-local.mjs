@@ -41,6 +41,7 @@ const DEFAULT_FILES = [
   "supabase/tests/whatsapp-automation-parity.test.ts",
   "supabase/tests/whatsapp-outbound-reliability.test.ts",
   "supabase/tests/whatsapp-voice-notes.test.ts",
+  "supabase/tests/whatsapp-operational-analytics.test.ts",
 ];
 
 function localEnvFromSupabase() {
