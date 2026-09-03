@@ -19,6 +19,7 @@ import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 import { describeTemplateEligibilityError, validateTemplateEligibility } from "../_shared/inbox/templateValidation.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import { classifyOutboundFailure, initialFailurePatch, isAcceptedDelivery, type InitialFailurePatch } from "../_shared/inbox/outboundRetry.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
@@ -26,7 +27,7 @@ import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompl
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag"]);
+const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag", "retry_message"]);
 
 const PRIORITY_LEVELS = new Set(["normal", "high", "urgent"]);
 
@@ -258,6 +259,80 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, tag: rawTag, already_present: error?.code === "23505" });
   }
 
+  // --- Phase 9: manual retry of a failed / dead-lettered outbound -------
+  // Re-runs EVERY outbound safety gate against CURRENT state, sends once
+  // through the same provider seam, and records the outcome on the SAME
+  // logical message row via apply_whatsapp_retry_outcome. Dead-letter is
+  // cleared only because a fresh attempt is actually being made.
+  if (action === "retry_message") {
+    const messageId = typeof body.message_id === "string" ? body.message_id : "";
+    if (!messageId) return json(req, { error: "message_id is required" }, 400);
+    const { data: msg } = await serviceSb.from("inbox_messages")
+      .select("id, workspace_id, conversation_id, direction, message_type, content, delivery_status, provider_message_id, retry_claimed_at, dead_lettered_at, template_id, template_parameters")
+      .eq("id", messageId).eq("workspace_id", workspaceId).eq("conversation_id", conversationId).maybeSingle();
+    if (!msg || msg.direction !== "outbound") return json(req, { error: "Message not found" }, 404);
+    if (isAcceptedDelivery(msg.delivery_status) || msg.provider_message_id) {
+      return json(req, { error: "This message has already been accepted for delivery.", code: "already_accepted" }, 409);
+    }
+    if (msg.retry_claimed_at && new Date(msg.retry_claimed_at).getTime() > Date.now() - 5 * 60_000) {
+      return json(req, { error: "A retry for this message is already in progress.", code: "retry_in_progress" }, 409);
+    }
+
+    await logActivity(serviceSb, workspaceId, actorId, "whatsapp_manual_retry_requested", conversationId, { message_id: messageId });
+    // claim + clear dead-letter so apply_whatsapp_retry_outcome will act
+    await serviceSb.from("inbox_messages").update({ retry_claimed_at: nowIso, dead_lettered_at: null, dead_letter_reason: null }).eq("id", messageId);
+
+    const gate = await assertWorkspaceActive(serviceSb, workspaceId);
+    if (!gate.allowed) {
+      await serviceSb.rpc("apply_whatsapp_retry_outcome", { p_message_id: messageId, p_outcome: "policy_blocked", p_failure_code: "workspace_suspended", p_failure_category: "policy_blocked", p_source: "manual_retry", p_actor: actorId });
+      return json(req, workspaceSuspendedBody(gate.status), 403);
+    }
+    const retryCred = await resolveCredential(serviceSb, conversation.whatsapp_number_id);
+    if (!retryCred) {
+      await serviceSb.rpc("apply_whatsapp_retry_outcome", { p_message_id: messageId, p_outcome: "policy_blocked", p_failure_code: "credential_unavailable", p_failure_category: "policy_blocked", p_source: "manual_retry", p_actor: actorId });
+      return json(req, { error: "WhatsApp is not connected for this workspace", code: "credential_unavailable" }, 409);
+    }
+
+    const isTemplate = msg.message_type === "template";
+    let tplName: string | null = null;
+    let tplLang: string | null = null;
+    if (isTemplate) {
+      const { data: tpl } = await serviceSb.from("whatsapp_message_templates")
+        .select("name, language, provider_status, components").eq("id", msg.template_id).eq("workspace_id", workspaceId).maybeSingle();
+      const elig = validateTemplateEligibility(tpl ? { provider_status: tpl.provider_status, language: tpl.language, components: tpl.components } : null, (msg.template_parameters ?? []).length);
+      if (!elig.ok) {
+        await serviceSb.rpc("apply_whatsapp_retry_outcome", { p_message_id: messageId, p_outcome: "policy_blocked", p_failure_code: `template_${elig.error.code}`, p_failure_category: "policy_blocked", p_source: "manual_retry", p_actor: actorId });
+        return json(req, { error: describeTemplateEligibilityError(elig.error), code: `template_${elig.error.code}` }, 422);
+      }
+      tplName = tpl!.name; tplLang = tpl!.language;
+    } else {
+      const window = await resolveMessagingWindow(serviceSb, conversationId);
+      if (window.state !== "open") {
+        await serviceSb.rpc("apply_whatsapp_retry_outcome", { p_message_id: messageId, p_outcome: "policy_blocked", p_failure_code: "messaging_window_closed", p_failure_category: "policy_blocked", p_source: "manual_retry", p_actor: actorId });
+        return json(req, { error: "The 24-hour messaging window has closed. Send an approved template instead.", code: "messaging_window_closed" }, 409);
+      }
+    }
+
+    const provider = resolveWhatsAppSendMockMode(req) ? MOCK_WHATSAPP_PROVIDER : REAL_WHATSAPP_PROVIDER;
+    let retryWamid: string | null = null;
+    let retryOutcome: "success" | "retryable" | "permanent" | "policy_blocked" = "success";
+    let retryCode: string | null = null;
+    let retryCat: string | null = null;
+    try {
+      retryWamid = isTemplate
+        ? await provider.sendTemplate(retryCred, conversation.wa_id, { name: tplName!, language: tplLang!, bodyParameters: (msg.template_parameters ?? []).map((t: string) => ({ type: "text", text: t })) })
+        : await provider.sendText(retryCred, conversation.wa_id, cleanReply(msg.content ?? ""));
+    } catch (sendError) {
+      const c = classifyOutboundFailure(sendError);
+      retryOutcome = c.failureClass; retryCode = c.code; retryCat = c.category;
+    }
+    const { data: outcome } = await serviceSb.rpc("apply_whatsapp_retry_outcome", {
+      p_message_id: messageId, p_outcome: retryOutcome, p_failure_code: retryCode, p_failure_category: retryCat,
+      p_provider_message_id: retryWamid, p_source: "manual_retry", p_actor: actorId,
+    });
+    return json(req, { ok: true, outcome });
+  }
+
   if (action === "assign") {
     const staffId = body.staff_id;
     if (typeof staffId !== "string" || !staffId) return json(req, { error: "staff_id is required" }, 400);
@@ -410,13 +485,18 @@ Deno.serve(async (req: Request) => {
     let providerMessageId: string | null = null;
     let deliveryStatus = "submitted";
     let warning: string | null = null;
+    let failPatch: InitialFailurePatch | null = null;
     try {
       providerMessageId = await provider.sendText(cred, conversation.wa_id, cleaned);
     } catch (sendError) {
+      failPatch = initialFailurePatch(sendError);
       deliveryStatus = "failed";
       warning = sanitizeIntegrationError(sendError).message;
     }
-    await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, delivery_status: deliveryStatus }).eq("id", pendingRow.id);
+    // Phase 9: a transient failure schedules a retry on this same row; a
+    // permanent / policy failure dead-letters it now. Ask Info retry re-sends
+    // this exact question - it never regenerates or advances intake.
+    await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, ...(failPatch ?? { delivery_status: deliveryStatus }) }).eq("id", pendingRow.id);
     await serviceSb.from("inbox_conversations").update({ last_outbound_at: nowIso }).eq("id", conversationId);
     await logActivity(serviceSb, workspaceId, actorId, "inbox_ask_info_sent", conversationId, { field_key: fieldKey, delivery_status: deliveryStatus });
 
@@ -573,14 +653,19 @@ Deno.serve(async (req: Request) => {
     let providerMessageId: string | null = null;
     let deliveryStatus = "submitted";
     let warning: string | null = null;
+    let failPatch: InitialFailurePatch | null = null;
     try {
       providerMessageId = await provider.sendText(cred, conversation.wa_id, cleaned);
     } catch (sendError) {
+      failPatch = initialFailurePatch(sendError);
       deliveryStatus = "failed";
       warning = sanitizeIntegrationError(sendError).message;
     }
 
-    await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, delivery_status: deliveryStatus }).eq("id", pendingRow.id);
+    // Phase 9: transient failure -> retry scheduled on this row; permanent /
+    // policy failure -> dead-lettered now. The retry re-runs the free-form
+    // window gate, so a retry after the window closes will NOT free-form send.
+    await serviceSb.from("inbox_messages").update({ provider_message_id: providerMessageId, ...(failPatch ?? { delivery_status: deliveryStatus }) }).eq("id", pendingRow.id);
 
     const wasAiEnabled = conversation.ai_enabled;
     const assignedToSelf = conversation.assigned_staff_id ? {} : { assigned_staff_id: actorId, assigned_staff_name: actorName, assigned_at: nowIso, assigned_by: actorId };
@@ -670,9 +755,11 @@ Deno.serve(async (req: Request) => {
   let providerMessageId: string | null = null;
   let deliveryStatus = "submitted";
   let warning: string | null = null;
+  let failPatch: InitialFailurePatch | null = null;
   try {
     providerMessageId = await provider.sendTemplate(cred, conversation.wa_id, { name: template!.name, language: template!.language, bodyParameters });
   } catch (sendError) {
+    failPatch = initialFailurePatch(sendError);
     deliveryStatus = "failed";
     warning = sanitizeIntegrationError(sendError).message;
   }
@@ -692,6 +779,12 @@ Deno.serve(async (req: Request) => {
     staff_sender_name: automationCtx ? null : actorName,
     automation_run_id: automationCtx?.runId ?? null,
     automation_action_index: automationCtx?.actionIndex ?? null,
+    // Phase 9: keep the authoritative template id + params so a retry
+    // re-fetches the template, re-checks APPROVED, and re-sends the SAME
+    // parameters - never a stale payload, never a silent template switch.
+    template_id: templateId,
+    template_parameters: parameters,
+    ...(failPatch ?? {}),
   });
   if (msgInsertError) {
     // A 23505 here means a concurrent request for the SAME (run, action)

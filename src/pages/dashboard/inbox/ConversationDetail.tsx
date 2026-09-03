@@ -24,7 +24,8 @@ import { linkConversationCustomer, unlinkConversationCustomer } from "@/lib/cust
 import { useWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { computeSlaState } from "@/lib/slaState";
 import { aiMediaBadge } from "@/lib/multimodalMedia";
-import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, returnConversationToAI } from "@/lib/inbox";
+import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, retryOutboundMessage, returnConversationToAI } from "@/lib/inbox";
+import { canRetryOutbound, outboundDeliveryLabel, outboundDeliveryState } from "@/lib/outboundRetry";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
 import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
 import { roleHasPermission } from "@/lib/permissions";
@@ -38,9 +39,21 @@ import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
 import { openOpportunityActionLabel } from "@/lib/terminology";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
 
-function MessageBubble({ message }: { message: InboxMessageRow }) {
+function MessageBubble({ message, canManage, onRetry, retrying }: {
+  message: InboxMessageRow;
+  canManage: boolean;
+  onRetry: (messageId: string) => void;
+  retrying: boolean;
+}) {
   const isInbound = message.direction === "inbound";
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  // Phase 9: while a retry is pending the row still carries
+  // delivery_status = "failed"; outboundDeliveryState folds next_retry_at /
+  // dead_lettered_at into an honest label. Fall back to the legacy
+  // presentation for blocked_* / other statuses it doesn't own.
+  const retryState = outboundDeliveryState(message);
+  const showRetryLabel = !isInbound && retryState !== "not_applicable";
+  const canRetry = canRetryOutbound(message, canManage);
 
   useEffect(() => {
     if (message.media_storage_path) getInboxMediaUrl(message.media_storage_path).then(setMediaUrl);
@@ -79,8 +92,27 @@ function MessageBubble({ message }: { message: InboxMessageRow }) {
           </div>
         )}
         <p className="whitespace-pre-wrap">{message.content}</p>
-        {!isInbound && message.delivery_status && (
-          <p className={`mt-1 text-[11px] ${deliveryTone(message.delivery_status) === "error" ? "text-red-200" : "opacity-70"}`}>{deliveryLabel(message.delivery_status)}</p>
+        {showRetryLabel ? (
+          <div className="mt-1 flex items-center gap-2">
+            <span className={`text-[11px] ${retryState === "delivery_failed" ? "text-red-200" : retryState === "retry_scheduled" ? "text-amber-200" : "opacity-70"}`}>
+              {outboundDeliveryLabel(message)}
+              {message.dead_lettered_at && message.dead_letter_reason ? ` · ${message.dead_letter_reason.replace(/_/g, " ")}` : ""}
+            </span>
+            {canRetry && (
+              <button
+                type="button"
+                onClick={() => onRetry(message.id)}
+                disabled={retrying}
+                className="text-[11px] font-medium underline underline-offset-2 disabled:opacity-50"
+              >
+                {retrying ? "Retrying..." : "Retry"}
+              </button>
+            )}
+          </div>
+        ) : (
+          !isInbound && message.delivery_status && (
+            <p className={`mt-1 text-[11px] ${deliveryTone(message.delivery_status) === "error" ? "text-red-200" : "opacity-70"}`}>{deliveryLabel(message.delivery_status)}</p>
+          )
         )}
       </div>
     </div>
@@ -192,6 +224,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateParams, setTemplateParams] = useState<string[]>([]);
   const [sendingTemplate, setSendingTemplate] = useState(false);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   const usableTemplates = approvedTemplates(templates);
   const selectedTemplate = usableTemplates.find((t) => t.id === selectedTemplateId) || null;
 
@@ -309,6 +342,28 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       toast.error(error instanceof Error ? error.message : "Unable to send this template");
     } finally {
       setSendingTemplate(false);
+    }
+  };
+
+  // Phase 9: manual retry of a dead-lettered outbound message. The edge
+  // function re-runs every send safety gate against current state and
+  // refuses if the message was actually delivered - this only reports the
+  // outcome and refreshes the thread.
+  const handleRetryMessage = async (messageId: string) => {
+    setRetryingMessageId(messageId);
+    try {
+      const result = await retryOutboundMessage(workspaceId, conversation.id, messageId);
+      invalidate();
+      const outcome = result.outcome?.result;
+      if (outcome === "succeeded") toast.success("Message re-sent");
+      else if (outcome === "retry_scheduled") toast.success("Retry scheduled");
+      else if (outcome === "dead_lettered") toast.error("Still could not be delivered - left for review");
+      else if (outcome === "already_accepted") toast.info("This message was already delivered");
+      else toast.success("Retry requested");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to retry this message");
+    } finally {
+      setRetryingMessageId(null);
     }
   };
 
@@ -659,7 +714,15 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         ) : !messages?.length ? (
           <p className="text-sm text-muted-foreground">No messages yet.</p>
         ) : (
-          messages.map((m) => <MessageBubble key={m.id} message={m} />)
+          messages.map((m) => (
+            <MessageBubble
+              key={m.id}
+              message={m}
+              canManage={canManage}
+              onRetry={handleRetryMessage}
+              retrying={retryingMessageId === m.id}
+            />
+          ))
         )}
         <div ref={messagesEndRef} />
       </div>

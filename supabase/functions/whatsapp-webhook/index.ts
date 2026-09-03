@@ -47,6 +47,7 @@ import { REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
 import { assertWorkspaceActive } from "../_shared/workspaceStatus.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
+import { initialFailurePatch } from "../_shared/inbox/outboundRetry.ts";
 import { recordConversationTouchpoint } from "../_shared/attribution.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
@@ -138,12 +139,17 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
   const provider = REAL_WHATSAPP_PROVIDER;
   let providerMessageId: string | null = null;
   let deliveryStatus = "submitted";
+  let failPatch: ReturnType<typeof initialFailurePatch> | null = null;
   try {
     providerMessageId = await provider.sendText(cred, waId, cleaned);
   } catch (error) {
     console.error("whatsapp-webhook: send failed", sanitizeIntegrationError(error).message);
+    failPatch = initialFailurePatch(error);
     deliveryStatus = "failed";
   }
+  // Phase 9: an Inbox AI / system reply that fails transiently is retried
+  // on this same row - the retry re-sends this exact text, never a fresh
+  // OpenAI call. A permanent / policy failure dead-letters it for staff.
   await sb.from("inbox_messages").insert({
     workspace_id: workspaceId,
     conversation_id: conversationId,
@@ -153,6 +159,7 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
     message_type: "text",
     content: cleaned,
     delivery_status: deliveryStatus,
+    ...(failPatch ?? {}),
   });
   await sb.from("inbox_conversations").update({ last_outbound_at: new Date().toISOString() }).eq("id", conversationId);
 }

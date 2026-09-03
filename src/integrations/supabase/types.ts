@@ -2491,9 +2491,14 @@ export type Database = {
           content: string | null
           conversation_id: string
           created_at: string
+          dead_letter_reason: string | null
+          dead_lettered_at: string | null
           delivery_status: string | null
           direction: string
           id: string
+          last_failure_category: string | null
+          last_failure_code: string | null
+          last_retry_at: string | null
           media_filename: string | null
           media_id: string | null
           media_mime_type: string | null
@@ -2501,10 +2506,15 @@ export type Database = {
           media_size_bytes: number | null
           media_storage_path: string | null
           message_type: string
+          next_retry_at: string | null
           provider_message_id: string | null
+          retry_claimed_at: string | null
+          retry_count: number
           sender_type: string
           staff_sender_id: string | null
           staff_sender_name: string | null
+          template_id: string | null
+          template_parameters: string[] | null
           workspace_id: string
         }
         Insert: {
@@ -2515,9 +2525,14 @@ export type Database = {
           content?: string | null
           conversation_id: string
           created_at?: string
+          dead_letter_reason?: string | null
+          dead_lettered_at?: string | null
           delivery_status?: string | null
           direction: string
           id?: string
+          last_failure_category?: string | null
+          last_failure_code?: string | null
+          last_retry_at?: string | null
           media_filename?: string | null
           media_id?: string | null
           media_mime_type?: string | null
@@ -2525,10 +2540,15 @@ export type Database = {
           media_size_bytes?: number | null
           media_storage_path?: string | null
           message_type?: string
+          next_retry_at?: string | null
           provider_message_id?: string | null
+          retry_claimed_at?: string | null
+          retry_count?: number
           sender_type: string
           staff_sender_id?: string | null
           staff_sender_name?: string | null
+          template_id?: string | null
+          template_parameters?: string[] | null
           workspace_id: string
         }
         Update: {
@@ -2539,9 +2559,14 @@ export type Database = {
           content?: string | null
           conversation_id?: string
           created_at?: string
+          dead_letter_reason?: string | null
+          dead_lettered_at?: string | null
           delivery_status?: string | null
           direction?: string
           id?: string
+          last_failure_category?: string | null
+          last_failure_code?: string | null
+          last_retry_at?: string | null
           media_filename?: string | null
           media_id?: string | null
           media_mime_type?: string | null
@@ -2549,20 +2574,18 @@ export type Database = {
           media_size_bytes?: number | null
           media_storage_path?: string | null
           message_type?: string
+          next_retry_at?: string | null
           provider_message_id?: string | null
+          retry_claimed_at?: string | null
+          retry_count?: number
           sender_type?: string
           staff_sender_id?: string | null
           staff_sender_name?: string | null
+          template_id?: string | null
+          template_parameters?: string[] | null
           workspace_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "inbox_messages_automation_run_id_fkey"
-            columns: ["automation_run_id"]
-            isOneToOne: false
-            referencedRelation: "automation_runs"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "inbox_messages_conversation_id_fkey"
             columns: ["conversation_id"]
@@ -2575,6 +2598,13 @@ export type Database = {
             columns: ["staff_sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_message_templates"
             referencedColumns: ["id"]
           },
           {
@@ -4299,6 +4329,18 @@ export type Database = {
           won_at: string
         }[]
       }
+      apply_whatsapp_retry_outcome: {
+        Args: {
+          p_actor?: string
+          p_failure_category?: string
+          p_failure_code?: string
+          p_message_id: string
+          p_outcome: string
+          p_provider_message_id?: string
+          p_source?: string
+        }
+        Returns: Json
+      }
       backfill_lead_pipeline_placement: {
         Args: { p_workspace_id: string }
         Returns: number
@@ -4316,6 +4358,22 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: boolean
+      }
+      claim_whatsapp_retry_batch: {
+        Args: { p_limit?: number }
+        Returns: {
+          content: string
+          conversation_id: string
+          delivery_status: string
+          id: string
+          message_type: string
+          provider_message_id: string
+          retry_count: number
+          sender_type: string
+          template_id: string
+          template_parameters: string[]
+          workspace_id: string
+        }[]
       }
       clear_workspace_integration_secret: {
         Args: { p_integration_id: string }
