@@ -20,6 +20,14 @@ import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/worksp
 import { describeTemplateEligibilityError, validateTemplateEligibility } from "../_shared/inbox/templateValidation.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { classifyOutboundFailure, initialFailurePatch, isAcceptedDelivery, type InitialFailurePatch } from "../_shared/inbox/outboundRetry.ts";
+import {
+  attemptTranscription,
+  INBOX_VOICE_FEATURE,
+  persistTranscriptionStatus,
+  type VoiceMessageFacts,
+} from "../_shared/inbox/voiceTranscription.ts";
+import { decideInboxAiBudget, INBOX_AI_CAP_KEY, INBOX_AI_FEATURE, resolveInboxAiCap, utcDayStartIso, utcMonthStartIso } from "../_shared/inbox/inboxAiBudget.ts";
+import { getPlatformTokenUsageSince, getWorkspaceFeaturesTokenUsageSince } from "../_shared/flowAi/usage.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
@@ -27,7 +35,7 @@ import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompl
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag", "retry_message"]);
+const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag", "retry_message", "retry_transcription"]);
 
 const PRIORITY_LEVELS = new Set(["normal", "high", "urgent"]);
 
@@ -331,6 +339,67 @@ Deno.serve(async (req: Request) => {
       p_provider_message_id: retryWamid, p_source: "manual_retry", p_actor: actorId,
     });
     return json(req, { ok: true, outcome });
+  }
+
+  // --- Phase 10: manual retry of a customer voice-note transcription ----
+  // For a stored inbound voice/audio message whose transcription failed or
+  // was skipped for cost. Re-uses the SAME message row and the SAME stored
+  // audio - never a new message, never a second logical send. Respects the
+  // workspace opt-in intent implicitly (a transcript already being asked
+  // for), the workspace status, and the shared Inbox AI monthly budget.
+  if (action === "retry_transcription") {
+    const messageId = typeof body.message_id === "string" ? body.message_id : "";
+    if (!messageId) return json(req, { error: "message_id is required" }, 400);
+    const { data: msg } = await serviceSb.from("inbox_messages")
+      .select("id, direction, message_type, media_mime_type, media_size_bytes, media_storage_path, transcription_status")
+      .eq("id", messageId).eq("workspace_id", workspaceId).eq("conversation_id", conversationId).maybeSingle();
+    if (!msg || msg.direction !== "inbound" || (msg.message_type !== "voice" && msg.message_type !== "audio") || !msg.media_storage_path) {
+      return json(req, { error: "Voice note not found" }, 404);
+    }
+    if (msg.transcription_status === "processed") {
+      return json(req, { error: "This voice note is already transcribed.", code: "already_transcribed" }, 409);
+    }
+    if (msg.transcription_status === "pending") {
+      return json(req, { error: "A transcription for this voice note is already in progress.", code: "transcription_in_progress" }, 409);
+    }
+
+    const transcribeGate = await assertWorkspaceActive(serviceSb, workspaceId);
+    if (!transcribeGate.allowed) return json(req, workspaceSuspendedBody(transcribeGate.status), 403);
+
+    const transcribeKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+    const transcribeModel = Deno.env.get("OPENAI_TRANSCRIBE_MODEL")?.trim() || "gpt-4o-mini-transcribe";
+    if (!transcribeKey) return json(req, { error: "Voice transcription is not configured for this deployment.", code: "transcription_unavailable" }, 503);
+
+    // Shared Inbox AI monthly budget (Phase 7 + 10): transcription never
+    // gets a second, uncapped allowance.
+    const { data: billingRow } = await serviceSb.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
+    const cap = resolveInboxAiCap((billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY], Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"));
+    const usedTokens = await getWorkspaceFeaturesTokenUsageSince(serviceSb, workspaceId, [INBOX_AI_FEATURE, INBOX_VOICE_FEATURE], utcMonthStartIso(new Date()));
+    const ceilRaw = Number(Deno.env.get("FLOW_AI_PLATFORM_DAILY_TOKEN_CEILING")?.trim());
+    const ceil = Number.isFinite(ceilRaw) && ceilRaw > 0 ? ceilRaw : null;
+    const platUsed = ceil !== null ? await getPlatformTokenUsageSince(serviceSb, utcDayStartIso(new Date())) : null;
+    const budget = decideInboxAiBudget({ workspaceUsed: usedTokens, workspaceCap: cap, platformUsed: platUsed, platformCeiling: ceil });
+    if (!budget.allowed) {
+      await persistTranscriptionStatus(serviceSb, messageId, "skipped_quota", null);
+      return json(req, { error: "This workspace has reached its monthly Inbox AI usage limit.", code: "quota_exhausted" }, 409);
+    }
+
+    await serviceSb.from("inbox_messages").update({ transcription_status: "pending" }).eq("id", messageId);
+    const { data: blob, error: dlError } = await serviceSb.storage.from("inbox-media").download(msg.media_storage_path);
+    if (dlError || !blob) {
+      await persistTranscriptionStatus(serviceSb, messageId, "failed", null);
+      return json(req, { error: "Could not read the stored audio for this voice note.", code: "audio_unavailable" }, 502);
+    }
+    const facts: VoiceMessageFacts = {
+      direction: "inbound", sender_type: "customer", message_type: msg.message_type,
+      media_mime_type: msg.media_mime_type, media_size_bytes: msg.media_size_bytes, media_storage_path: msg.media_storage_path,
+    };
+    const outcome = await attemptTranscription(serviceSb, {
+      messageId, workspaceId, facts, audioBytes: new Uint8Array(await blob.arrayBuffer()),
+      cred: { apiKey: transcribeKey, model: transcribeModel }, source: "manual_retry",
+    });
+    await logActivity(serviceSb, workspaceId, actorId, "whatsapp_transcription_retry_requested", conversationId, { message_id: messageId, status: outcome.status });
+    return json(req, { ok: true, status: outcome.status });
   }
 
   if (action === "assign") {

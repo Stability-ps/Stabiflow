@@ -2515,6 +2515,9 @@ export type Database = {
           staff_sender_name: string | null
           template_id: string | null
           template_parameters: string[] | null
+          transcribed_at: string | null
+          transcript: string | null
+          transcription_status: string | null
           workspace_id: string
         }
         Insert: {
@@ -2549,6 +2552,9 @@ export type Database = {
           staff_sender_name?: string | null
           template_id?: string | null
           template_parameters?: string[] | null
+          transcribed_at?: string | null
+          transcript?: string | null
+          transcription_status?: string | null
           workspace_id: string
         }
         Update: {
@@ -2583,6 +2589,9 @@ export type Database = {
           staff_sender_name?: string | null
           template_id?: string | null
           template_parameters?: string[] | null
+          transcribed_at?: string | null
+          transcript?: string | null
+          transcription_status?: string | null
           workspace_id?: string
         }
         Relationships: [
@@ -4019,6 +4028,7 @@ export type Database = {
       workspace_settings: {
         Row: {
           ai_multimodal_enabled: boolean
+          ai_voice_transcription_enabled: boolean
           business_description: string | null
           contact_email: string | null
           contact_phone: string | null
@@ -4038,6 +4048,7 @@ export type Database = {
         }
         Insert: {
           ai_multimodal_enabled?: boolean
+          ai_voice_transcription_enabled?: boolean
           business_description?: string | null
           contact_email?: string | null
           contact_phone?: string | null
@@ -4057,6 +4068,7 @@ export type Database = {
         }
         Update: {
           ai_multimodal_enabled?: boolean
+          ai_voice_transcription_enabled?: boolean
           business_description?: string | null
           contact_email?: string | null
           contact_phone?: string | null

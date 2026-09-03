@@ -1,8 +1,9 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { buildAIInputText, buildAIInstructions, generateStructuredReply, mergeExtracted, missingFields } from "./aiReplyEngine.ts";
 import type { IntakeSchemaDef } from "./intakeSchema.ts";
-import { evaluateIntake } from "./intakeSchema.ts";
+import { evaluateIntake, mergeExtractedFields } from "./intakeSchema.ts";
 import { buildMediaInputPart } from "./multimodalMedia.ts";
+import { wrapTranscriptForAi } from "./voiceTranscription.ts";
 
 Deno.test("buildAIInstructions names the business and never claims a fixed human identity", () => {
   const instructions = buildAIInstructions("Acme Co");
@@ -70,6 +71,49 @@ Deno.test("generateStructuredReply: with no media the content is text-only (beha
   assertEquals(body.input[0].content.length, 1);
   assertEquals(body.input[0].content[0].type, "input_text");
   assertEquals(r.usage, { inputTokens: 11, outputTokens: 7 });
+});
+
+Deno.test("Phase 10: a transcribed voice note feeds structured-intake extraction as the turn text (trust-wrapped)", async () => {
+  const captured: { body: unknown } = { body: null };
+  const evalr = evaluateIntake(SCHEMA, {});
+  const turnText = wrapTranscriptForAi("The invoice total is 12500 and our registration is 2019/123456/07");
+  const r = await generateStructuredReply(
+    { apiKey: "k", model: "gpt-4o-mini" },
+    "Acme",
+    [],
+    turnText,
+    {},
+    SCHEMA,
+    evalr,
+    { fetchImpl: stubFetch(captured, { reply: "Thanks", human_handoff_requested: false, fields: { invoice_total: 12500, company_registration: "2019/123456/07" } }) },
+  );
+  const body = captured.body as { input: Array<{ content: Array<{ type: string; text?: string }> }> };
+  // the transcript reaches the model as the untrusted-wrapped user text
+  assertEquals(body.input[0].content[0].type, "input_text");
+  assertEquals(String(body.input[0].content[0].text).includes("untrusted customer message content"), true);
+  assertEquals(String(body.input[0].content[0].text).includes("The invoice total is 12500"), true);
+  // and its returned fields merge into intake normally
+  const merged = mergeExtractedFields(SCHEMA, {}, r.fields);
+  assertEquals(merged.fields.invoice_total, 12500);
+  assertEquals(merged.updated_keys.sort(), ["company_registration", "invoice_total"]);
+});
+
+Deno.test("Phase 10: a garbled/uncertain transcript that yields no fields fabricates no intake values", async () => {
+  const captured: { body: unknown } = { body: null };
+  const evalr = evaluateIntake(SCHEMA, {});
+  const r = await generateStructuredReply(
+    { apiKey: "k", model: "gpt-4o-mini" },
+    "Acme",
+    [],
+    wrapTranscriptForAi("uhh ... [inaudible] ... sorry the line is bad"),
+    { invoice_total: 999 },
+    SCHEMA,
+    evalr,
+    { fetchImpl: stubFetch(captured, { reply: "Could you repeat that?", human_handoff_requested: false, fields: { invoice_total: null, company_registration: null } }) },
+  );
+  const merged = mergeExtractedFields(SCHEMA, { invoice_total: 999 }, r.fields);
+  assertEquals(merged.fields.invoice_total, 999); // unchanged - nulls never overwrite
+  assertEquals(merged.updated_keys, []);
 });
 
 Deno.test("generateStructuredReply: a malformed model response is a thrown error, not a fabricated reply", async () => {

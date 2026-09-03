@@ -72,6 +72,32 @@ Deno.test("extracts click-to-WhatsApp ad referral metadata when Meta supplies it
   assertEquals(events[0].referral, { sourceType: "ad", sourceId: "1234567890", headline: "Spring sale", ctwaClid: "clid-abc" });
 });
 
+Deno.test("Phase 10: a WhatsApp push-to-talk voice note parses as kind 'voice' with its audio metadata", () => {
+  const events = parseInboundMessageEvents(payload({
+    metadata: { phone_number_id: "phone-1" },
+    messages: [{ from: "27820000001", id: "wamid.v1", type: "audio", audio: { id: "media-v1", mime_type: "audio/ogg; codecs=opus", sha256: "vv", voice: true } }],
+  }));
+  assertEquals(events[0].kind, "voice");
+  assertEquals(events[0].mediaId, "media-v1");
+  assertEquals(events[0].mime, "audio/ogg; codecs=opus");
+  assertEquals(events[0].sha256, "vv");
+  assertEquals(events[0].text, "");
+  assertEquals(events[0].filename, null);
+});
+
+Deno.test("Phase 10: a regular inbound audio file (voice flag absent/false) parses as kind 'audio', not 'voice'", () => {
+  const off = parseInboundMessageEvents(payload({
+    metadata: { phone_number_id: "phone-1" },
+    messages: [{ from: "27820000001", id: "wamid.a1", type: "audio", audio: { id: "media-a1", mime_type: "audio/mpeg", voice: false } }],
+  }));
+  assertEquals(off[0].kind, "audio");
+  const absent = parseInboundMessageEvents(payload({
+    metadata: { phone_number_id: "phone-1" },
+    messages: [{ from: "27820000001", id: "wamid.a2", type: "audio", audio: { id: "media-a2", mime_type: "audio/mp4" } }],
+  }));
+  assertEquals(absent[0].kind, "audio");
+});
+
 Deno.test("REGRESSION: a change with no phone_number_id in metadata contributes zero events - never routed by guesswork", () => {
   const events = parseInboundMessageEvents({
     entry: [{ changes: [{ value: { messages: [{ from: "1", id: "wamid.6", type: "text", text: { body: "hi" } }] } }] }],

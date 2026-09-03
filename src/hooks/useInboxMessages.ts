@@ -20,12 +20,14 @@ export type InboxMessageRow = {
   dead_lettered_at: string | null;
   dead_letter_reason: string | null;
   retry_count: number | null;
+  transcript: string | null;
+  transcription_status: string | null;
   staff_sender_name: string | null;
   created_at: string;
 };
 
 const MESSAGE_COLUMNS =
-  "id, conversation_id, provider_message_id, direction, sender_type, message_type, content, delivery_status, media_mime_type, media_filename, media_storage_path, ai_media_status, ai_media_processed_at, next_retry_at, dead_lettered_at, dead_letter_reason, retry_count, staff_sender_name, created_at";
+  "id, conversation_id, provider_message_id, direction, sender_type, message_type, content, delivery_status, media_mime_type, media_filename, media_storage_path, ai_media_status, ai_media_processed_at, next_retry_at, dead_lettered_at, dead_letter_reason, retry_count, transcript, transcription_status, staff_sender_name, created_at";
 
 export function useInboxMessages(conversationId: string | null) {
   const queryClient = useQueryClient();
