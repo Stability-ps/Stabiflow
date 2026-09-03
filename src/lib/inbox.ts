@@ -21,7 +21,7 @@ async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T
   return data as T;
 }
 
-export type InboxAction = "assign" | "return_to_ai" | "resolve" | "reopen" | "reply" | "reply_template" | "mark_read" | "add_note";
+export type InboxAction = "assign" | "return_to_ai" | "resolve" | "reopen" | "reply" | "reply_template" | "mark_read" | "add_note" | "retry_message";
 
 export function runInboxAction(workspaceId: string, conversationId: string, action: InboxAction, params: Record<string, unknown> = {}) {
   return invoke<{ ok: true; delivery_status?: string; warning?: string | null }>("inbox-actions", {
@@ -62,4 +62,12 @@ export function replyToConversation(workspaceId: string, conversationId: string,
 
 export function replyWithTemplate(workspaceId: string, conversationId: string, templateId: string, parameters: string[]) {
   return runInboxAction(workspaceId, conversationId, "reply_template", { template_id: templateId, parameters });
+}
+
+/** Phase 9: manually retry a dead-lettered outbound message. Re-runs every
+ * send safety gate against current state; never sends if delivered/read. */
+export function retryOutboundMessage(workspaceId: string, conversationId: string, messageId: string) {
+  return invoke<{ ok: true; outcome?: { result?: string } }>("inbox-actions", {
+    workspace_id: workspaceId, conversation_id: conversationId, action: "retry_message", message_id: messageId,
+  });
 }

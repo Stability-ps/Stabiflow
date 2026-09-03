@@ -72,7 +72,7 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
         canInbox
           ? supabase
               .from("inbox_alerts")
-              .select("id, alert_type, severity, title, conversation_id, created_at")
+              .select("id, alert_type, severity, title, conversation_id, message_id, created_at")
               .eq("workspace_id", wid).eq("is_resolved", false)
               .order("created_at", { ascending: false }).limit(25)
           : Promise.resolve({ data: [], error: null }),
@@ -130,8 +130,28 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
 
       // --- inbox alerts, filtered against current conversation state ------
       if ("data" in alerts && alerts.data.length > 0) {
-        const rows = alerts.data as Array<{ id: string; alert_type: string; severity: string | null; title: string | null; conversation_id: string; created_at: string }>;
+        const rows = alerts.data as Array<{ id: string; alert_type: string; severity: string | null; title: string | null; conversation_id: string; message_id: string | null; created_at: string }>;
         const convIds = [...new Set(rows.map((r) => r.conversation_id))];
+
+        // Phase 9: a message_failed alert only warrants staff attention once
+        // StabiFlow has actually stopped trying - i.e. the message is
+        // dead-lettered. A transient failure with a retry still scheduled is
+        // self-healing and must not surface here. Re-check live message state.
+        const failedMsgIds = [...new Set(rows.filter((r) => r.alert_type === "message_failed" && r.message_id).map((r) => r.message_id as string))];
+        type MsgS = { dead_lettered_at: string | null; dead_letter_reason: string | null; retry_count: number | null };
+        let msgState = new Map<string, MsgS>();
+        if (failedMsgIds.length > 0) {
+          try {
+            const { data: msgs, error } = await supabase
+              .from("inbox_messages")
+              .select("id, dead_lettered_at, dead_letter_reason, retry_count")
+              .eq("workspace_id", wid).in("id", failedMsgIds);
+            if (error) throw error;
+            msgState = new Map(((msgs || []) as Array<MsgS & { id: string }>).map((m) => [m.id, m]));
+          } catch {
+            partialFailure = true;
+          }
+        }
         type ConvS = { status: string; priority_level: string; ai_enabled: boolean; inbox_status: string; human_handoff_requested_at: string | null; last_staff_reply_at: string | null; assigned_staff_name: string | null };
         let convState = new Map<string, ConvS>();
         try {
@@ -154,6 +174,20 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
           // high/urgent needs no priority attention.
           if (meta.kind === "human_takeover" && cs && (cs.status !== "human_handoff" || cs.ai_enabled)) continue;
           if (meta.kind === "priority_conversation" && cs && cs.priority_level !== "high" && cs.priority_level !== "urgent") continue;
+          let failedMessageDescription: string | null = null;
+          if (meta.kind === "message_failed" && a.message_id) {
+            const ms = msgState.get(a.message_id);
+            // Known message, still retrying (or already recovered) - not an
+            // operator problem yet. Unknown message: keep the alert rather
+            // than hide a real failure behind a missing lookup.
+            if (ms && !ms.dead_lettered_at) continue;
+            if (ms) {
+              const attempts = (ms.retry_count ?? 0) + 1;
+              failedMessageDescription =
+                `WhatsApp message could not be delivered after ${attempts} attempt${attempts === 1 ? "" : "s"}` +
+                (ms.dead_letter_reason ? ` (${ms.dead_letter_reason.replace(/_/g, " ")})` : "") + ".";
+            }
+          }
           let slaDescription: string | null = null;
           if (meta.kind === "handoff_sla_overdue") {
             if (!cs) continue;
@@ -166,7 +200,7 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
             kind: meta.kind,
             severity: toSeverity(a.severity),
             title: meta.title,
-            description: slaDescription || a.title || "A conversation needs your attention.",
+            description: slaDescription || failedMessageDescription || a.title || "A conversation needs your attention.",
             occurredAt: a.created_at,
             targetType: "conversation",
             targetId: a.conversation_id,

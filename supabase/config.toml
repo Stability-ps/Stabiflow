@@ -425,6 +425,12 @@ verify_jwt = false
 [functions.whatsapp-sla-tick]
 verify_jwt = false
 
+# Cron-triggered only (pg_cron -> pg_net, see
+# 20260927060000_whatsapp_outbound_reliability.sql) - authorises itself via
+# the x-cron-secret header (WHATSAPP_RETRY_CRON_SECRET), never a Supabase JWT.
+[functions.whatsapp-outbound-retry-tick]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
