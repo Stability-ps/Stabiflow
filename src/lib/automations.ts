@@ -20,6 +20,7 @@ export const EVENT_TYPES = [
   "conversation.started", "message.received", "conversation.human_takeover",
   "conversation.intake_completed", "conversation.handoff_sla_overdue",
   "conversation.document_received", "conversation.ai_limit_reached",
+  "conversation.idle_timeout", "conversation.priority_changed",
   "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout",
   "opportunity.created", "opportunity.stage_changed", "opportunity.won", "opportunity.lost",
   "customer.created", "revenue.recorded",
@@ -34,6 +35,8 @@ export const ACTION_TYPES = [
   "create_lead", "assign_lead", "update_lead_stage",
   "create_opportunity", "assign_opportunity",
   "create_internal_note", "create_notification", "request_flow_ai_analysis",
+  "set_conversation_priority", "set_conversation_handoff",
+  "send_whatsapp_template", "request_document", "add_tag",
 ] as const;
 export type AutomationActionType = (typeof ACTION_TYPES)[number];
 
@@ -48,6 +51,8 @@ export const EVENT_TYPE_LABELS: Record<AutomationEventType, string> = {
   "conversation.handoff_sla_overdue": "A human handoff is overdue (SLA breached)",
   "conversation.document_received": "A customer sends a document or image",
   "conversation.ai_limit_reached": "Inbox AI is paused (workspace usage limit reached)",
+  "conversation.idle_timeout": "A conversation has gone quiet for a while",
+  "conversation.priority_changed": "A conversation's priority changes",
   "lead.created": "A lead is created",
   "lead.qualified": "A lead is marked qualified",
   "lead.stage_changed": "A lead moves pipeline stage",
@@ -76,6 +81,11 @@ export const ACTION_TYPE_LABELS: Record<AutomationActionType, string> = {
   create_internal_note: "Add an internal note",
   create_notification: "Send an in-app notification",
   request_flow_ai_analysis: "Ask Flow AI to analyze this",
+  set_conversation_priority: "Set the conversation priority",
+  set_conversation_handoff: "Hand the conversation to a human",
+  send_whatsapp_template: "Send a WhatsApp template",
+  request_document: "Ask the customer for a document",
+  add_tag: "Add a tag to the conversation",
 };
 
 export type AutomationConditionInput = { field: string; operator: ConditionOperator; value: unknown };

@@ -30,6 +30,7 @@ import { decideNextRunState } from "../_shared/automations/retryDecision.ts";
 import { mintUserAccessToken } from "../_shared/automations/actAsUser.ts";
 import { dispatchAction } from "../_shared/automations/actionDispatch.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
+import { readIntakePayload } from "../_shared/inbox/intakeSchema.ts";
 
 const EVENT_BATCH_LIMIT = 100;
 const RUN_BATCH_LIMIT = 20;
@@ -119,9 +120,11 @@ async function matchEventsToRuns(sb: ReturnType<typeof createServiceClient>) {
 // --- Phase B: idle-timeout scan --------------------------------------------
 
 async function scanIdleTimeouts(sb: ReturnType<typeof createServiceClient>) {
-  const { data: automations } = await sb.from("automations").select("id, workspace_id, idle_timeout_minutes").eq("trigger_event_type", "lead.idle_timeout").eq("status", "enabled");
   let emitted = 0;
-  for (const automation of (automations ?? []) as { id: string; workspace_id: string; idle_timeout_minutes: number | null }[]) {
+
+  // lead.idle_timeout - unchanged.
+  const { data: leadAutomations } = await sb.from("automations").select("id, workspace_id, idle_timeout_minutes").eq("trigger_event_type", "lead.idle_timeout").eq("status", "enabled");
+  for (const automation of (leadAutomations ?? []) as { id: string; workspace_id: string; idle_timeout_minutes: number | null }[]) {
     if (!automation.idle_timeout_minutes) continue;
     if (await workspaceAutomationsDisabled(sb, automation.workspace_id)) continue;
     const cutoffIso = new Date(Date.now() - automation.idle_timeout_minutes * 60_000).toISOString();
@@ -144,7 +147,90 @@ async function scanIdleTimeouts(sb: ReturnType<typeof createServiceClient>) {
       emitted++;
     }
   }
+
+  // Phase 8: conversation.idle_timeout - a customer conversation that has
+  // gone quiet (no inbound message) for longer than the automation's
+  // threshold, still open, workspace active. One bounded set-based scan per
+  // enabled automation (backed by inbox_conversations_idle_idx). Deduped
+  // per (conversation, automation, the exact last_inbound_at observed) so
+  // the SAME idle episode never re-emits every tick; a new inbound message
+  // moves last_inbound_at and starts a fresh episode. The sweep emits the
+  // event only - automations decide what to do with it.
+  const { data: convAutomations } = await sb.from("automations").select("id, workspace_id, idle_timeout_minutes").eq("trigger_event_type", "conversation.idle_timeout").eq("status", "enabled");
+  for (const automation of (convAutomations ?? []) as { id: string; workspace_id: string; idle_timeout_minutes: number | null }[]) {
+    if (!automation.idle_timeout_minutes || automation.idle_timeout_minutes <= 0) continue;
+    if (await workspaceAutomationsDisabled(sb, automation.workspace_id)) continue;
+    const cutoffIso = new Date(Date.now() - automation.idle_timeout_minutes * 60_000).toISOString();
+    const { data: idleConvs } = await sb
+      .from("inbox_conversations")
+      .select("id, last_inbound_at")
+      .eq("workspace_id", automation.workspace_id)
+      .neq("status", "closed")
+      .neq("inbox_status", "resolved")
+      .not("last_inbound_at", "is", null)
+      .lt("last_inbound_at", cutoffIso)
+      .limit(IDLE_SCAN_LIMIT);
+    for (const conv of (idleConvs ?? []) as { id: string; last_inbound_at: string }[]) {
+      await emitDomainEvent(sb, {
+        workspaceId: automation.workspace_id,
+        eventType: "conversation.idle_timeout",
+        entityType: "inbox_conversation",
+        entityId: conv.id,
+        payload: { entity_id: conv.id, conversation_id: conv.id, last_inbound_at: conv.last_inbound_at, idle_timeout_minutes: automation.idle_timeout_minutes },
+        dedupeKey: `conversation.idle_timeout:${conv.id}:${automation.id}:${conv.last_inbound_at}`,
+      });
+      emitted++;
+    }
+  }
+
   return { idleEventsEmitted: emitted };
+}
+
+// Phase 8: conditions are evaluated against the event payload PLUS, for a
+// conversation-scoped event, an authoritative snapshot of the conversation
+// (status/priority/assignment/ai/source/intake-completion), its pinned
+// intake fields (`intake.<key>` via the Phase-3 reader - never raw nested
+// JSON the automation creator supplied), and the triggering message
+// (direction/sender_type/message_type/media_mime_type). Every row is
+// re-read workspace-scoped here, so a condition can only ever see
+// workspace-owned data. The RAW payload is still what $event.* resolution
+// uses in dispatchAction - only condition eval sees this enriched copy.
+async function buildConditionPayload(
+  sb: ReturnType<typeof createServiceClient>,
+  event: { entity_type: string; entity_id: string | null; payload: Record<string, unknown> },
+): Promise<Record<string, unknown>> {
+  const base: Record<string, unknown> = { ...(event.payload ?? {}) };
+  if (event.entity_type !== "inbox_conversation" || !event.entity_id) return base;
+
+  const { data: conv } = await sb
+    .from("inbox_conversations")
+    .select("workspace_id, status, ai_enabled, inbox_status, priority_level, assigned_staff_id, referral_source, intake_completed_at, intake_payload")
+    .eq("id", event.entity_id)
+    .maybeSingle();
+  if (!conv) return base;
+
+  base.conversation = {
+    status: conv.status,
+    priority: conv.priority_level,
+    ai_enabled: conv.ai_enabled,
+    inbox_status: conv.inbox_status,
+    assigned_staff_id: conv.assigned_staff_id ?? null,
+    source: conv.referral_source ?? null,
+    intake_completed: !!conv.intake_completed_at,
+  };
+  base.intake = readIntakePayload(conv.intake_payload).fields;
+
+  const messageId = typeof base.message_id === "string" ? base.message_id : null;
+  if (messageId) {
+    const { data: msg } = await sb
+      .from("inbox_messages")
+      .select("direction, sender_type, message_type, media_mime_type")
+      .eq("id", messageId)
+      .eq("workspace_id", conv.workspace_id)
+      .maybeSingle();
+    if (msg) base.message = { direction: msg.direction, sender_type: msg.sender_type, message_type: msg.message_type, media_mime_type: msg.media_mime_type ?? null };
+  }
+  return base;
 }
 
 // --- Phase C: claim + execute due runs -------------------------------------
@@ -214,7 +300,8 @@ async function executeRun(sb: ReturnType<typeof createServiceClient>, run: RunCa
     return;
   }
 
-  const { allPassed, results } = evaluateConditions((conditions ?? []) as { field: string; operator: string; value: unknown }[], event.payload as Record<string, unknown>);
+  const conditionPayload = await buildConditionPayload(sb, { entity_type: event.entity_type, entity_id: event.entity_id, payload: event.payload as Record<string, unknown> });
+  const { allPassed, results } = evaluateConditions((conditions ?? []) as { field: string; operator: string; value: unknown }[], conditionPayload);
   if (!allPassed) {
     await sb.from("automation_runs").update({ status: "skipped_conditions_not_met", conditions_result: results, finished_at: new Date().toISOString() }).eq("id", run.id);
     return;
@@ -242,7 +329,7 @@ async function executeRun(sb: ReturnType<typeof createServiceClient>, run: RunCa
         accessToken,
         serviceClient: sb,
         actorUserId: automation.created_by,
-        automationContext: { runId: run.id, automationId: run.automation_id, correlationId: run.correlation_id, depth: event.causation_depth },
+        automationContext: { runId: run.id, automationId: run.automation_id, correlationId: run.correlation_id, depth: event.causation_depth, actionIndex: i },
       });
       await sb.from("automation_run_steps").update({ status: result.status, result: result.result ?? null, error: result.error ? { message: result.error } : null, finished_at: new Date().toISOString() }).eq("id", stepRow?.id);
       if (result.status === "succeeded") anySucceeded = true;

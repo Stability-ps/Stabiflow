@@ -85,7 +85,33 @@ async function callFlowAiAnalysis(accessToken: string, workspaceId: string, prom
   return { status: "succeeded", result: { conversationId, analysis: text } };
 }
 
-export type AutomationContext = { runId: string; automationId: string; correlationId: string; depth: number };
+export type AutomationContext = { runId: string; automationId: string; correlationId: string; depth: number; actionIndex?: number };
+
+// Phase 8: resolve the conversation this action targets - an explicit
+// config.conversation_id, else the triggering event's own entity (only
+// valid when that entity IS a conversation, which every conversation.*
+// trigger guarantees).
+function conversationId(config: Record<string, unknown>, event: { entityId: string | null }): string | null {
+  return typeof config.conversation_id === "string" && config.conversation_id ? config.conversation_id : event.entityId;
+}
+
+function templateParameters(config: Record<string, unknown>): string[] {
+  const raw = config.parameters;
+  if (Array.isArray(raw)) return raw.filter((p): p is string => typeof p === "string");
+  if (typeof raw === "string" && raw.trim()) return raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+
+// A WhatsApp send action succeeds ONLY when the provider actually accepted
+// it. inbox-actions records a "failed" delivery_status (never a fabricated
+// "sent") and still returns 200 - so a failed provider send must be
+// surfaced here as a failed automation step, never a green run.
+function afterSend(result: ActionResult): ActionResult {
+  if (result.status !== "succeeded") return result;
+  const delivery = (result.result as { delivery_status?: unknown } | null)?.delivery_status;
+  if (delivery === "failed") return { status: "failed", error: "The WhatsApp provider rejected this message - it was not delivered.", result: result.result };
+  return result;
+}
 
 export async function dispatchAction(opts: {
   actionType: ActionType;
@@ -145,6 +171,43 @@ export async function dispatchAction(opts: {
         : `An automation was triggered by a ${opts.event.entityType} event. Please analyze the relevant recent performance and summarize anything notable.`;
       return callFlowAiAnalysis(opts.accessToken, opts.workspaceId, prompt);
     }
+
+    // --- Phase 8: WhatsApp automation-parity actions ---------------------
+    // Every one routes through inbox-actions under the automation creator's
+    // impersonated token, so the SAME window / suspension / credential /
+    // template-approval / provider / ledger / cross-tenant gates apply.
+    case "set_conversation_priority":
+      return callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "set_priority",
+        conversation_id: conversationId(config, opts.event), priority: config.priority,
+      }, opts.automationContext);
+
+    case "set_conversation_handoff":
+      return callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "set_handoff",
+        conversation_id: conversationId(config, opts.event),
+      }, opts.automationContext);
+
+    case "send_whatsapp_template":
+      return afterSend(await callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "reply_template",
+        conversation_id: conversationId(config, opts.event),
+        template_id: config.template_id, parameters: templateParameters(config),
+      }, opts.automationContext));
+
+    case "request_document":
+      return afterSend(await callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "request_document",
+        conversation_id: conversationId(config, opts.event),
+        template_id: config.template_id, parameters: templateParameters(config),
+        document_field_key: typeof config.field_key === "string" ? config.field_key : undefined,
+      }, opts.automationContext));
+
+    case "add_tag":
+      return callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "add_tag",
+        conversation_id: conversationId(config, opts.event), tag: config.tag,
+      }, opts.automationContext);
 
     default:
       return { status: "failed", error: `Unknown action_type: ${opts.actionType}` };

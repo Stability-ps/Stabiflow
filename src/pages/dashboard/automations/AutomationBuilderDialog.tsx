@@ -106,13 +106,13 @@ export function AutomationBuilderDialog({ workspaceId, automation, template, ope
       if (isEditing) {
         await updateAutomation(workspaceId, automation!.id, {
           name, triggerEventType,
-          idleTimeoutMinutes: triggerEventType === "lead.idle_timeout" ? Number(idleTimeoutMinutes) : null,
+          idleTimeoutMinutes: (triggerEventType === "lead.idle_timeout" || triggerEventType === "conversation.idle_timeout") ? Number(idleTimeoutMinutes) : null,
           conditions, actions,
         });
       } else {
         await createAutomation(workspaceId, {
           name, triggerEventType,
-          idleTimeoutMinutes: triggerEventType === "lead.idle_timeout" ? Number(idleTimeoutMinutes) : undefined,
+          idleTimeoutMinutes: (triggerEventType === "lead.idle_timeout" || triggerEventType === "conversation.idle_timeout") ? Number(idleTimeoutMinutes) : undefined,
           conditions, actions,
         });
       }
@@ -147,10 +147,15 @@ export function AutomationBuilderDialog({ workspaceId, automation, template, ope
                 {EVENT_TYPES.map((e) => <SelectItem key={e} value={e}>{EVENT_TYPE_LABELS[e]}</SelectItem>)}
               </SelectContent>
             </Select>
-            {triggerEventType === "lead.idle_timeout" && (
+            {(triggerEventType === "lead.idle_timeout" || triggerEventType === "conversation.idle_timeout") && (
               <div className="mt-2">
                 <Label className="text-xs">Idle for at least (minutes)</Label>
                 <Input type="number" min={1} value={idleTimeoutMinutes} onChange={(e) => setIdleTimeoutMinutes(e.target.value)} className="w-32" />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {triggerEventType === "conversation.idle_timeout"
+                    ? "Measured from the customer's last message. A new message starts the clock over."
+                    : "Measured from the lead's last activity."}
+                </p>
               </div>
             )}
           </div>

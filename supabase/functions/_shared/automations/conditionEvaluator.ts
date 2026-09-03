@@ -17,9 +17,18 @@ export type ConditionEvalResult = {
   passed: boolean;
 };
 
+// A condition `field` is a dot path into the (server-built) event payload -
+// e.g. "conversation.status", "intake.risk", "message.media_mime_type". The
+// automation creator types the path; guard against a prototype-pollution
+// style key ever resolving to Object.prototype/its constructor so a
+// malicious "intake.__proto__.x" can only ever be `undefined`, never a
+// real object to compare against.
+const UNSAFE_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
 function getByPath(payload: Record<string, unknown>, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, key) => {
-    if (acc === null || typeof acc !== "object") return undefined;
+    if (acc === null || typeof acc !== "object" || UNSAFE_KEYS.has(key)) return undefined;
+    if (!Object.prototype.hasOwnProperty.call(acc, key)) return undefined;
     return (acc as Record<string, unknown>)[key];
   }, payload);
 }
