@@ -24,8 +24,9 @@ import { linkConversationCustomer, unlinkConversationCustomer } from "@/lib/cust
 import { useWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { computeSlaState } from "@/lib/slaState";
 import { aiMediaBadge } from "@/lib/multimodalMedia";
-import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, retryOutboundMessage, returnConversationToAI } from "@/lib/inbox";
+import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, retryOutboundMessage, retryTranscription, returnConversationToAI } from "@/lib/inbox";
 import { canRetryOutbound, outboundDeliveryLabel, outboundDeliveryState } from "@/lib/outboundRetry";
+import { canRetryTranscription, isAudioMessage, transcriptionHint, type TranscriptionStatus } from "@/lib/voiceTranscription";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
 import { approvedTemplates, templateBodyParameterCount, useInboxTemplates } from "@/hooks/useInboxTemplates";
 import { roleHasPermission } from "@/lib/permissions";
@@ -39,11 +40,13 @@ import { useOpportunityTerminology } from "@/hooks/useOpportunityTerminology";
 import { openOpportunityActionLabel } from "@/lib/terminology";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
 
-function MessageBubble({ message, canManage, onRetry, retrying }: {
+function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscription, transcribing }: {
   message: InboxMessageRow;
   canManage: boolean;
   onRetry: (messageId: string) => void;
   retrying: boolean;
+  onRetryTranscription: (messageId: string) => void;
+  transcribing: boolean;
 }) {
   const isInbound = message.direction === "inbound";
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -54,6 +57,13 @@ function MessageBubble({ message, canManage, onRetry, retrying }: {
   const retryState = outboundDeliveryState(message);
   const showRetryLabel = !isInbound && retryState !== "not_applicable";
   const canRetry = canRetryOutbound(message, canManage);
+  // Phase 10: a customer voice note. The original audio is authoritative;
+  // the transcript (if any) is derived, possibly-inexact data shown as a
+  // clearly-labelled, secondary block - never as the customer's words.
+  const isAudio = isAudioMessage(message.media_mime_type);
+  const transcriptionStatus = message.transcription_status as TranscriptionStatus | null;
+  const transHint = isAudio && isInbound ? transcriptionHint(transcriptionStatus) : null;
+  const canRetryTrans = isInbound && isAudio && canRetryTranscription(transcriptionStatus, canManage);
 
   useEffect(() => {
     if (message.media_storage_path) getInboxMediaUrl(message.media_storage_path).then(setMediaUrl);
@@ -70,11 +80,16 @@ function MessageBubble({ message, canManage, onRetry, retrying }: {
             {mediaUrl ? (
               message.media_mime_type?.startsWith("image/") ? (
                 <img src={mediaUrl} alt={message.media_filename || "attachment"} className="max-h-48 rounded" />
+              ) : isAudio ? (
+                <span className="block">
+                  <span className="mb-0.5 block text-[11px] opacity-70">{message.message_type === "voice" ? "Voice note" : "Audio message"}</span>
+                  <audio controls preload="metadata" src={mediaUrl} className="max-w-full" />
+                </span>
               ) : (
                 <a href={mediaUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 underline"><Paperclip className="h-3 w-3" /> {message.media_filename || "Attachment"}</a>
               )
             ) : (
-              <p className="flex items-center gap-1 text-xs opacity-70"><Paperclip className="h-3 w-3" /> Loading attachment...</p>
+              <p className="flex items-center gap-1 text-xs opacity-70"><Paperclip className="h-3 w-3" /> Loading {isAudio ? "voice note" : "attachment"}...</p>
             )}
             {isInbound && aiMediaBadge(message.ai_media_status) && (
               <span
@@ -91,7 +106,36 @@ function MessageBubble({ message, canManage, onRetry, retrying }: {
             )}
           </div>
         )}
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {!(isAudio && isInbound) && <p className="whitespace-pre-wrap">{message.content}</p>}
+        {isAudio && isInbound && (
+          <>
+            {message.transcript && (
+              <div className="mt-1 rounded border-l-2 border-muted-foreground/30 bg-background/40 px-2 py-1">
+                <p className="text-[10px] font-medium uppercase tracking-wide opacity-60">Transcript</p>
+                <p className="whitespace-pre-wrap text-sm">{message.transcript}</p>
+              </div>
+            )}
+            {transHint && (
+              <p
+                className={`mt-1 text-[11px] ${
+                  transHint.tone === "warn" ? "text-amber-700 dark:text-amber-400" : "opacity-70"
+                }`}
+              >
+                {transHint.label}
+                {canRetryTrans && (
+                  <button
+                    type="button"
+                    onClick={() => onRetryTranscription(message.id)}
+                    disabled={transcribing}
+                    className="ml-2 font-medium underline underline-offset-2 disabled:opacity-50"
+                  >
+                    {transcribing ? "Retrying..." : "Retry transcription"}
+                  </button>
+                )}
+              </p>
+            )}
+          </>
+        )}
         {showRetryLabel ? (
           <div className="mt-1 flex items-center gap-2">
             <span className={`text-[11px] ${retryState === "delivery_failed" ? "text-red-200" : retryState === "retry_scheduled" ? "text-amber-200" : "opacity-70"}`}>
@@ -225,6 +269,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const [templateParams, setTemplateParams] = useState<string[]>([]);
   const [sendingTemplate, setSendingTemplate] = useState(false);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  const [transcribingMessageId, setTranscribingMessageId] = useState<string | null>(null);
   const usableTemplates = approvedTemplates(templates);
   const selectedTemplate = usableTemplates.find((t) => t.id === selectedTemplateId) || null;
 
@@ -364,6 +409,24 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       toast.error(error instanceof Error ? error.message : "Unable to retry this message");
     } finally {
       setRetryingMessageId(null);
+    }
+  };
+
+  // Phase 10: manually re-run transcription for a customer voice note that
+  // failed or was skipped for cost. Same message row + stored audio.
+  const handleRetryTranscription = async (messageId: string) => {
+    setTranscribingMessageId(messageId);
+    try {
+      const result = await retryTranscription(workspaceId, conversation.id, messageId);
+      invalidate();
+      if (result.status === "processed") toast.success("Voice note transcribed");
+      else if (result.status === "failed") toast.error("Still couldn't transcribe this voice note");
+      else if (result.status === "skipped_quota") toast.error("Over the monthly Inbox AI usage limit");
+      else toast.info("Transcription attempted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to retry transcription");
+    } finally {
+      setTranscribingMessageId(null);
     }
   };
 
@@ -721,6 +784,8 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
               canManage={canManage}
               onRetry={handleRetryMessage}
               retrying={retryingMessageId === m.id}
+              onRetryTranscription={handleRetryTranscription}
+              transcribing={transcribingMessageId === m.id}
             />
           ))
         )}

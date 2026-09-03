@@ -114,6 +114,18 @@ export default function WhatsAppSettings() {
       setSavingAi(false);
     }
   };
+  const saveVoiceTranscription = async (enabled: boolean) => {
+    setSavingAi(true);
+    try {
+      await updateWorkspaceAiSettings(workspaceId, { ai_voice_transcription_enabled: enabled });
+      await queryClient.invalidateQueries({ queryKey: ["workspace-ai-settings", workspaceId] });
+      toast.success(enabled ? "Voice-note transcription enabled" : "Voice-note transcription disabled");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to save AI settings");
+    } finally {
+      setSavingAi(false);
+    }
+  };
   const { data: lastEvent } = useLastWhatsAppWebhookEvent(workspaceId);
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
   const wabaId = numbers.find((n) => n.waba_id)?.waba_id ?? null;
@@ -255,6 +267,29 @@ export default function WhatsAppSettings() {
           </p>
           <p className="text-xs text-muted-foreground">
             Images: {AI_MEDIA_SUPPORTED_FORMATS.images.join(", ")} &nbsp;·&nbsp; Documents: {AI_MEDIA_SUPPORTED_FORMATS.documents.join(", ")}
+          </p>
+          {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Voice notes</CardTitle></CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={aiSettings?.ai_voice_transcription_enabled ?? false}
+              disabled={!canManageWorkspace || savingAi}
+              onChange={(e) => saveVoiceTranscription(e.target.checked)}
+            />
+            <span>Transcribe customer voice notes</span>
+          </label>
+          <p className="text-sm text-muted-foreground">
+            When enabled, a customer voice note&apos;s audio is sent to the configured AI provider to produce a text transcript for your team and for Inbox AI. The original audio is always kept privately either way, and staff can always listen to it. Transcripts are automatic and may contain errors.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Counts towards this workspace&apos;s monthly Inbox AI usage limit.
           </p>
           {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
         </CardContent>

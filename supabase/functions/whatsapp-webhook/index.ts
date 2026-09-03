@@ -31,7 +31,7 @@ import {
   type AiMediaStatus,
   type MediaInputPart,
 } from "../_shared/inbox/multimodalMedia.ts";
-import { estimateCost, getPlatformTokenUsageSince, getWorkspaceFeatureTokenUsageSince } from "../_shared/flowAi/usage.ts";
+import { estimateCost, getPlatformTokenUsageSince, getWorkspaceFeaturesTokenUsageSince } from "../_shared/flowAi/usage.ts";
 import {
   decideInboxAiBudget,
   INBOX_AI_FEATURE,
@@ -39,7 +39,17 @@ import {
   resolveInboxAiCap,
   utcDayStartIso,
   utcMonthStartIso,
+  type InboxAiBudgetDecision,
 } from "../_shared/inbox/inboxAiBudget.ts";
+import {
+  attemptTranscription,
+  INBOX_VOICE_FEATURE,
+  isUsableTranscript,
+  persistTranscriptionStatus,
+  SUPPORTED_INBOUND_AUDIO_MIME_TYPES,
+  wrapTranscriptForAi,
+  type VoiceMessageFacts,
+} from "../_shared/inbox/voiceTranscription.ts";
 import { evaluateIntake, mergeExtractedFields, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
 import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
@@ -307,6 +317,29 @@ async function pauseConversationForAiLimit(
   });
 }
 
+// Phase 7 + 10: the one per-workspace monthly Inbox AI budget decision.
+// `features` is the set of ai_usage_events.feature values that count toward
+// the SAME allowance - Inbox AI replies AND (Phase 10) voice-note
+// transcription, so transcription never gets a second uncapped budget.
+async function resolveInboxAiBudget(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  features: string[],
+): Promise<InboxAiBudgetDecision> {
+  const { data: billingRow } = await sb.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
+  const inboxCap = resolveInboxAiCap(
+    (billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY],
+    Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"),
+  );
+  const inboxUsed = await getWorkspaceFeaturesTokenUsageSince(sb, workspaceId, features, utcMonthStartIso(new Date()));
+  const platformCeilingRaw = Number(Deno.env.get("FLOW_AI_PLATFORM_DAILY_TOKEN_CEILING")?.trim());
+  const platformCeiling = Number.isFinite(platformCeilingRaw) && platformCeilingRaw > 0 ? platformCeilingRaw : null;
+  const platformUsed = platformCeiling !== null ? await getPlatformTokenUsageSince(sb, utcDayStartIso(new Date())) : null;
+  return decideInboxAiBudget({ workspaceUsed: inboxUsed, workspaceCap: inboxCap, platformUsed, platformCeiling });
+}
+
+const INBOX_AI_BUDGET_FEATURES = [INBOX_AI_FEATURE, INBOX_VOICE_FEATURE];
+
 async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
   const { data: numberRow } = await sb
     .from("workspace_whatsapp_numbers")
@@ -384,28 +417,46 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   let size: number | null = null;
   let sha256 = event.sha256;
   let storagePath: string | null = null;
+  // Phase 10: kept in scope so a stored voice note can be transcribed once,
+  // right after the inbound row is created, without a second media download.
+  let audioBytes: Uint8Array | null = null;
   const cred = await resolveCredential(sb, numberRow);
+  const isAudioKind = event.kind === "voice" || event.kind === "audio";
 
-  if ((event.kind === "image" || event.kind === "document") && event.mediaId && cred) {
+  if ((event.kind === "image" || event.kind === "document" || isAudioKind) && event.mediaId && cred) {
     try {
       const media = await downloadWhatsAppMedia(cred, event.mediaId);
       mime = media.mime;
       size = media.size;
       sha256 = media.sha256 || sha256;
-      const allowed = ALLOWED_INBOUND_MEDIA_MIME_TYPES.has(mime || "");
+      const normalizedMime = (mime || "").toLowerCase().split(";")[0].trim();
+      const allowed = isAudioKind
+        ? SUPPORTED_INBOUND_AUDIO_MIME_TYPES.has(normalizedMime)
+        : ALLOWED_INBOUND_MEDIA_MIME_TYPES.has(mime || "");
       if (allowed) {
-        const ext = mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+        const ext = isAudioKind
+          ? (normalizedMime === "audio/mpeg" ? "mp3" : normalizedMime === "audio/mp4" ? "mp4" : normalizedMime === "audio/aac" ? "aac" : normalizedMime === "audio/amr" ? "amr" : "ogg")
+          : (mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg");
         const safeName = (event.filename || `whatsapp.${ext}`).replace(/[^a-zA-Z0-9._-]/g, "_");
         const path = `${numberRow.workspace_id}/${conversation.id}/${Date.now()}-${event.messageId}-${safeName}`;
         const { error: uploadError } = await sb.storage.from("inbox-media").upload(path, media.bytes, { contentType: mime, upsert: false });
-        if (!uploadError) storagePath = path;
+        if (!uploadError) {
+          storagePath = path;
+          if (isAudioKind) audioBytes = media.bytes;
+        }
       }
     } catch (mediaError) {
       console.error("whatsapp-webhook: media download failed", mediaError instanceof Error ? mediaError.message : mediaError);
     }
   }
 
-  const inboundContent = event.text || (event.kind === "image" ? "[Image attached]" : event.kind === "document" ? "[Document attached]" : "[Unsupported message]");
+  const inboundContent = event.text || (
+    event.kind === "image" ? "[Image attached]"
+      : event.kind === "document" ? "[Document attached]"
+      : event.kind === "voice" ? "[Voice note]"
+      : event.kind === "audio" ? "[Audio message]"
+      : "[Unsupported message]"
+  );
   const { data: inboundMessage, error: inboundError } = await sb.from("inbox_messages").insert({
     workspace_id: numberRow.workspace_id,
     conversation_id: conversation.id,
@@ -436,6 +487,58 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     dedupeKey: `message.received:${event.messageId}`,
   });
 
+  // Phase 10: transcribe a stored customer voice note ONCE. Deliberately
+  // runs for human-controlled conversations too (background staff
+  // transcription) - the AI-reply gate further down is unchanged, so a
+  // human-controlled chat never gets an AI reply out of this. The original
+  // audio row is authoritative and untouched; the transcript is derived,
+  // possibly-inexact data. Any failure here leaves the inbound message
+  // intact and playable.
+  let transcribedText: string | null = null;
+  if (isAudioKind && storagePath && audioBytes && inboundMessage?.id) {
+    const { data: voiceSettings } = await sb
+      .from("workspace_settings")
+      .select("ai_voice_transcription_enabled")
+      .eq("workspace_id", numberRow.workspace_id)
+      .maybeSingle();
+    const transcribeModel = Deno.env.get("OPENAI_TRANSCRIBE_MODEL")?.trim() || "gpt-4o-mini-transcribe";
+    const transcribeKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+    if (voiceSettings?.ai_voice_transcription_enabled === true && transcribeKey) {
+      const voiceBudget = await resolveInboxAiBudget(sb, numberRow.workspace_id, INBOX_AI_BUDGET_FEATURES);
+      if (!voiceBudget.allowed) {
+        // Over the workspace's Inbox AI allowance - NO provider call. An
+        // honest state + a zero-token blocked_quota usage row so "how often
+        // did cost block transcription" stays answerable.
+        await persistTranscriptionStatus(sb, inboundMessage.id, "skipped_quota", null);
+        await sb.from("ai_usage_events").insert({
+          workspace_id: numberRow.workspace_id, conversation_id: null, user_id: null,
+          feature: INBOX_VOICE_FEATURE, provider: "openai", model: transcribeModel,
+          input_tokens: 0, output_tokens: 0, estimated_cost: 0, latency_ms: 0, status: "blocked_quota",
+        }).then(() => {}, () => {});
+      } else {
+        const facts: VoiceMessageFacts = {
+          direction: "inbound",
+          sender_type: "customer",
+          message_type: event.kind,
+          media_mime_type: mime,
+          media_size_bytes: size,
+          media_storage_path: storagePath,
+        };
+        const outcome = await attemptTranscription(sb, {
+          messageId: inboundMessage.id,
+          workspaceId: numberRow.workspace_id,
+          facts,
+          audioBytes,
+          cred: { apiKey: transcribeKey, model: transcribeModel },
+          source: "webhook",
+        });
+        if (outcome.status === "processed" && isUsableTranscript(outcome.transcript)) {
+          transcribedText = outcome.transcript;
+        }
+      }
+    }
+  }
+
   // Phase 6: a SUPPORTED customer attachment was RECEIVED (not "understood
   // by AI" - that is ai_media_status). Fires on a supported image/PDF
   // regardless of whether our own storage upload then succeeded; deduped
@@ -459,13 +562,29 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     return;
   }
 
-  if (event.kind === "text" && isSimpleGreeting(event.text)) {
+  // Phase 10: a voice note the AI has no usable transcript for (setting off,
+  // transcription failed, unsupported audio, over budget). The AI must NOT
+  // pretend it understood - the audio is still stored + playable for staff.
+  if (isAudioKind && !transcribedText) {
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Thanks for the voice note - I can't listen to it here. Please type your message and I'll help, or say \"talk to a human\" and I'll pass you to the team.", "system");
+    return;
+  }
+
+  // Phase 10: from here on, a transcribed voice note behaves like a text
+  // turn. `inboundTurnText` drives the plain keyword fast-paths;
+  // `aiTurnText` is what reaches the model, wrapped in an untrusted-content
+  // boundary when it came from a transcript (never obey commands in it).
+  const inboundTurnText = transcribedText ?? event.text;
+  const aiTurnText = transcribedText != null ? wrapTranscriptForAi(transcribedText) : event.text;
+  const isTextLikeTurn = event.kind === "text" || (isAudioKind && !!transcribedText);
+
+  if (isTextLikeTurn && isSimpleGreeting(inboundTurnText)) {
     await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Hi! How can we help you today?");
     return;
   }
 
   const nowIso2 = new Date().toISOString();
-  if (event.kind === "text" && requestsHumanHandoff(event.text)) {
+  if (isTextLikeTurn && requestsHumanHandoff(inboundTurnText)) {
     await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: nowIso2 }).eq("id", conversation.id);
     await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
     return;
@@ -479,16 +598,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   // fabricated reply, the conversation moves to the existing human-handoff
   // path, and ONE unresolved alert records why. Soft ceiling, same contract
   // as Flow AI (see inboxAiBudget.ts for the bounded-overshoot note).
-  const { data: billingRow } = await sb.from("workspace_billing").select("limits").eq("workspace_id", numberRow.workspace_id).maybeSingle();
-  const inboxCap = resolveInboxAiCap(
-    (billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY],
-    Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"),
-  );
-  const inboxUsed = await getWorkspaceFeatureTokenUsageSince(sb, numberRow.workspace_id, INBOX_AI_FEATURE, utcMonthStartIso(new Date()));
-  const platformCeilingRaw = Number(Deno.env.get("FLOW_AI_PLATFORM_DAILY_TOKEN_CEILING")?.trim());
-  const platformCeiling = Number.isFinite(platformCeilingRaw) && platformCeilingRaw > 0 ? platformCeilingRaw : null;
-  const platformUsed = platformCeiling !== null ? await getPlatformTokenUsageSince(sb, utcDayStartIso(new Date())) : null;
-  const budget = decideInboxAiBudget({ workspaceUsed: inboxUsed, workspaceCap: inboxCap, platformUsed, platformCeiling });
+  const budget = await resolveInboxAiBudget(sb, numberRow.workspace_id, INBOX_AI_BUDGET_FEATURES);
   if (!budget.allowed) {
     await pauseConversationForAiLimit(sb, numberRow.workspace_id, conversation.id, Deno.env.get("OPENAI_WHATSAPP_MODEL")?.trim() || "unknown", budget.scope);
     return;
@@ -501,8 +611,15 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     return;
   }
 
-  const { data: rows } = await sb.from("inbox_messages").select("direction,content").eq("conversation_id", conversation.id).neq("provider_message_id", event.messageId).order("created_at", { ascending: false }).limit(16);
-  const history = ([...(rows || [])].reverse()) as ConversationHistoryMessage[];
+  // Phase 10: a prior voice note contributes its transcript (not the
+  // "[Voice note]" placeholder) to AI context, so a multi-turn voice
+  // conversation stays coherent. Still derived data, never shown to the
+  // customer.
+  const { data: rows } = await sb.from("inbox_messages").select("direction,content,transcript").eq("conversation_id", conversation.id).neq("provider_message_id", event.messageId).order("created_at", { ascending: false }).limit(16);
+  const history = ([...(rows || [])].reverse()).map((r: { direction: string; content: string | null; transcript: string | null }) => ({
+    direction: r.direction,
+    content: r.transcript ?? r.content,
+  })) as ConversationHistoryMessage[];
   const { data: workspaceRow } = await sb.from("workspaces").select("name").eq("id", numberRow.workspace_id).maybeSingle();
   const businessName = workspaceRow?.name || "our team";
 
@@ -557,7 +674,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     let sr;
     const startedAt = Date.now();
     try {
-      sr = await generateStructuredReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, currentFields, schema, preEval, { mediaParts: mm.parts });
+      sr = await generateStructuredReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, aiTurnText, currentFields, schema, preEval, { mediaParts: mm.parts });
     } catch (aiError) {
       console.error("whatsapp-webhook: structured AI reply failed", aiError instanceof Error ? aiError.message : aiError);
       if (mm.status === "processed") await writeMediaStatus("failed"); // an attachment was attached but the call never completed - never claim "AI read"
@@ -617,7 +734,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   let ai;
   const legacyStartedAt = Date.now();
   try {
-    ai = await generateAIReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, event.text, (conversation.intake_payload || {}) as Record<string, unknown>, { mediaParts: mm.parts });
+    ai = await generateAIReply({ apiKey: openaiKey, model: openaiModel }, businessName, history, aiTurnText, (conversation.intake_payload || {}) as Record<string, unknown>, { mediaParts: mm.parts });
   } catch (aiError) {
     console.error("whatsapp-webhook: AI reply generation failed", aiError instanceof Error ? aiError.message : aiError);
     if (mm.status === "processed") await writeMediaStatus("failed");

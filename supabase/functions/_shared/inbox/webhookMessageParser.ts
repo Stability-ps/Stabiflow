@@ -15,7 +15,10 @@ export type InboundMessageEvent = {
   phoneNumberId: string;
   waId: string;
   messageId: string;
-  kind: "text" | "image" | "document" | "unsupported";
+  // Phase 10: `voice` = a WhatsApp push-to-talk voice note (Meta sets
+  // audio.voice = true); `audio` = any other inbound audio file. Both are
+  // stored + playable; only these two ever get transcribed.
+  kind: "text" | "image" | "document" | "voice" | "audio" | "unsupported";
   text: string;
   displayName: string | null;
   referral: InboundReferral | null;
@@ -68,6 +71,7 @@ export function parseInboundMessageEvents(payload: unknown): InboundMessageEvent
         const text = asRecord(m.text);
         const image = asRecord(m.image);
         const document = asRecord(m.document);
+        const audio = asRecord(m.audio);
         const waId = String(m.from || "").trim();
         const messageId = String(m.id || "").trim();
         if (!waId || !messageId) continue;
@@ -81,6 +85,19 @@ export function parseInboundMessageEvents(payload: unknown): InboundMessageEvent
           out.push({ ...base, kind: "image", text: String(image.caption || "").trim(), mediaId: image.id ? String(image.id) : null, mime: image.mime_type ? String(image.mime_type) : null, filename: null, sha256: image.sha256 ? String(image.sha256) : null });
         } else if (m.type === "document") {
           out.push({ ...base, kind: "document", text: String(document.caption || "").trim(), mediaId: document.id ? String(document.id) : null, mime: document.mime_type ? String(document.mime_type) : null, filename: document.filename ? String(document.filename) : null, sha256: document.sha256 ? String(document.sha256) : null });
+        } else if (m.type === "audio") {
+          // Meta's audio object carries `voice: true` for a push-to-talk
+          // voice note; a plain audio file has it false/absent. The
+          // repository contract - not an assumption - drives the split.
+          out.push({
+            ...base,
+            kind: audio.voice === true ? "voice" : "audio",
+            text: "",
+            mediaId: audio.id ? String(audio.id) : null,
+            mime: audio.mime_type ? String(audio.mime_type) : null,
+            filename: null,
+            sha256: audio.sha256 ? String(audio.sha256) : null,
+          });
         } else {
           out.push({ ...base, kind: "unsupported", text: "", mediaId: null, mime: null, filename: null, sha256: null });
         }

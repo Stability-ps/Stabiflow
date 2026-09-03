@@ -73,6 +73,28 @@ export async function getWorkspaceFeatureTokenUsageSince(
   return (data ?? []).reduce((sum: number, row: { total_tokens: number }) => sum + (row.total_tokens ?? 0), 0);
 }
 
+// Phase 10: the workspace-month usage sum across SEVERAL features at once
+// (e.g. 'whatsapp_inbox_ai' + 'whatsapp_voice_transcription'), so voice
+// transcription counts toward the same one Inbox AI monthly allowance
+// rather than getting a second, uncapped budget. Same select+reduce shape;
+// an empty list returns 0 without a query.
+export async function getWorkspaceFeaturesTokenUsageSince(
+  serviceClient: AnySupabaseClient,
+  workspaceId: string,
+  features: string[],
+  since: string,
+): Promise<number> {
+  if (features.length === 0) return 0;
+  const { data, error } = await serviceClient
+    .from("ai_usage_events")
+    .select("total_tokens")
+    .eq("workspace_id", workspaceId)
+    .in("feature", features)
+    .gte("created_at", since);
+  if (error) throw new Error(`Failed to read workspace AI usage: ${error.message}`);
+  return (data ?? []).reduce((sum: number, row: { total_tokens: number }) => sum + (row.total_tokens ?? 0), 0);
+}
+
 export async function getPlatformTokenUsageSince(serviceClient: AnySupabaseClient, since: string): Promise<number> {
   const { data, error } = await serviceClient
     .from("ai_usage_events")
