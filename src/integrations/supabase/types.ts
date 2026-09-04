@@ -4610,6 +4610,26 @@ export type Database = {
           staff_reply_count: number
         }[]
       }
+      get_whatsapp_operational_analytics: {
+        Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
+        Returns: {
+          conversations_resolved: number
+          conversations_started: number
+          conversations_with_handoff: number
+          handled_ai_only: number
+          handled_human_assisted: number
+          handled_human_only: number
+          handled_no_agent_reply: number
+          handoff_rate: number
+          human_response_sample_size: number
+          inbound_messages: number
+          intake_applicable: number
+          intake_completed: number
+          intake_completion_rate: number
+          median_human_response_seconds: number
+          median_resolution_seconds: number
+        }[]
+      }
       get_workspace_integration_secret: {
         Args: { p_integration_id: string }
         Returns: string

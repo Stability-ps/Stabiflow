@@ -35,7 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
       { label: "Contacts", to: "/app/whatsapp/contacts" },
       { label: "Templates", to: "/app/whatsapp/templates" },
       { label: "Automations", to: "/app/automations?trigger=conversation", external: true },
-      { label: "Analytics", to: "/app/analytics?whatsapp", external: true },
+      { label: "Analytics", to: "/app/whatsapp/analytics" },
       { label: "Settings", to: "/app/whatsapp/settings" },
     ],
   },

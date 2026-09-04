@@ -55,9 +55,11 @@ describe("AppSidebar active state", () => {
     expect(screen.getByRole("link", { name: "WhatsApp Templates" })).toBeInTheDocument();
   });
 
-  it("links the WhatsApp sub-nav Automations/Analytics into the shared modules with a WhatsApp filter", () => {
+  it("links the WhatsApp sub-nav Automations into the shared module with a WhatsApp filter, and Analytics to the WhatsApp-owned page", () => {
     renderSidebar("/app/whatsapp/inbox");
     expect(screen.getByRole("link", { name: "WhatsApp Automations" })).toHaveAttribute("href", "/app/automations?trigger=conversation");
-    expect(screen.getByRole("link", { name: "WhatsApp Analytics" })).toHaveAttribute("href", "/app/analytics?whatsapp");
+    // Phase 11: WhatsApp Analytics is now its own operational page inside
+    // the WhatsApp section, not a filtered link into global Analytics.
+    expect(screen.getByRole("link", { name: "WhatsApp Analytics" })).toHaveAttribute("href", "/app/whatsapp/analytics");
   });
 });
