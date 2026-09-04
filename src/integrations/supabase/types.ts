@@ -4908,6 +4908,46 @@ export type Database = {
           revenue: Json
         }[]
       }
+      get_inbox_conversations: {
+        Args: {
+          p_assigned_staff_id?: string
+          p_assignment?: string
+          p_cursor_id?: string
+          p_cursor_updated_at?: string
+          p_handling?: string
+          p_inbox_status?: string
+          p_limit?: number
+          p_priority?: string
+          p_search?: string
+          p_unread_only?: boolean
+          p_workspace_id: string
+        }
+        Returns: {
+          ai_enabled: boolean
+          ai_summary: string
+          assigned_staff_id: string
+          assigned_staff_name: string
+          customer_id: string
+          display_name: string
+          human_handoff_requested_at: string
+          id: string
+          inbox_status: string
+          intake_completed_at: string
+          intake_missing_fields: string[]
+          intake_payload: Json
+          intake_schema_id: string
+          is_unread: boolean
+          last_inbound_at: string
+          last_outbound_at: string
+          last_staff_reply_at: string
+          lead_id: string
+          phone_number: string
+          priority_level: string
+          status: string
+          updated_at: string
+          wa_id: string
+        }[]
+      }
       get_lead_source_breakdown: {
         Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
         Returns: {
@@ -5020,6 +5060,8 @@ export type Database = {
         Args: { p_integration_id: string; p_secret: string }
         Returns: undefined
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       sla_sweep: { Args: never; Returns: Json }
       workspace_assets_path_workspace_id: {
         Args: { p_name: string }
