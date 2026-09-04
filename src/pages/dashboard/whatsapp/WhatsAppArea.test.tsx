@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   integrations: [] as Array<Record<string, unknown>>,
   numbers: [] as Array<Record<string, unknown>>,
   lastEvent: null as Record<string, unknown> | null,
+  recentEvents: [] as Array<Record<string, unknown>>,
   conversations: [] as Array<Record<string, unknown>>,
   templates: [] as Array<Record<string, unknown>>,
 }));
@@ -50,6 +51,7 @@ vi.mock("@/hooks/useIntegrations", () => ({
 }));
 vi.mock("@/hooks/useWhatsAppStatus", () => ({
   useLastWhatsAppWebhookEvent: () => ({ data: state.lastEvent }),
+  useRecentWhatsAppWebhookEvents: () => ({ data: state.recentEvents ?? [] }),
 }));
 vi.mock("@/hooks/useInboxConversations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks/useInboxConversations")>();
@@ -133,6 +135,7 @@ beforeEach(() => {
   state.integrations = [CONNECTED_INTEGRATION];
   state.numbers = [ACTIVE_NUMBER];
   state.lastEvent = { event_type: "message", received_at: "2026-08-30T09:30:00Z" };
+  state.recentEvents = [];
   state.conversations = [];
   state.templates = [];
   Object.values(inboxActionSpies).forEach((s) => s.mockReset());
@@ -300,6 +303,24 @@ describe("WhatsApp Templates child", () => {
 });
 
 describe("WhatsApp Settings child", () => {
+  it("Phase 15: renders the recent-webhook-activity panel with business-friendly outcome text, no raw JSON", () => {
+    state.recentEvents = [
+      { id: "e1", received_at: "2026-08-30T09:29:00Z", event_type: "message", phone_number_id: "pnid-1", resolved: true, outcome: "stored", message_type: "text", is_unresolved: false },
+      { id: "e2", received_at: "2026-08-30T09:20:00Z", event_type: "message", phone_number_id: "pnid-x", resolved: false, outcome: "unresolved_number", message_type: null, is_unresolved: true },
+    ];
+    renderArea("/app/whatsapp/settings");
+    expect(screen.getByText("Recent webhook activity")).toBeInTheDocument();
+    expect(screen.getByText("Received and routed")).toBeInTheDocument();
+    expect(screen.getByText(/Unresolved phone number/i)).toBeInTheDocument();
+    expect(screen.queryByText(/payload_summary|\{"/)).not.toBeInTheDocument();
+  });
+
+  it("Phase 15: recent-webhook-activity shows an empty state when there are none", () => {
+    state.recentEvents = [];
+    renderArea("/app/whatsapp/settings");
+    expect(screen.getByText("No webhook activity received yet.")).toBeInTheDocument();
+  });
+
   it("reuses the integration connection state (WABA, numbers, health) without duplicating the integration logic", () => {
     renderArea("/app/whatsapp/settings");
     expect(screen.getByText("waba-1")).toBeInTheDocument();
@@ -330,6 +351,31 @@ describe("WhatsApp Settings child", () => {
     expect(integrationSpies.repairWhatsAppWebhookSubscription).toHaveBeenCalledWith("workspace-1");
     expect(integrationSpies.setResourceActive).not.toHaveBeenCalled();
     expect(integrationSpies.disconnectIntegration).not.toHaveBeenCalled();
+  });
+
+  it("Phase 15: after Repair, per-WABA results render individually - successes stay visible when one fails", async () => {
+    integrationSpies.repairWhatsAppWebhookSubscription.mockResolvedValue({
+      ok: true,
+      webhookSubscription: {
+        status: "error",
+        detail: "one failed",
+        wabaCount: 3,
+        perWaba: [
+          { wabaId: "111122223333", subscribed: true, verified: true, status: "subscribed", error: null },
+          { wabaId: "444455556666", subscribed: true, verified: true, status: "subscribed", error: null },
+          { wabaId: "777788889999", subscribed: false, verified: null, status: "error", error: "Meta rate limit - try again shortly." },
+        ],
+      },
+    });
+    state.integrations = [{ ...CONNECTED_INTEGRATION, webhook_subscription_status: "not_subscribed" }];
+    renderArea("/app/whatsapp/settings");
+    screen.getByRole("button", { name: /Subscribe webhook/i }).click();
+    // per-WABA rows: 2 "Subscribed" + 1 "Needs repair"/"Check failed", plus the curated reason
+    expect(await screen.findAllByText("Subscribed")).toHaveLength(2);
+    expect(screen.getByText("Check failed")).toBeInTheDocument();
+    expect(screen.getByText("Meta rate limit - try again shortly.")).toBeInTheDocument();
+    // shortened WABA identifier, not a raw full id dump
+    expect(screen.getByText("WABA …9999")).toBeInTheDocument();
   });
 
   it("a manager (no integration.manage) sees the subscription state but NO repair button in Settings", () => {

@@ -192,7 +192,11 @@ Deno.serve(async (req: Request) => {
       connected: true,
       healthy: allHealthy,
       status,
-      webhook: webhook ? { status: webhook.status, detail: webhook.detail, checked_at: nowIso } : null,
+      // Phase 15: perWaba is the already-computed per-WABA breakdown
+      // (wabaId + subscribed/verified/status + curated error - no token /
+      // raw Graph body). Lets the UI show "2 subscribed, 1 needs repair"
+      // instead of one collapsed badge.
+      webhook: webhook ? { status: webhook.status, detail: webhook.detail, checked_at: nowIso, perWaba: webhook.perWaba } : null,
     },
     resources,
   });

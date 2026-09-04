@@ -4955,6 +4955,19 @@ export type Database = {
           source_label: string
         }[]
       }
+      get_recent_whatsapp_webhook_events: {
+        Args: { p_limit?: number; p_workspace_id: string }
+        Returns: {
+          event_type: string
+          id: string
+          is_unresolved: boolean
+          message_type: string
+          outcome: string
+          phone_number_id: string
+          received_at: string
+          resolved: boolean
+        }[]
+      }
       get_revenue_breakdown: {
         Args: { p_date_from: string; p_date_to: string; p_workspace_id: string }
         Returns: {

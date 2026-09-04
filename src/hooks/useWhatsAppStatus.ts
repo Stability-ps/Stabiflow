@@ -27,3 +27,34 @@ export function useLastWhatsAppWebhookEvent(workspaceId: string | null) {
     refetchInterval: 60_000,
   });
 }
+
+// Phase 15: the last <=20 webhook events + what happened after receipt
+// (get_recent_whatsapp_webhook_events RPC - integration.view-gated,
+// diagnostic-safe columns only, no payload). Complements the single
+// "Last inbound webhook event" signal above.
+export type RecentWhatsAppWebhookEvent = {
+  id: string;
+  received_at: string;
+  event_type: string;
+  phone_number_id: string;
+  resolved: boolean;
+  outcome: string | null;
+  message_type: string | null;
+  is_unresolved: boolean;
+};
+
+export function useRecentWhatsAppWebhookEvents(workspaceId: string | null, limit = 10) {
+  return useQuery({
+    queryKey: ["whatsapp-recent-webhook-events", workspaceId, limit],
+    queryFn: async (): Promise<RecentWhatsAppWebhookEvent[]> => {
+      const { data, error } = await supabase.rpc("get_recent_whatsapp_webhook_events", {
+        p_workspace_id: workspaceId as string,
+        p_limit: limit,
+      });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as RecentWhatsAppWebhookEvent[];
+    },
+    enabled: !!workspaceId,
+    refetchInterval: 60_000,
+  });
+}

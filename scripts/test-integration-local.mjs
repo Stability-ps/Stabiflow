@@ -46,6 +46,7 @@ const DEFAULT_FILES = [
   "supabase/tests/creative-studio-batch-ads.test.ts",
   "supabase/tests/whatsapp-reply-localization.test.ts",
   "supabase/tests/inbox-search-pagination.test.ts",
+  "supabase/tests/whatsapp-webhook-diagnostics.test.ts",
 ];
 
 function localEnvFromSupabase() {

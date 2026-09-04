@@ -12,6 +12,7 @@
 // built now, since this phase's objective is the connection FOUNDATION,
 // not full WhatsApp number provisioning.
 import { classifyIntegrationNetworkError, classifyMetaGraphError } from "./metaGraphError.ts";
+import { fetchWithTimeout } from "./fetchWithTimeout.ts";
 import { graphApiBaseUrl } from "./metaOAuth.ts";
 import type { DiscoveredWabaPhoneNumber, DiscoveredWabaTemplate, MetaCredential } from "./types.ts";
 
@@ -20,7 +21,9 @@ async function graphGet<T>(cred: MetaCredential, path: string): Promise<T> {
   url.searchParams.set("access_token", cred.token);
   let response: Response;
   try {
-    response = await fetch(url.toString(), { method: "GET" });
+    // Phase 15: bounded wait - a hung Meta call fails fast instead of
+    // stalling discovery/health until the runtime wall-clock limit.
+    response = await fetchWithTimeout(url.toString(), { method: "GET" });
   } catch (error) {
     classifyIntegrationNetworkError(error);
   }

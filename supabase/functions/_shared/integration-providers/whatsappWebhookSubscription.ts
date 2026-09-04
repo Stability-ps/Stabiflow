@@ -18,6 +18,7 @@
 // WABA ids come from THIS workspace's discovered `workspace_whatsapp_numbers`
 // rows. Nothing here reads or trusts a caller-supplied workspace/app id.
 import { classifyIntegrationNetworkError, classifyMetaGraphError, sanitizeIntegrationError } from "./metaGraphError.ts";
+import { fetchWithTimeout } from "./fetchWithTimeout.ts";
 import { graphApiBaseUrl } from "./metaOAuth.ts";
 import type { MetaCredential } from "./types.ts";
 
@@ -32,8 +33,25 @@ export type PerWabaSubscription = {
   // null = could not determine (e.g. the verify GET failed after a POST
   // that itself succeeded - the POST result is still trusted for `status`).
   subscribed: boolean | null;
+  // Phase 15: the verify GET outcome, distinct from `subscribed` (which
+  // trusts the POST when the GET fails). true = GET listed this app,
+  // false = GET ran but did not list it, null = GET not attempted or
+  // failed. Always set by the subscribe/verify functions; optional only so
+  // legacy callers of the pure summarizer need not synthesise it.
+  verified?: boolean | null;
+  // Phase 15: this one WABA folded to a single label for the UI list.
+  status?: WebhookSubscriptionState;
+  // Curated (sanitizeIntegrationError) - never a raw Graph body / token.
   error: string | null;
 };
+
+/** One WABA's outcome as a single label. Pure. */
+export function perWabaStatus(p: Pick<PerWabaSubscription, "subscribed" | "error">): WebhookSubscriptionState {
+  if (p.error) return "error";
+  if (p.subscribed === true) return "subscribed";
+  if (p.subscribed === false) return "not_subscribed";
+  return "unknown";
+}
 
 export type WebhookSubscriptionResult = {
   status: WebhookSubscriptionState;
@@ -54,7 +72,7 @@ function subscribedAppsUrl(cred: MetaCredential, wabaId: string): string {
 export async function subscribeWabaToApp(cred: MetaCredential, wabaId: string): Promise<void> {
   let response: Response;
   try {
-    response = await fetch(subscribedAppsUrl(cred, wabaId), { method: "POST" });
+    response = await fetchWithTimeout(subscribedAppsUrl(cred, wabaId), { method: "POST" });
   } catch (error) {
     classifyIntegrationNetworkError(error);
   }
@@ -91,7 +109,7 @@ export function parseSubscribedAppsResponse(json: unknown): string[] {
 export async function fetchWabaSubscribedApps(cred: MetaCredential, wabaId: string): Promise<string[]> {
   let response: Response;
   try {
-    response = await fetch(subscribedAppsUrl(cred, wabaId), { method: "GET" });
+    response = await fetchWithTimeout(subscribedAppsUrl(cred, wabaId), { method: "GET" });
   } catch (error) {
     classifyIntegrationNetworkError(error);
   }
@@ -150,29 +168,49 @@ export async function subscribeAndVerifyWabas(
   wabaIds: string[],
   expectedAppId: string | null,
 ): Promise<WebhookSubscriptionResult> {
-  const perWaba: PerWabaSubscription[] = [];
-  for (const wabaId of wabaIds) {
-    let subscribed: boolean | null = null;
-    let error: string | null = null;
-    try {
-      await subscribeWabaToApp(cred, wabaId);
-      subscribed = true; // POST succeeded (idempotent)
-      if (expectedAppId) {
-        try {
-          const ids = await fetchWabaSubscribedApps(cred, wabaId);
-          subscribed = ids.includes(expectedAppId);
-        } catch {
-          // Verify GET failed but the POST succeeded - trust the POST,
-          // leave `subscribed` true, don't manufacture an error.
-          subscribed = true;
+  // Phase 15: WABAs are independent - subscribe/verify them concurrently.
+  // WITHIN one WABA the POST still strictly precedes its verify GET;
+  // ACROSS WABAs they run in parallel. allSettled + an inner catch mean a
+  // single WABA's failure can never reject the batch or hide the others.
+  const settled = await Promise.allSettled(
+    wabaIds.map(async (wabaId): Promise<PerWabaSubscription> => {
+      let subscribed: boolean | null = null;
+      let verified: boolean | null = null;
+      let error: string | null = null;
+      try {
+        await subscribeWabaToApp(cred, wabaId);
+        subscribed = true; // POST succeeded (idempotent)
+        if (expectedAppId) {
+          try {
+            const ids = await fetchWabaSubscribedApps(cred, wabaId);
+            verified = ids.includes(expectedAppId);
+            subscribed = verified;
+          } catch {
+            // Verify GET failed but the POST succeeded - trust the POST,
+            // leave `subscribed` true, don't manufacture an error.
+            verified = null;
+            subscribed = true;
+          }
         }
+      } catch (e) {
+        error = sanitizeIntegrationError(e).message;
+        subscribed = false;
+        verified = null;
       }
-    } catch (e) {
-      error = sanitizeIntegrationError(e).message;
-      subscribed = false;
-    }
-    perWaba.push({ wabaId, subscribed, error });
-  }
+      return { wabaId, subscribed, verified, error, status: perWabaStatus({ subscribed, error }) };
+    }),
+  );
+  const perWaba: PerWabaSubscription[] = settled.map((r, i) =>
+    r.status === "fulfilled"
+      ? r.value
+      : {
+          wabaId: wabaIds[i],
+          subscribed: false,
+          verified: null,
+          error: sanitizeIntegrationError(r.reason).message,
+          status: "error" as const,
+        },
+  );
   return { ...summarizeWebhookSubscription(perWaba), perWaba };
 }
 
@@ -204,7 +242,7 @@ export async function subscribeWhatsAppWebhooks(
     result = {
       status: "subscribed",
       detail: "Mock mode - webhook subscription recorded without a Graph API call.",
-      perWaba: distinct.map((wabaId) => ({ wabaId, subscribed: true, error: null })),
+      perWaba: distinct.map((wabaId) => ({ wabaId, subscribed: true, verified: true, error: null, status: "subscribed" as const })),
     };
   } else {
     result = await subscribeAndVerifyWabas(cred, distinct, expectedAppId);
@@ -245,7 +283,7 @@ export async function verifyWhatsAppWebhooks(
     result = {
       status: "subscribed",
       detail: "Mock mode - webhook subscription assumed without a Graph API call.",
-      perWaba: distinct.map((wabaId) => ({ wabaId, subscribed: true, error: null })),
+      perWaba: distinct.map((wabaId) => ({ wabaId, subscribed: true, verified: true, error: null, status: "subscribed" as const })),
     };
   } else if (!expectedAppId) {
     result = {
@@ -254,15 +292,24 @@ export async function verifyWhatsAppWebhooks(
       perWaba: [],
     };
   } else {
-    const perWaba: PerWabaSubscription[] = [];
-    for (const wabaId of distinct) {
-      try {
-        const ids = await fetchWabaSubscribedApps(cred, wabaId);
-        perWaba.push({ wabaId, subscribed: ids.includes(expectedAppId), error: null });
-      } catch (e) {
-        perWaba.push({ wabaId, subscribed: null, error: sanitizeIntegrationError(e).message });
-      }
-    }
+    // Phase 15: GET-only re-verification, one concurrent request per WABA.
+    const settled = await Promise.allSettled(
+      distinct.map(async (wabaId): Promise<PerWabaSubscription> => {
+        try {
+          const ids = await fetchWabaSubscribedApps(cred, wabaId);
+          const verified = ids.includes(expectedAppId);
+          return { wabaId, subscribed: verified, verified, error: null, status: perWabaStatus({ subscribed: verified, error: null }) };
+        } catch (e) {
+          const error = sanitizeIntegrationError(e).message;
+          return { wabaId, subscribed: null, verified: null, error, status: "error" as const };
+        }
+      }),
+    );
+    const perWaba: PerWabaSubscription[] = settled.map((r, i) =>
+      r.status === "fulfilled"
+        ? r.value
+        : { wabaId: distinct[i], subscribed: null, verified: null, error: sanitizeIntegrationError(r.reason).message, status: "error" as const },
+    );
     result = { ...summarizeWebhookSubscription(perWaba), perWaba };
   }
 
