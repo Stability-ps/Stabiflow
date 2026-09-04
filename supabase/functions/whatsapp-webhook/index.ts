@@ -927,32 +927,87 @@ Deno.serve(async (req: Request) => {
   // any bug in the newer conversation/AI logic. Kept as its own pass rather
   // than folded into processMessageEvent so a webhook_events row always
   // exists even for status callbacks, which processMessageEvent never sees.
+  // Phase 15: track routable events so a bounded `outcome` can be written
+  // back to each ledger row AFTER processing - enough for an operator to
+  // answer "did Meta hit us, and where did it stop", without ever storing
+  // message content. Never a second table; the (phone_number_id,
+  // provider_event_id) UNIQUE stays the sole dedupe authority.
+  const routed = new Map<string, { phoneNumberId: string; workspaceId: string | null; eventType: "message" | "status" }>();
+  const duplicateIds = new Set<string>();
+  const failedIds = new Set<string>();
+  const messageKinds = new Map<string, string>();
+
   for (const routable of parseWhatsAppWebhookEvents(payload)) {
     const { data: numberRow } = await serviceSb.from("workspace_whatsapp_numbers").select("workspace_id").eq("phone_number_id", routable.phoneNumberId).eq("is_active", true).maybeSingle();
+    const workspaceId = (numberRow?.workspace_id as string | undefined) ?? null;
     const { error: insertError } = await serviceSb.from("workspace_whatsapp_webhook_events").insert({
-      workspace_id: numberRow?.workspace_id ?? null,
+      workspace_id: workspaceId,
       phone_number_id: routable.phoneNumberId,
       provider_event_id: routable.eventId,
       event_type: routable.eventType,
-      payload_summary: { resolved: !!numberRow },
+      // `received` is the transient state for a routed event; the
+      // reconciliation pass below upgrades it to stored / ignored_unsupported
+      // / processing_failed. An unroutable event is terminal here.
+      payload_summary: { resolved: !!numberRow, outcome: numberRow ? "received" : "unresolved_number" },
     });
-    if (insertError && insertError.code !== "23505") console.error("whatsapp-webhook: failed to record routing event", insertError.message);
+    if (insertError) {
+      if (insertError.code === "23505") {
+        // A repeat delivery of an event we already recorded. Do NOT
+        // reprocess (that idempotency lives in processMessageEvent /
+        // applyStatusUpdate). Relabel the existing row ONLY if it is still
+        // in the transient `received` state - never clobber a real outcome.
+        duplicateIds.add(routable.eventId);
+        await serviceSb.from("workspace_whatsapp_webhook_events")
+          .update({ payload_summary: { resolved: true, outcome: "duplicate" } })
+          .eq("phone_number_id", routable.phoneNumberId)
+          .eq("provider_event_id", routable.eventId)
+          .eq("payload_summary->>outcome", "received");
+      } else {
+        console.error("whatsapp-webhook: failed to record routing event", insertError.message);
+      }
+    } else {
+      routed.set(routable.eventId, { phoneNumberId: routable.phoneNumberId, workspaceId, eventType: routable.eventType });
+    }
   }
 
   for (const status of incomingStatuses(payload)) {
     try {
       await applyStatusUpdate(serviceSb, status);
     } catch (statusError) {
+      failedIds.add(status.metaMessageId);
       console.error("whatsapp-webhook: status processing error", statusError instanceof Error ? statusError.message : statusError);
     }
   }
 
   for (const event of parseInboundMessageEvents(payload)) {
+    messageKinds.set(event.messageId, event.kind);
     try {
       await processMessageEvent(serviceSb, event);
     } catch (messageError) {
+      failedIds.add(event.messageId);
       console.error("whatsapp-webhook: message processing error", messageError instanceof Error ? messageError.message : messageError);
     }
+  }
+
+  // Reconcile outcomes onto the ledger rows this delivery owns.
+  for (const [eventId, info] of routed) {
+    if (duplicateIds.has(eventId) || info.workspaceId === null) continue;
+    let outcome: string;
+    const extra: Record<string, unknown> = {};
+    if (failedIds.has(eventId)) {
+      outcome = "processing_failed";
+    } else if (info.eventType === "message") {
+      const kind = messageKinds.get(eventId);
+      if (kind) extra.message_type = kind;
+      const { data: msgRow } = await serviceSb.from("inbox_messages").select("id").eq("workspace_id", info.workspaceId).eq("provider_message_id", eventId).maybeSingle();
+      outcome = msgRow ? "stored" : "ignored_unsupported";
+    } else {
+      outcome = "stored"; // a signed status callback we processed without error
+    }
+    await serviceSb.from("workspace_whatsapp_webhook_events")
+      .update({ payload_summary: { resolved: true, outcome, ...extra } })
+      .eq("phone_number_id", info.phoneNumberId)
+      .eq("provider_event_id", eventId);
   }
 
   // Meta expects a fast 200 ack regardless of what processing found - a

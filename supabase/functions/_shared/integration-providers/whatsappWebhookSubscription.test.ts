@@ -248,3 +248,108 @@ Deno.test("verifyWhatsAppWebhooks in mock mode makes no call", async () => {
     assertEquals(calls.length, 0);
   });
 });
+
+// --- Phase 15: per-WABA concurrency + result surfacing -------------------
+
+/** fetch stub with a per-call delay so wall-clock proves concurrency. */
+function withDelayedFetch(
+  delayMs: number,
+  responder: (call: { url: string; method: string }) => { status?: number; body: unknown },
+  run: (calls: Array<{ url: string; method: string; at: number }>) => Promise<void>,
+) {
+  const calls: Array<{ url: string; method: string; at: number }> = [];
+  const start = performance.now();
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const method = (init?.method || "GET").toUpperCase();
+    calls.push({ url, method, at: performance.now() - start });
+    const r = responder({ url, method });
+    return new Promise<Response>((resolve) =>
+      setTimeout(() => resolve(new Response(JSON.stringify(r.body ?? {}), { status: r.status ?? 200, headers: { "Content-Type": "application/json" } })), delayMs)
+    );
+  }) as typeof fetch;
+  return run(calls).finally(() => { globalThis.fetch = original; });
+}
+
+Deno.test("subscribeAndVerifyWabas: independent WABAs run concurrently (wall-clock ~ one round-trip, not N)", async () => {
+  const wabas = ["waba-a", "waba-b", "waba-c"];
+  await withDelayedFetch(60, () => ({ body: { data: [{ id: "app-x" }] } }), async (calls) => {
+    const t0 = performance.now();
+    const result = await subscribeAndVerifyWabas(CRED, wabas, "app-x");
+    const elapsed = performance.now() - t0;
+    // 3 WABAs x (POST 60ms + GET 60ms) sequential would be ~360ms; concurrent ~120ms.
+    assertEquals(elapsed < 260, true);
+    assertEquals(result.perWaba.length, 3);
+    assertEquals(result.status, "subscribed");
+    // 6 calls total (POST+GET per WABA)
+    assertEquals(calls.length, 6);
+  });
+});
+
+Deno.test("subscribeAndVerifyWabas: within one WABA the POST strictly precedes its GET", async () => {
+  await withDelayedFetch(10, () => ({ body: { data: [{ id: "app-x" }] } }), async (calls) => {
+    await subscribeAndVerifyWabas(CRED, ["waba-a", "waba-b"], "app-x");
+    for (const w of ["waba-a", "waba-b"]) {
+      const post = calls.find((c) => c.url.includes(w) && c.method === "POST");
+      const get = calls.find((c) => c.url.includes(w) && c.method === "GET");
+      assertEquals(post !== undefined && get !== undefined, true);
+      assertEquals((post!.at) <= (get!.at), true);
+    }
+  });
+});
+
+Deno.test("subscribeAndVerifyWabas: one WABA failing does not reject the batch or hide the others", async () => {
+  await withStubbedFetch((call) => {
+    if (call.url.includes("waba-bad") && call.method === "POST") return { status: 400, body: { error: { code: 100, message: "bad waba" } } };
+    return { body: { data: [{ id: "app-x" }] } };
+  }, async () => {
+    const result = await subscribeAndVerifyWabas(CRED, ["waba-a", "waba-bad", "waba-c"], "app-x");
+    assertEquals(result.perWaba.length, 3);
+    const bad = result.perWaba.find((p) => p.wabaId === "waba-bad")!;
+    const ok = result.perWaba.filter((p) => p.wabaId !== "waba-bad");
+    assertEquals(bad.status, "error");
+    assertEquals(bad.subscribed, false);
+    assertEquals(typeof bad.error, "string");
+    assertEquals(ok.every((p) => p.subscribed === true && p.status === "subscribed"), true);
+    assertEquals(result.status, "error"); // aggregate surfaces the failure, never "healthy"
+  });
+});
+
+Deno.test("subscribeAndVerifyWabas: POST ok + verify GET fails keeps the trusted-POST semantics", async () => {
+  await withStubbedFetch((call) => {
+    if (call.method === "GET") return { status: 500, body: { error: { message: "verify blip" } } };
+    return { body: {} };
+  }, async () => {
+    const result = await subscribeAndVerifyWabas(CRED, ["waba-a"], "app-x");
+    const p = result.perWaba[0];
+    assertEquals(p.subscribed, true);   // POST is trusted
+    assertEquals(p.verified, null);     // GET could not confirm
+    assertEquals(p.error, null);        // not manufactured into an error
+    assertEquals(result.status, "subscribed");
+  });
+});
+
+Deno.test("subscribeAndVerifyWabas: aggregate is 'subscribed' only when every WABA confirms, 'error' on any hard failure; perWaba covers all requested", async () => {
+  await withStubbedFetch({ body: { data: [{ id: "app-x" }] } }, async () => {
+    const all = await subscribeAndVerifyWabas(CRED, ["w1", "w2", "w3"], "app-x");
+    assertEquals(all.status, "subscribed");
+    assertEquals(all.perWaba.map((p) => p.wabaId).sort(), ["w1", "w2", "w3"]);
+  });
+  await withStubbedFetch((call) => (call.url.includes("w2") && call.method === "POST" ? { status: 429, body: { error: { code: 4, message: "rate" } } } : { body: { data: [{ id: "app-x" }] } }), async () => {
+    const partial = await subscribeAndVerifyWabas(CRED, ["w1", "w2", "w3"], "app-x");
+    assertEquals(partial.status, "error");
+    assertEquals(partial.perWaba.length, 3);
+    assertEquals(partial.perWaba.find((p) => p.wabaId === "w1")!.status, "subscribed");
+  });
+});
+
+Deno.test("subscribeWhatsAppWebhooks mock mode: no real fetch, perWaba carries the new fields", async () => {
+  await withStubbedFetch({ body: {} }, async (calls) => {
+    const sb = stubSupabase();
+    const result = await subscribeWhatsAppWebhooks(sb, "integration-1", CRED, ["waba-a", "waba-b"], true, "app-x");
+    assertEquals(calls.length, 0);
+    assertEquals(result.status, "subscribed");
+    assertEquals(result.perWaba.every((p) => p.status === "subscribed" && p.verified === true && p.subscribed === true), true);
+  });
+});

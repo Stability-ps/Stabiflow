@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
         target_id: integration.id,
         metadata: { status: webhook.status, waba_count: webhook.perWaba.length },
       });
-      return json(req, { ok: true, webhookSubscription: { status: webhook.status, detail: webhook.detail, wabaCount: webhook.perWaba.length } });
+      return json(req, { ok: true, webhookSubscription: { status: webhook.status, detail: webhook.detail, wabaCount: webhook.perWaba.length, perWaba: webhook.perWaba } });
     }
 
     const summary =

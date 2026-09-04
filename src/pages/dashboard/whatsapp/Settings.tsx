@@ -14,9 +14,9 @@ import { useWorkspaceAiSettings, updateWorkspaceAiSettings } from "@/hooks/useWo
 import { useInboxAiUsage, updateInboxAiCap } from "@/hooks/useInboxAiUsage";
 import { AI_MEDIA_SUPPORTED_FORMATS } from "@/lib/multimodalMedia";
 import { INBOX_AI_CAP_MAX, INBOX_AI_CAP_MIN, usagePercent } from "@/lib/inboxAiBudget";
-import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
-import { repairWhatsAppWebhookSubscription } from "@/lib/integrations";
-import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
+import { useLastWhatsAppWebhookEvent, useRecentWhatsAppWebhookEvents } from "@/hooks/useWhatsAppStatus";
+import { repairWhatsAppWebhookSubscription, type PerWabaSubscriptionInfo } from "@/lib/integrations";
+import { presentIntegrationStatus, presentPerWabaStatus, presentWebhookEventOutcome, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
 import { WhatsAppManagePanel } from "@/pages/dashboard/integrations/WhatsAppManagePanel";
 import { BusinessHoursCard } from "@/pages/dashboard/whatsapp/BusinessHoursCard";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
@@ -140,18 +140,28 @@ export default function WhatsAppSettings() {
     }
   };
   const { data: lastEvent } = useLastWhatsAppWebhookEvent(workspaceId);
+  const { data: recentEvents } = useRecentWhatsAppWebhookEvents(workspaceId, 10);
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
   const wabaId = numbers.find((n) => n.waba_id)?.waba_id ?? null;
 
   const webhook = presentWebhookSubscription(integration.webhook_subscription_status, !!lastEvent);
   const [repairing, setRepairing] = useState(false);
+  const [perWaba, setPerWaba] = useState<PerWabaSubscriptionInfo[] | null>(null);
+  const wabaLabel = (id: string) =>
+    numbers.find((n) => n.waba_id === id)?.verified_name || `WABA …${id.slice(-4)}`;
   const handleRepair = async () => {
     setRepairing(true);
     try {
       const result = await repairWhatsAppWebhookSubscription(workspaceId);
       await queryClient.invalidateQueries({ queryKey: ["workspace-integrations", workspaceId] });
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp-recent-webhook-events", workspaceId] });
+      setPerWaba(result.webhookSubscription.perWaba ?? null);
+      const okCount = (result.webhookSubscription.perWaba ?? []).filter((p) => p.status === "subscribed").length;
+      const total = result.webhookSubscription.perWaba?.length ?? 0;
       if (result.webhookSubscription.status === "subscribed") {
         toast.success("Webhook subscription repaired - inbound messages will now be delivered.");
+      } else if (total > 1 && okCount > 0) {
+        toast.warning(`${okCount} of ${total} accounts subscribed - see the per-account list.`);
       } else {
         toast.error(result.webhookSubscription.detail || "Could not confirm the webhook subscription.");
       }
@@ -210,6 +220,45 @@ export default function WhatsAppSettings() {
               )}
             </span>
           </Row>
+
+          {perWaba && perWaba.length > 0 && (
+            <div className="mt-1 space-y-1 border-t pt-2">
+              {perWaba.map((p) => {
+                const s = presentPerWabaStatus(p.status);
+                return (
+                  <div key={p.wabaId} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="truncate text-muted-foreground" title={p.wabaId}>{wabaLabel(p.wabaId)}</span>
+                    <Badge className={toneClassName(s.tone)}>{s.label}</Badge>
+                  </div>
+                );
+              })}
+              {perWaba.some((p) => p.status === "error" && p.error) && (
+                <p className="pt-1 text-xs text-muted-foreground">{perWaba.find((p) => p.status === "error" && p.error)?.error}</p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-3 border-t pt-2">
+            <p className="mb-1 text-xs font-medium text-muted-foreground">Recent webhook activity</p>
+            {recentEvents && recentEvents.length > 0 ? (
+              <ul className="space-y-1">
+                {recentEvents.map((ev) => {
+                  const o = presentWebhookEventOutcome(ev);
+                  return (
+                    <li key={ev.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground">
+                        {relativeTime(ev.received_at)} · {o.title}
+                        {ev.message_type ? ` (${ev.message_type})` : ""}
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 ${toneClassName(o.tone)}`}>{o.detail}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground">No webhook activity received yet.</p>
+            )}
+          </div>
         </CardContent>
       </Card>
       {webhook.actionable && webhook.hint && (

@@ -79,7 +79,20 @@ export function startIntegrationConnect(workspaceId: string, provider: Integrati
   return invoke<{ url: string }>("integrations-oauth-start", { workspace_id: workspaceId, provider });
 }
 
-export type WebhookSubscriptionInfo = { status: "subscribed" | "not_subscribed" | "unknown" | "error"; detail: string; wabaCount: number };
+export type PerWabaSubscriptionInfo = {
+  wabaId: string;
+  subscribed: boolean | null;
+  verified: boolean | null;
+  status: "subscribed" | "not_subscribed" | "unknown" | "error";
+  error: string | null;
+};
+export type WebhookSubscriptionInfo = {
+  status: "subscribed" | "not_subscribed" | "unknown" | "error";
+  detail: string;
+  wabaCount: number;
+  /** Phase 15: per-WABA breakdown (present on repair / health responses). */
+  perWaba?: PerWabaSubscriptionInfo[];
+};
 
 export type DiscoverySummary = {
   facebookPages: { discovered: number; new: number; collisions: number };
@@ -113,7 +126,12 @@ export type ConnectionHealthResult = {
     connected: boolean;
     healthy?: boolean;
     status?: string;
-    webhook?: { status: "subscribed" | "not_subscribed" | "unknown" | "error"; detail: string; checked_at: string } | null;
+    webhook?: {
+      status: "subscribed" | "not_subscribed" | "unknown" | "error";
+      detail: string;
+      checked_at: string;
+      perWaba?: PerWabaSubscriptionInfo[];
+    } | null;
   };
   resources: IntegrationResourceHealth[];
 };

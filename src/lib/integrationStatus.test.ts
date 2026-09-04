@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { presentIntegrationStatus, presentWebhookSubscription } from "./integrationStatus";
+import {
+  presentIntegrationStatus,
+  presentPerWabaStatus,
+  presentWebhookEventOutcome,
+  presentWebhookSubscription,
+} from "./integrationStatus";
 
 describe("presentIntegrationStatus", () => {
   it("maps not-connected, healthy, and reauthorization_required", () => {
@@ -50,5 +55,33 @@ describe("presentWebhookSubscription", () => {
     const p = presentWebhookSubscription("not_subscribed", true);
     expect(p.label).toBe("Not subscribed");
     expect(p.actionable).toBe(true);
+  });
+});
+
+describe("presentPerWabaStatus (Phase 15)", () => {
+  it("maps each per-WABA state to a compact label + tone", () => {
+    expect(presentPerWabaStatus("subscribed")).toEqual({ label: "Subscribed", tone: "healthy" });
+    expect(presentPerWabaStatus("not_subscribed")).toEqual({ label: "Needs repair", tone: "attention" });
+    expect(presentPerWabaStatus("error")).toEqual({ label: "Check failed", tone: "error" });
+    expect(presentPerWabaStatus(null)).toEqual({ label: "Unknown", tone: "neutral" });
+  });
+});
+
+describe("presentWebhookEventOutcome (Phase 15)", () => {
+  it("gives a business-friendly title + outcome text, never raw JSON", () => {
+    expect(presentWebhookEventOutcome({ event_type: "message", outcome: "stored", is_unresolved: false }))
+      .toEqual({ title: "Inbound message", detail: "Received and routed", tone: "healthy" });
+    expect(presentWebhookEventOutcome({ event_type: "status", outcome: "stored", is_unresolved: false }).title).toBe("Status update");
+    expect(presentWebhookEventOutcome({ event_type: "message", outcome: "unresolved_number", is_unresolved: true }))
+      .toMatchObject({ tone: "attention" });
+    expect(presentWebhookEventOutcome({ event_type: "message", outcome: "processing_failed", is_unresolved: false }).tone).toBe("error");
+    expect(presentWebhookEventOutcome({ event_type: "message", outcome: "duplicate", is_unresolved: false }).detail).toMatch(/duplicate/i);
+  });
+
+  it("falls back cleanly when outcome is null (pre-Phase-15 rows)", () => {
+    const resolved = presentWebhookEventOutcome({ event_type: "message", outcome: null, is_unresolved: false });
+    expect(resolved.detail).toBe("Received");
+    const unresolved = presentWebhookEventOutcome({ event_type: "message", outcome: null, is_unresolved: true });
+    expect(unresolved.tone).toBe("attention");
   });
 });
