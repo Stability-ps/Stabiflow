@@ -2280,6 +2280,7 @@ export type Database = {
           intake_schema_id: string | null
           last_inbound_at: string | null
           last_outbound_at: string | null
+          last_outside_hours_ack_period_key: string | null
           last_staff_reply_at: string | null
           lead_id: string | null
           phone_number: string
@@ -2316,6 +2317,7 @@ export type Database = {
           intake_schema_id?: string | null
           last_inbound_at?: string | null
           last_outbound_at?: string | null
+          last_outside_hours_ack_period_key?: string | null
           last_staff_reply_at?: string | null
           lead_id?: string | null
           phone_number: string
@@ -2352,6 +2354,7 @@ export type Database = {
           intake_schema_id?: string | null
           last_inbound_at?: string | null
           last_outbound_at?: string | null
+          last_outside_hours_ack_period_key?: string | null
           last_staff_reply_at?: string | null
           lead_id?: string | null
           phone_number?: string
@@ -3459,6 +3462,47 @@ export type Database = {
           },
         ]
       }
+      workspace_business_hours: {
+        Row: {
+          closes_at: string | null
+          created_at: string
+          day_of_week: number
+          id: string
+          is_open: boolean
+          opens_at: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          closes_at?: string | null
+          created_at?: string
+          day_of_week: number
+          id?: string
+          is_open?: boolean
+          opens_at?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          closes_at?: string | null
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          is_open?: boolean
+          opens_at?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_business_hours_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_facebook_pages: {
         Row: {
           connected_at: string
@@ -4030,6 +4074,7 @@ export type Database = {
           ai_multimodal_enabled: boolean
           ai_voice_transcription_enabled: boolean
           business_description: string | null
+          business_hours_enabled: boolean
           contact_email: string | null
           contact_phone: string | null
           created_at: string
@@ -4040,6 +4085,8 @@ export type Database = {
           id: string
           industry: string | null
           logo_path: string | null
+          outside_hours_auto_reply_enabled: boolean
+          outside_hours_auto_reply_message: string | null
           terminology: Json
           timezone: string
           updated_at: string
@@ -4050,6 +4097,7 @@ export type Database = {
           ai_multimodal_enabled?: boolean
           ai_voice_transcription_enabled?: boolean
           business_description?: string | null
+          business_hours_enabled?: boolean
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -4060,6 +4108,8 @@ export type Database = {
           id?: string
           industry?: string | null
           logo_path?: string | null
+          outside_hours_auto_reply_enabled?: boolean
+          outside_hours_auto_reply_message?: string | null
           terminology?: Json
           timezone?: string
           updated_at?: string
@@ -4070,6 +4120,7 @@ export type Database = {
           ai_multimodal_enabled?: boolean
           ai_voice_transcription_enabled?: boolean
           business_description?: string | null
+          business_hours_enabled?: boolean
           contact_email?: string | null
           contact_phone?: string | null
           created_at?: string
@@ -4080,6 +4131,8 @@ export type Database = {
           id?: string
           industry?: string | null
           logo_path?: string | null
+          outside_hours_auto_reply_enabled?: boolean
+          outside_hours_auto_reply_message?: string | null
           terminology?: Json
           timezone?: string
           updated_at?: string
@@ -4357,6 +4410,10 @@ export type Database = {
         Args: { p_workspace_id: string }
         Returns: number
       }
+      business_minutes_between: {
+        Args: { p_end: string; p_start: string; p_workspace_id: string }
+        Returns: number
+      }
       can_grant_workspace_role: {
         Args: {
           p_new_role: Database["public"]["Enums"]["workspace_role"]
@@ -4369,6 +4426,10 @@ export type Database = {
           p_current_role: Database["public"]["Enums"]["workspace_role"]
           p_workspace_id: string
         }
+        Returns: boolean
+      }
+      claim_outside_hours_ack: {
+        Args: { p_conversation_id: string; p_period_key: string }
         Returns: boolean
       }
       claim_whatsapp_retry_batch: {
@@ -4679,6 +4740,14 @@ export type Database = {
       workspace_assets_path_workspace_id: {
         Args: { p_name: string }
         Returns: string
+      }
+      workspace_closed_period_key: {
+        Args: { p_at: string; p_workspace_id: string }
+        Returns: string
+      }
+      workspace_is_open_at: {
+        Args: { p_at: string; p_workspace_id: string }
+        Returns: boolean
       }
       workspace_role_rank: {
         Args: { p_role: Database["public"]["Enums"]["workspace_role"] }

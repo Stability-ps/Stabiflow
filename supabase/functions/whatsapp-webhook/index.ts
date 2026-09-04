@@ -555,7 +555,47 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     });
   }
 
+  // Phase 12: outside-business-hours acknowledgement. Fires at most ONCE
+  // per conversation per closed period, when the workspace has business
+  // hours + the acknowledgement both enabled AND is currently CLOSED in
+  // its own timezone. Runs BEFORE the human-control / AI gates so a
+  // handed-off conversation still gets the courtesy reply; it never
+  // touches handoff state or the SLA clock (the SLA simply pauses while
+  // closed - see business_minutes_between in sla_sweep). When it applies,
+  // the normal AI reply for this inbound turn is SUPPRESSED so the
+  // customer never gets "we're closed" immediately followed by an AI
+  // "how can I help you?".
+  let outsideHoursHandled = false;
+  if (cred && inboundMessage?.id) {
+    const { data: bh } = await sb
+      .from("workspace_settings")
+      .select("business_hours_enabled, outside_hours_auto_reply_enabled, outside_hours_auto_reply_message")
+      .eq("workspace_id", numberRow.workspace_id)
+      .maybeSingle();
+    if (bh?.business_hours_enabled === true && bh?.outside_hours_auto_reply_enabled === true) {
+      const ackText = (bh.outside_hours_auto_reply_message ?? "").trim();
+      const { data: periodKey } = await sb.rpc("workspace_closed_period_key", {
+        p_workspace_id: numberRow.workspace_id,
+        p_at: nowIso,
+      });
+      // periodKey is null when the workspace is OPEN. A non-null string
+      // names THIS closure, so the compare-and-set below dedupes per
+      // closed period (safe under webhook retries + concurrency).
+      if (ackText && typeof periodKey === "string" && periodKey.length > 0) {
+        outsideHoursHandled = true; // closed + feature on -> AI stays silent this turn (even if the ack was already sent for this period)
+        const { data: won } = await sb.rpc("claim_outside_hours_ack", {
+          p_conversation_id: conversation.id,
+          p_period_key: periodKey,
+        });
+        if (won === true) {
+          await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, ackText, "system");
+        }
+      }
+    }
+  }
+
   if (!cred) return; // no connected/working credential - leave for staff, cannot auto-reply
+  if (outsideHoursHandled) return; // Phase 12: closed + outside-hours acknowledgement contract -> no normal AI reply this turn
   if (!conversation.ai_enabled || conversation.status === "human_handoff") return; // human control is active - AI stays silent
   if (event.kind === "unsupported") {
     await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Please send that as text, an image, or a PDF and I'll help you from there.", "system");
