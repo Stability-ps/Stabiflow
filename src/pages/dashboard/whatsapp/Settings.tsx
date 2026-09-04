@@ -18,6 +18,7 @@ import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
 import { repairWhatsAppWebhookSubscription } from "@/lib/integrations";
 import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
 import { WhatsAppManagePanel } from "@/pages/dashboard/integrations/WhatsAppManagePanel";
+import { BusinessHoursCard } from "@/pages/dashboard/whatsapp/BusinessHoursCard";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
 
 function relativeTime(iso: string | null): string {
@@ -248,6 +249,8 @@ export default function WhatsAppSettings() {
           {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
         </CardContent>
       </Card>
+
+      <BusinessHoursCard workspaceId={workspaceId} canManage={canManageWorkspace} />
 
       <Card>
         <CardHeader><CardTitle className="text-base">AI document understanding</CardTitle></CardHeader>
