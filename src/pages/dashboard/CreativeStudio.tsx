@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { MediaPreview } from "@/components/content/MediaPreview";
+import { BatchAdStudio } from "@/components/creative-studio/BatchAdStudio";
 import { useAuth } from "@/hooks/useAuth";
 import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
 import { generateCreativeCopy, type CreativeVariant } from "@/lib/creativeStudio";
@@ -77,7 +78,7 @@ export default function CreativeStudio() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Creative Studio</h1>
-        <p className="text-sm text-muted-foreground">AI-assisted copy, headlines, and creative variations for your campaigns.</p>
+        <p className="text-sm text-muted-foreground">AI-assisted copy and headlines, then batch-rendered image adverts in every Meta format.</p>
       </div>
 
       {!canGenerate ? (
@@ -203,6 +204,25 @@ export default function CreativeStudio() {
               title="Ready when you are"
               description="Describe your product or service above and generate a few starting points - headlines, primary text, descriptions, and a call-to-action, ready to copy or use in a new campaign."
               className="min-h-[20vh]"
+            />
+          )}
+
+          {currentWorkspaceId && (
+            <BatchAdStudio
+              workspaceId={currentWorkspaceId}
+              businessContext={businessContext}
+              audience={audience}
+              tone={tone}
+              sourceAssetId={selectedAssetId}
+              copyVariants={variants ?? []}
+              mediaAssets={(mediaAssets ?? []).map((a) => ({
+                id: a.id,
+                title: a.title,
+                storage_path: a.storage_path,
+                width_px: a.width_px,
+                height_px: a.height_px,
+              }))}
+              canPromoteToCampaign={canPromoteToCampaign}
             />
           )}
         </>
