@@ -1882,6 +1882,275 @@ export type Database = {
           },
         ]
       }
+      creative_studio_batches: {
+        Row: {
+          audience: string | null
+          business_context: string
+          created_at: string
+          created_by: string | null
+          error_detail: string | null
+          id: string
+          layouts: string[]
+          sizes: string[]
+          source_media_asset_id: string | null
+          status: Database["public"]["Enums"]["creative_studio_batch_status"]
+          tone: string | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          audience?: string | null
+          business_context: string
+          created_at?: string
+          created_by?: string | null
+          error_detail?: string | null
+          id?: string
+          layouts?: string[]
+          sizes?: string[]
+          source_media_asset_id?: string | null
+          status?: Database["public"]["Enums"]["creative_studio_batch_status"]
+          tone?: string | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          audience?: string | null
+          business_context?: string
+          created_at?: string
+          created_by?: string | null
+          error_detail?: string | null
+          id?: string
+          layouts?: string[]
+          sizes?: string[]
+          source_media_asset_id?: string | null
+          status?: Database["public"]["Enums"]["creative_studio_batch_status"]
+          tone?: string | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_studio_batches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_batches_source_media_asset_id_fkey"
+            columns: ["source_media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_batches_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_studio_concepts: {
+        Row: {
+          batch_id: string
+          concept_name: string
+          created_at: string
+          cta: string
+          headline: string
+          id: string
+          layout_style: string | null
+          sort_order: number
+          supporting_text: string
+          updated_at: string
+          visual_error: string | null
+          visual_job_id: string | null
+          visual_media_asset_id: string | null
+          visual_notes: string | null
+          visual_prompt: string
+          visual_source: Database["public"]["Enums"]["creative_studio_visual_source"]
+          visual_status: Database["public"]["Enums"]["creative_studio_visual_status"]
+          workspace_id: string
+        }
+        Insert: {
+          batch_id: string
+          concept_name: string
+          created_at?: string
+          cta: string
+          headline: string
+          id?: string
+          layout_style?: string | null
+          sort_order?: number
+          supporting_text: string
+          updated_at?: string
+          visual_error?: string | null
+          visual_job_id?: string | null
+          visual_media_asset_id?: string | null
+          visual_notes?: string | null
+          visual_prompt: string
+          visual_source?: Database["public"]["Enums"]["creative_studio_visual_source"]
+          visual_status?: Database["public"]["Enums"]["creative_studio_visual_status"]
+          workspace_id: string
+        }
+        Update: {
+          batch_id?: string
+          concept_name?: string
+          created_at?: string
+          cta?: string
+          headline?: string
+          id?: string
+          layout_style?: string | null
+          sort_order?: number
+          supporting_text?: string
+          updated_at?: string
+          visual_error?: string | null
+          visual_job_id?: string | null
+          visual_media_asset_id?: string | null
+          visual_notes?: string | null
+          visual_prompt?: string
+          visual_source?: Database["public"]["Enums"]["creative_studio_visual_source"]
+          visual_status?: Database["public"]["Enums"]["creative_studio_visual_status"]
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_studio_concepts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "creative_studio_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_concepts_visual_media_asset_id_fkey"
+            columns: ["visual_media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_concepts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_studio_creatives: {
+        Row: {
+          batch_id: string
+          body_text: string
+          concept_id: string
+          contact_text: string | null
+          created_at: string
+          cta: string
+          disclaimer_text: string | null
+          headline: string
+          height_px: number
+          id: string
+          layout: string
+          overflow_warning: boolean
+          price_text: string | null
+          render_error: string | null
+          rendered_media_asset_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          size: string
+          status: Database["public"]["Enums"]["creative_studio_creative_status"]
+          storage_path: string | null
+          updated_at: string
+          width_px: number
+          workspace_id: string
+        }
+        Insert: {
+          batch_id: string
+          body_text: string
+          concept_id: string
+          contact_text?: string | null
+          created_at?: string
+          cta: string
+          disclaimer_text?: string | null
+          headline: string
+          height_px: number
+          id?: string
+          layout: string
+          overflow_warning?: boolean
+          price_text?: string | null
+          render_error?: string | null
+          rendered_media_asset_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          size: string
+          status?: Database["public"]["Enums"]["creative_studio_creative_status"]
+          storage_path?: string | null
+          updated_at?: string
+          width_px: number
+          workspace_id: string
+        }
+        Update: {
+          batch_id?: string
+          body_text?: string
+          concept_id?: string
+          contact_text?: string | null
+          created_at?: string
+          cta?: string
+          disclaimer_text?: string | null
+          headline?: string
+          height_px?: number
+          id?: string
+          layout?: string
+          overflow_warning?: boolean
+          price_text?: string | null
+          render_error?: string | null
+          rendered_media_asset_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          size?: string
+          status?: Database["public"]["Enums"]["creative_studio_creative_status"]
+          storage_path?: string | null
+          updated_at?: string
+          width_px?: number
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_studio_creatives_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "creative_studio_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_creatives_concept_id_fkey"
+            columns: ["concept_id"]
+            isOneToOne: false
+            referencedRelation: "creative_studio_concepts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_creatives_rendered_media_asset_id_fkey"
+            columns: ["rendered_media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_creatives_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_studio_creatives_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       crm_notes: {
         Row: {
           author_id: string
@@ -4071,8 +4340,12 @@ export type Database = {
       }
       workspace_settings: {
         Row: {
+          ad_footer_disclaimer: string | null
           ai_multimodal_enabled: boolean
           ai_voice_transcription_enabled: boolean
+          brand_accent_color: string | null
+          brand_cta_text_color: string | null
+          brand_primary_color: string | null
           business_description: string | null
           business_hours_enabled: boolean
           contact_email: string | null
@@ -4094,8 +4367,12 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          ad_footer_disclaimer?: string | null
           ai_multimodal_enabled?: boolean
           ai_voice_transcription_enabled?: boolean
+          brand_accent_color?: string | null
+          brand_cta_text_color?: string | null
+          brand_primary_color?: string | null
           business_description?: string | null
           business_hours_enabled?: boolean
           contact_email?: string | null
@@ -4117,8 +4394,12 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          ad_footer_disclaimer?: string | null
           ai_multimodal_enabled?: boolean
           ai_voice_transcription_enabled?: boolean
+          brand_accent_color?: string | null
+          brand_cta_text_color?: string | null
+          brand_primary_color?: string | null
           business_description?: string | null
           business_hours_enabled?: boolean
           contact_email?: string | null
@@ -4798,6 +5079,24 @@ export type Database = {
         | "paused"
         | "completed"
         | "archived"
+      creative_studio_batch_status:
+        | "draft"
+        | "generating"
+        | "ready"
+        | "partial"
+        | "failed"
+      creative_studio_creative_status:
+        | "rendering"
+        | "ready"
+        | "approved"
+        | "rejected"
+        | "failed"
+      creative_studio_visual_source: "ai" | "media_library"
+      creative_studio_visual_status:
+        | "pending"
+        | "generating"
+        | "ready"
+        | "failed"
       integration_provider: "meta" | "whatsapp"
       integration_status: "connected" | "disconnected" | "error"
       workspace_invitation_status:
@@ -4991,6 +5290,27 @@ export const Constants = {
         "paused",
         "completed",
         "archived",
+      ],
+      creative_studio_batch_status: [
+        "draft",
+        "generating",
+        "ready",
+        "partial",
+        "failed",
+      ],
+      creative_studio_creative_status: [
+        "rendering",
+        "ready",
+        "approved",
+        "rejected",
+        "failed",
+      ],
+      creative_studio_visual_source: ["ai", "media_library"],
+      creative_studio_visual_status: [
+        "pending",
+        "generating",
+        "ready",
+        "failed",
       ],
       integration_provider: ["meta", "whatsapp"],
       integration_status: ["connected", "disconnected", "error"],
