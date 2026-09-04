@@ -2,7 +2,7 @@ import { LegalLayout } from "@/pages/legal/LegalLayout";
 
 export default function Privacy() {
   return (
-    <LegalLayout title="Privacy Policy" effectiveDate="2026-08-28">
+    <LegalLayout title="Privacy Policy" effectiveDate="2026-09-04">
       <section>
         <p>
           This Privacy Policy describes what personal information StabiFlow collects and processes when a
@@ -38,7 +38,7 @@ export default function Privacy() {
 
       <section>
         <h2>How AI features use information</h2>
-        <p>StabiFlow has two separate AI systems, and they are given different information:</p>
+        <p>StabiFlow has several AI-assisted features, and each is given only the information it needs:</p>
         <ul>
           <li>
             <strong>WhatsApp AI (automated replies to customers):</strong> when enabled for a conversation, it
@@ -47,15 +47,42 @@ export default function Privacy() {
             is not included in that request.
           </li>
           <li>
+            <strong>Image and PDF understanding:</strong> when a workspace turns this on, a supported image or
+            PDF a customer sends may be provided to OpenAI to help understand that customer&apos;s enquiry. Only
+            the current attachment on an active conversation is sent, and only for workspaces that have enabled
+            the feature.
+          </li>
+          <li>
+            <strong>Voice-note transcription:</strong> when a workspace turns this on, a supported customer
+            voice note&apos;s audio may be sent to OpenAI to produce a text transcript, which is then used the
+            same way as a written message. The original audio is always kept; transcription is automatic and
+            may contain errors.
+          </li>
+          <li>
+            <strong>Customer-language matching:</strong> when a workspace turns this on, limited recent
+            customer-language context and the already-generated reply may be sent to OpenAI so the reply&apos;s
+            wording can better match the customer&apos;s language and tone. This adapts presentation only - it
+            does not change the underlying facts, amounts, or actions in the reply - and language detection is
+            not guaranteed to be accurate.
+          </li>
+          <li>
             <strong>Flow AI (a staff-facing assistant for reporting and recommendations):</strong> uses curated
             workspace and business data through a fixed set of read tools - aggregated campaign performance,
             lead and pipeline summaries, and revenue figures. Flow AI never has access to raw WhatsApp message
             content.
           </li>
+          <li>
+            <strong>Creative Studio (advertising copy and image generation):</strong> business, product, or
+            creative brief information a workspace enters may be sent to OpenAI to generate advertising copy
+            and concepts, and AI-generated visual prompts may be used to generate advertising images. Creative
+            Studio does not have access to a workspace&apos;s WhatsApp conversations, and generated copy and
+            images are not published automatically - a staff member chooses whether and how to use them.
+          </li>
         </ul>
         <p>
-          In both cases, OpenAI acts as a subprocessor (operator) and processes this information solely to
-          generate the requested AI output.
+          In every case, OpenAI acts as a subprocessor (operator) and processes this information solely to
+          generate the requested AI output. AI-generated and AI-transcribed content may be inaccurate, and
+          staff remain responsible for reviewing important outputs before relying on or acting on them.
         </p>
       </section>
 
