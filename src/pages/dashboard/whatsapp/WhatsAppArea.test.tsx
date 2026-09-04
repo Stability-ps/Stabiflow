@@ -51,11 +51,24 @@ vi.mock("@/hooks/useIntegrations", () => ({
 vi.mock("@/hooks/useWhatsAppStatus", () => ({
   useLastWhatsAppWebhookEvent: () => ({ data: state.lastEvent }),
 }));
-vi.mock("@/hooks/useInboxConversations", () => ({
-  useInboxConversations: vi.fn((workspaceId: string | null) => ({ data: workspaceId ? state.conversations : [], isLoading: false })),
-  useInboxConversationReads: () => ({ data: new Map() }),
-  isConversationUnread: () => false,
-}));
+vi.mock("@/hooks/useInboxConversations", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/useInboxConversations")>();
+  return {
+    ...actual,
+    useInboxConversations: vi.fn((workspaceId: string | null) => ({ data: workspaceId ? state.conversations : [], isLoading: false })),
+    useInboxConversationsInfinite: vi.fn((workspaceId: string | null) => ({
+      conversations: workspaceId ? state.conversations : [],
+      isLoading: false,
+      isFetching: false,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+    })),
+    useInboxConversationReads: () => ({ data: new Map() }),
+    isConversationUnread: () => false,
+  };
+});
+vi.mock("@/hooks/useWorkspaceMembers", () => ({ useWorkspaceMembers: () => ({ data: [] }) }));
 vi.mock("@/hooks/useInboxTemplates", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/hooks/useInboxTemplates")>();
   return { ...actual, useInboxTemplates: () => ({ data: state.templates, isLoading: false }) };
@@ -75,7 +88,7 @@ vi.mock("@/pages/dashboard/inbox/ConversationDetail", () => ({
   ),
 }));
 
-import { useInboxConversations } from "@/hooks/useInboxConversations";
+import { useInboxConversations, useInboxConversationsInfinite } from "@/hooks/useInboxConversations";
 
 function renderArea(path: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -126,6 +139,7 @@ beforeEach(() => {
   Object.values(leadSpies).forEach((s) => s.mockReset());
   Object.values(integrationSpies).forEach((s) => s.mockReset());
   (useInboxConversations as unknown as ReturnType<typeof vi.fn>).mockClear();
+  (useInboxConversationsInfinite as unknown as ReturnType<typeof vi.fn>).mockClear();
 });
 afterEach(cleanup);
 
@@ -239,7 +253,7 @@ describe("WhatsApp Inbox child", () => {
 
   it("scopes the conversation query to the active workspace id (isolation)", () => {
     renderArea("/app/whatsapp/inbox");
-    expect(useInboxConversations).toHaveBeenCalledWith("workspace-1");
+    expect(useInboxConversationsInfinite).toHaveBeenCalledWith("workspace-1", expect.anything());
   });
 });
 
