@@ -44,6 +44,7 @@ const DEFAULT_FILES = [
   "supabase/tests/whatsapp-operational-analytics.test.ts",
   "supabase/tests/whatsapp-business-hours.test.ts",
   "supabase/tests/creative-studio-batch-ads.test.ts",
+  "supabase/tests/whatsapp-reply-localization.test.ts",
 ];
 
 function localEnvFromSupabase() {

@@ -127,6 +127,18 @@ export default function WhatsAppSettings() {
       setSavingAi(false);
     }
   };
+  const saveMatchCustomerLanguage = async (enabled: boolean) => {
+    setSavingAi(true);
+    try {
+      await updateWorkspaceAiSettings(workspaceId, { match_customer_language: enabled });
+      await queryClient.invalidateQueries({ queryKey: ["workspace-ai-settings", workspaceId] });
+      toast.success(enabled ? "Customer-language matching enabled" : "Customer-language matching disabled");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Unable to save AI settings");
+    } finally {
+      setSavingAi(false);
+    }
+  };
   const { data: lastEvent } = useLastWhatsAppWebhookEvent(workspaceId);
   const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
   const wabaId = numbers.find((n) => n.waba_id)?.waba_id ?? null;
@@ -293,6 +305,29 @@ export default function WhatsAppSettings() {
           </p>
           <p className="text-xs text-muted-foreground">
             Counts towards this workspace&apos;s monthly Inbox AI usage limit.
+          </p>
+          {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Customer language</CardTitle></CardHeader>
+        <CardContent className="space-y-3 pt-0">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={aiSettings?.match_customer_language ?? false}
+              disabled={!canManageWorkspace || savingAi}
+              onChange={(e) => saveMatchCustomerLanguage(e.target.checked)}
+            />
+            <span>Match the customer&apos;s language</span>
+          </label>
+          <p className="text-sm text-muted-foreground">
+            When enabled, StabiFlow may adapt AI WhatsApp replies to the customer&apos;s language and conversational style while preserving the original meaning, amounts, names, links and business information.
+          </p>
+          <p className="text-xs text-muted-foreground">
+            AI localization may contain language mistakes. The original StabiFlow reply remains the source of truth. Counts towards this workspace&apos;s monthly Inbox AI usage limit.
           </p>
           {!canManageWorkspace && <p className="text-xs text-muted-foreground">Only workspace owners and admins can change this.</p>}
         </CardContent>

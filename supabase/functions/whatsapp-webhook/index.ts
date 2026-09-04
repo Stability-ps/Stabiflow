@@ -50,6 +50,7 @@ import {
   wrapTranscriptForAi,
   type VoiceMessageFacts,
 } from "../_shared/inbox/voiceTranscription.ts";
+import { localizeReply, LOCALIZATION_FEATURE, shouldLocalizeReply } from "../_shared/inbox/replyLocalization.ts";
 import { evaluateIntake, mergeExtractedFields, readIntakePayload, resolveIntakeCompletion, writeIntakePayload } from "../_shared/inbox/intakeSchema.ts";
 import { resolveActiveIntakeSchema } from "../_shared/inbox/intakeResolve.ts";
 import { ALLOWED_INBOUND_MEDIA_MIME_TYPES, downloadWhatsAppMedia, type WhatsAppSendCredential } from "../_shared/inbox/whatsappSend.ts";
@@ -248,13 +249,14 @@ async function recordInboxAiUsage(
   usage: AiUsage,
   latencyMs: number,
   status: "success" | "error" | "blocked_quota",
+  feature: string = INBOX_AI_FEATURE,
 ) {
   try {
     await sb.from("ai_usage_events").insert({
       workspace_id: workspaceId,
       conversation_id: null,
       user_id: null,
-      feature: "whatsapp_inbox_ai",
+      feature,
       provider: "openai",
       model,
       input_tokens: Math.max(0, usage.inputTokens || 0),
@@ -338,7 +340,60 @@ async function resolveInboxAiBudget(
   return decideInboxAiBudget({ workspaceUsed: inboxUsed, workspaceCap: inboxCap, platformUsed, platformCeiling });
 }
 
-const INBOX_AI_BUDGET_FEATURES = [INBOX_AI_FEATURE, INBOX_VOICE_FEATURE];
+// Phase 13: the reply-localization pass draws on the SAME per-workspace
+// monthly Inbox AI allowance - it is not a second budget.
+const INBOX_AI_BUDGET_FEATURES = [INBOX_AI_FEATURE, INBOX_VOICE_FEATURE, LOCALIZATION_FEATURE];
+
+const LOCALIZATION_TIMEOUT_MS = 8000;
+
+// Phase 13: one OPTIONAL presentation-only pass over an already-approved
+// AI reply. Never changes meaning/intake/handoff; on the workspace opt-in
+// being off, human control, an exhausted budget, or ANY provider/
+// validation failure it returns the authoritative reply verbatim. The
+// deterministic guards live in _shared/inbox/replyLocalization.ts.
+async function maybeLocalizeReply(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  conversation: { status?: unknown; ai_enabled?: unknown },
+  opts: {
+    matchCustomerLanguageEnabled: boolean;
+    budgetAllowed: boolean;
+    authoritativeReply: string;
+    customerContext: string;
+    apiKey: string;
+    model: string;
+  },
+): Promise<string> {
+  const gateOk = shouldLocalizeReply({
+    matchCustomerLanguageEnabled: opts.matchCustomerLanguageEnabled,
+    aiEnabled: conversation.ai_enabled === true,
+    conversationStatus: typeof conversation.status === "string" ? conversation.status : "",
+    aiReplyGenerated: true,
+  });
+  if (!gateOk) return opts.authoritativeReply;
+  // Over the monthly Inbox AI allowance -> skip localization, send the
+  // authoritative reply. Reuses the reply's own budget decision (computed
+  // moments ago in this same event); one extra call's drift is within the
+  // documented soft-ceiling overshoot - no conflicting quota policy.
+  if (!opts.budgetAllowed) return opts.authoritativeReply;
+
+  const startedAt = Date.now();
+  const outcome = await localizeReply(
+    { apiKey: opts.apiKey, model: opts.model },
+    { authoritativeReply: opts.authoritativeReply, customerContext: opts.customerContext, timeoutMs: LOCALIZATION_TIMEOUT_MS },
+  );
+  const providerResponded = outcome.status === "localized" || outcome.usage.inputTokens > 0 || outcome.usage.outputTokens > 0;
+  await recordInboxAiUsage(
+    sb,
+    workspaceId,
+    opts.model,
+    outcome.usage,
+    Date.now() - startedAt,
+    providerResponded ? "success" : "error",
+    LOCALIZATION_FEATURE,
+  );
+  return outcome.text;
+}
 
 async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageEvent) {
   const { data: numberRow } = await sb
@@ -667,8 +722,15 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   // considered - old documents are never re-sent (multimodalMedia.ts
   // policy). Requires the workspace's explicit opt-in AND a model that can
   // read image/PDF; anything else stays text-only and honest.
-  const { data: aiSettings } = await sb.from("workspace_settings").select("ai_multimodal_enabled").eq("workspace_id", numberRow.workspace_id).maybeSingle();
+  const { data: aiSettings } = await sb.from("workspace_settings").select("ai_multimodal_enabled, match_customer_language").eq("workspace_id", numberRow.workspace_id).maybeSingle();
   const multimodalEnabled = aiSettings?.ai_multimodal_enabled === true;
+  // Phase 13: bounded recent customer-language context for the optional
+  // localization pass - customer words only, no CRM/media/phone data.
+  const matchCustomerLanguage = aiSettings?.match_customer_language === true;
+  const customerLanguageContext = [
+    ...history.filter((h) => h.direction === "inbound").slice(-3).map((h) => h.content || ""),
+    inboundTurnText,
+  ].filter(Boolean).join("  |  ").slice(0, 600);
   const currentMediaMsg: AiMediaMessage | null = (event.kind === "image" || event.kind === "document")
     ? {
         id: inboundMessage?.id ?? "",
@@ -767,7 +829,16 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     let structuredAnswer = cleanReply(sr.reply);
     if (containsInventedPersonalIdentity(structuredAnswer)) structuredAnswer = "I'm an AI-assisted assistant here to help. How can we help you today?";
     if (containsFalseActionClaim(structuredAnswer)) structuredAnswer = "Thanks for the details - a team member will follow up on this.";
-    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, structuredAnswer || "Thanks for reaching out - how can we help?");
+    const structuredFinal = structuredAnswer || "Thanks for reaching out - how can we help?";
+    const structuredToSend = await maybeLocalizeReply(sb, numberRow.workspace_id, conversation, {
+      matchCustomerLanguageEnabled: matchCustomerLanguage,
+      budgetAllowed: budget.allowed,
+      authoritativeReply: structuredFinal,
+      customerContext: customerLanguageContext,
+      apiKey: openaiKey,
+      model: openaiModel,
+    });
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, structuredToSend);
     return;
   }
 
@@ -801,7 +872,16 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   let answer = cleanReply(ai.reply);
   if (containsInventedPersonalIdentity(answer)) answer = "I'm an AI-assisted assistant here to help. How can we help you today?";
   if (containsFalseActionClaim(answer)) answer = "Thanks for the details - a team member will follow up on this.";
-  await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, answer || "Thanks for reaching out - how can we help?");
+  const legacyFinal = answer || "Thanks for reaching out - how can we help?";
+  const legacyToSend = await maybeLocalizeReply(sb, numberRow.workspace_id, conversation, {
+    matchCustomerLanguageEnabled: matchCustomerLanguage,
+    budgetAllowed: budget.allowed,
+    authoritativeReply: legacyFinal,
+    customerContext: customerLanguageContext,
+    apiKey: openaiKey,
+    model: openaiModel,
+  });
+  await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, legacyToSend);
 }
 
 Deno.serve(async (req: Request) => {
