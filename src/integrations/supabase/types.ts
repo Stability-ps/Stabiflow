@@ -3117,6 +3117,71 @@ export type Database = {
           },
         ]
       }
+      legal_acceptances: {
+        Row: {
+          accepted_at: string
+          created_at: string
+          document_type: string
+          document_version: string
+          id: string
+          policy_url: string | null
+          source: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          accepted_at?: string
+          created_at?: string
+          document_type: string
+          document_version: string
+          id?: string
+          policy_url?: string | null
+          source?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          accepted_at?: string
+          created_at?: string
+          document_type?: string
+          document_version?: string
+          id?: string
+          policy_url?: string | null
+          source?: string
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_acceptances_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      legal_document_versions: {
+        Row: {
+          current_version: string
+          document_type: string
+          effective_at: string
+          updated_at: string
+        }
+        Insert: {
+          current_version: string
+          document_type: string
+          effective_at: string
+          updated_at?: string
+        }
+        Update: {
+          current_version?: string
+          document_type?: string
+          effective_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string | null
@@ -4584,6 +4649,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_current_legal_terms: {
+        Args: never
+        Returns: {
+          accepted_at: string
+          document_type: string
+          document_version: string
+        }[]
+      }
       accept_workspace_invitation: {
         Args: { p_token: string }
         Returns: string

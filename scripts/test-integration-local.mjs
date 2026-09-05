@@ -47,6 +47,7 @@ const DEFAULT_FILES = [
   "supabase/tests/whatsapp-reply-localization.test.ts",
   "supabase/tests/inbox-search-pagination.test.ts",
   "supabase/tests/whatsapp-webhook-diagnostics.test.ts",
+  "supabase/tests/legal-acceptance-tracking.test.ts",
 ];
 
 function localEnvFromSupabase() {

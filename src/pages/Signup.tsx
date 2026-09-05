@@ -31,7 +31,15 @@ export default function Signup() {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      // legal_acceptance_requested is a durable marker only - it does NOT
+      // carry a version or timestamp (those can never come from the
+      // browser). It just tells the post-login bootstrap in useAuth.tsx
+      // "this account checked the consent box at signup", so the server
+      // can call accept_current_legal_terms() (which records the DB's own
+      // current versions + clock) as soon as a session exists - whether
+      // that's immediately (email confirmation off) or after the user
+      // clicks the confirmation link (email confirmation on).
+      options: { data: { full_name: fullName, legal_acceptance_requested: true } },
     });
     setSubmitting(false);
     if (error) {

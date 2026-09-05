@@ -1,8 +1,9 @@
 import { LegalLayout } from "@/pages/legal/LegalLayout";
+import { TERMS_OF_SERVICE_VERSION } from "@/lib/legalDocuments";
 
 export default function Terms() {
   return (
-    <LegalLayout title="Terms of Service" effectiveDate="2026-08-28">
+    <LegalLayout title="Terms of Service" effectiveDate={TERMS_OF_SERVICE_VERSION}>
       <section>
         <p>
           These Terms of Service govern access to and use of StabiFlow. StabiFlow is a SaaS platform provided

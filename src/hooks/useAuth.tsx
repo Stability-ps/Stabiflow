@@ -16,6 +16,35 @@ export type WorkspaceMembership = {
 
 const CURRENT_WORKSPACE_STORAGE_KEY = "stabiflow.currentWorkspaceId";
 
+/**
+ * Signup sets user_metadata.legal_acceptance_requested = true (see
+ * Signup.tsx) the moment someone checks the consent box and account
+ * creation succeeds - regardless of whether email confirmation means a
+ * session exists yet. This runs on EVERY authenticated bootstrap (initial
+ * load, sign-in, and the session Supabase establishes right after a user
+ * clicks their confirmation link) and is a no-op unless that marker is
+ * still set, so it naturally covers both "session exists immediately" and
+ * "session only exists after email confirmation" without needing to know
+ * which case applies. accept_current_legal_terms() derives the user
+ * (auth.uid()) and the accepted versions (public.legal_document_versions)
+ * itself - nothing here supplies either. The marker is cleared only after
+ * a confirmed record, so a transient failure just retries at the next
+ * bootstrap (next login/refresh) - no explicit retry loop, and an account
+ * that requested acceptance is never left silently unrecorded.
+ */
+async function maybeRecordLegalAcceptance(user: User) {
+  if (user.user_metadata?.legal_acceptance_requested !== true) return;
+  try {
+    const { error } = await supabase.rpc("accept_current_legal_terms");
+    if (error) throw error;
+    await supabase.auth.updateUser({ data: { legal_acceptance_requested: false } });
+  } catch (err) {
+    // Deliberately no legal document text, version, or other PII - just
+    // enough to notice a systemic failure in ops tooling.
+    console.error("legal acceptance recording failed - will retry on next session bootstrap", err instanceof Error ? err.message : err);
+  }
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -128,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(initialSession);
       setUser(initialSession?.user ?? null);
       if (initialSession?.user) {
+        void maybeRecordLegalAcceptance(initialSession.user);
         loadProfileAndMemberships(initialSession.user.id).finally(() => setLoading(false));
       } else {
         setMembershipsLoading(false);
@@ -140,6 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
       if (nextSession?.user) {
+        void maybeRecordLegalAcceptance(nextSession.user);
         loadProfileAndMemberships(nextSession.user.id);
       } else {
         setProfile(null);
