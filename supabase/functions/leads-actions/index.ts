@@ -1,0 +1,985 @@
+// Staff actions on Leads/Opportunities (Phase E). Same dispatcher shape as
+// inbox-actions (Phase D): ONE endpoint, one `action` field, every action
+// server-side so it gets the same permission check, workspace-membership
+// cross-check, and audit trail into the shared workspace_activity_log -
+// never a forked audit table, never a direct client write for anything
+// that has cross-cutting business rules (duplicate detection, workspace
+// consistency, won/lost semantics).
+//
+// Reference: Acapolite's "Open Request" workflow (opening a structured
+// record from a conversation, staff ownership, notes, status changes,
+// audit logging, resolved/open lifecycle) - generalized here into a
+// source-agnostic Lead/Opportunity model, never its tax-specific request
+// schema or terminology.
+import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { normalizePhoneNumber } from "../_shared/phone.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
+import type { EventType } from "../_shared/automations/taxonomy.ts";
+import { intakeFieldsView, resolveSummaryAndIntake, safeTypedLeadFields, sanitizeIntake } from "../_shared/inbox/leadContext.ts";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const VALID_ACTIONS = new Set([
+  "check_duplicates",
+  "create_from_conversation",
+  "create_manual",
+  "link_conversation",
+  "sign_lead_attachment",
+  "assign",
+  "set_qualification",
+  "move_stage",
+  "mark_lead_lost",
+  "reopen_lead",
+  "add_note",
+  "create_opportunity",
+  "move_opportunity_stage",
+  "mark_opportunity_won",
+  "mark_opportunity_lost",
+  "reopen_opportunity",
+  "override_attribution",
+]);
+
+const LEAD_SOURCES = new Set(["whatsapp", "meta", "website", "manual", "referral", "organic", "google_later", "other"]);
+const QUALIFICATION_STATUSES = new Set(["unqualified", "qualifying", "qualified", "not_qualified"]);
+
+// Phase G additive-backfill (never rewrite, never duplicate): the ORIGINAL
+// attribution_events row(s) recorded when a touchpoint first happened get
+// a downstream id filled in as the entity that touchpoint fed progresses
+// through the funnel - occurred_at and every evidence field are untouched.
+async function backfillAttribution(sb: AnySupabaseClient, column: "lead_id" | "opportunity_id" | "customer_id", value: string, matchColumn: "conversation_id" | "lead_id" | "opportunity_id", matchValue: string): Promise<{ error: unknown }> {
+  const { error } = await sb.from("attribution_events").update({ [column]: value }).eq(matchColumn, matchValue).is(column, null);
+  return { error };
+}
+
+async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: string, action: string, targetType: string, targetId: string | null, metadata: Record<string, unknown> = {}) {
+  const { error } = await sb.from("workspace_activity_log").insert({ workspace_id: workspaceId, actor_user_id: actorId, action, target_type: targetType, target_id: targetId, metadata });
+  // A duplicate-key error means this exact logical activity was already
+  // recorded (a retried request, or a concurrent sibling) - the scoped
+  // partial unique index doing its job, not a real failure. Every other
+  // error stays best-effort/silent, matching emitDomainEvent's contract:
+  // activity plumbing must never fail the caller's primary mutation.
+  if (error && !`${error.message ?? ""}`.toLowerCase().includes("duplicate key")) {
+    console.error("logActivity: insert failed", action, error.message);
+  }
+}
+
+async function findDuplicateLeads(sb: AnySupabaseClient, workspaceId: string, phoneNormalized: string | null, conversationId: string | null) {
+  if (!phoneNormalized && !conversationId) return [];
+  const orClauses: string[] = [];
+  if (phoneNormalized) orClauses.push(`phone_normalized.eq.${phoneNormalized}`);
+  if (conversationId) orClauses.push(`created_from_conversation_id.eq.${conversationId}`);
+  const { data } = await sb
+    .from("leads")
+    .select("id, human_reference, contact_name, phone, email, status, created_from_conversation_id")
+    .eq("workspace_id", workspaceId)
+    .or(orClauses.join(","))
+    .limit(5);
+  return data || [];
+}
+
+async function isWorkspaceMember(sb: AnySupabaseClient, workspaceId: string, userId: string): Promise<boolean> {
+  const { data } = await sb.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", userId).maybeSingle();
+  return !!data;
+}
+
+// New leads land in the workspace's default pipeline's first active stage
+// automatically, same as create_opportunity's own fallback - otherwise a
+// lead created with no explicit pipeline can never appear on the Kanban
+// board at all, since nothing in the UI lets a lead join a pipeline for
+// the first time (only move BETWEEN stages once it's already in one).
+//
+// Defensively GUARANTEES a default pipeline exists (via the same
+// authoritative public.ensure_default_pipeline() every other bootstrap
+// path uses) rather than merely reading one - lead creation must never
+// depend on create_workspace()'s own bootstrap or a prior /leads visit
+// having already run. Idempotent and concurrency-safe: two simultaneous
+// lead creations in a brand-new workspace both resolve to the SAME
+// pipeline, never two defaults.
+async function resolveDefaultPipelineFirstStage(sb: AnySupabaseClient, workspaceId: string, createdBy: string): Promise<{ pipelineId: string | null; stageId: string | null }> {
+  const { data: ensured } = await sb.rpc("ensure_default_pipeline", { p_workspace_id: workspaceId, p_created_by: createdBy }).single();
+  const pipelineId = ensured?.pipeline_id ?? null;
+  if (!pipelineId) return { pipelineId: null, stageId: null };
+  const { data: stage } = await sb.from("pipeline_stages").select("id").eq("workspace_id", workspaceId).eq("pipeline_id", pipelineId).eq("is_active", true).order("sort_order", { ascending: true }).limit(1).maybeSingle();
+  return { pipelineId, stageId: stage?.id ?? null };
+}
+
+// --- Phase 2: conversation context -> CRM ----------------------------------
+//
+// The PURE rules live in _shared/inbox/leadContext.ts (unit tested). The
+// two DB helpers below wrap them. Nothing fabricates data, guesses an
+// ambiguous value into a typed column, or copies file bytes.
+
+/** First path segment of an inbox-media object key, normalized to a
+ * canonical lowercase UUID - mirrors public.inbox_storage_path_workspace_id()
+ * so sign_lead_attachment can re-tie a stored path to a workspace before
+ * signing with the service role (which bypasses storage RLS).
+ *
+ * F7: also accepts the hyphenless 32-hex form (Postgres `::uuid` does), so
+ * the signer's accept set is a superset-safe match for the trigger's - the
+ * signer never rejects a path the trigger already tied to this workspace.
+ * Exotic uuid text forms (braces, urn:) are intentionally NOT mirrored:
+ * they cannot appear in an inbox-media object key the webhook wrote. */
+function deriveWorkspaceFromInboxPath(path: unknown): string | null {
+  const first = typeof path === "string" ? path.split("/")[0].toLowerCase() : "";
+  if (UUID_RE.test(first)) return first;
+  if (/^[0-9a-f]{32}$/.test(first)) {
+    return `${first.slice(0, 8)}-${first.slice(8, 12)}-${first.slice(12, 16)}-${first.slice(16, 20)}-${first.slice(20)}`;
+  }
+  return null;
+}
+
+/** Applies resolveSummaryAndIntake()'s decision to an EXISTING lead.
+ * Returns the decision flags plus any write error (never swallowed). */
+async function applyConversationContext(
+  sb: AnySupabaseClient,
+  lead: { id: string; summary: string | null; intake: unknown },
+  conversationAiSummary: string | null,
+  conversationIntake: Record<string, unknown>,
+  opts: { overwriteSummary?: boolean } = {},
+): Promise<{ summary_copied: boolean; summary_overwritten: boolean; summary_skipped: boolean; intake_new_keys: string[]; intake_changed: boolean; error: unknown }> {
+  const decision = resolveSummaryAndIntake(lead, conversationAiSummary, conversationIntake, opts);
+  let error: unknown = null;
+  if (Object.keys(decision.patch).length > 0) {
+    const res = await sb.from("leads").update(decision.patch).eq("id", lead.id);
+    error = res.error;
+  }
+  return {
+    summary_copied: decision.summary_copied,
+    summary_overwritten: decision.summary_overwritten,
+    summary_skipped: decision.summary_skipped,
+    intake_new_keys: decision.intake_new_keys,
+    intake_changed: decision.intake_changed,
+    error,
+  };
+}
+
+const ATTACHMENT_LINK_BATCH = 200; // rows per insert() call
+const ATTACHMENT_SCAN_LIMIT = 1000; // inbound media messages inspected per call
+
+/** Registers inbound media objects on the conversation against the lead as
+ * REFERENCES (no bytes copied, no re-upload). Deterministic batching: each
+ * call links the next slice of not-yet-linked media, so a retry after a
+ * partial failure finishes the job and a very media-heavy conversation is
+ * completed over successive calls rather than truncated. Idempotent via the
+ * (lead_id, storage_path) unique index. Never swallows an error. */
+async function linkConversationMediaToLead(
+  sb: AnySupabaseClient,
+  workspaceId: string,
+  leadId: string,
+  conversationId: string,
+  actorId: string,
+): Promise<{ linked: number; remaining: number; error: unknown }> {
+  const { data: mediaMessages, error: scanError } = await sb
+    .from("inbox_messages")
+    .select("id, media_storage_path, media_mime_type, media_filename, media_size_bytes, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("workspace_id", workspaceId)
+    .eq("direction", "inbound")
+    .not("media_storage_path", "is", null)
+    .order("created_at", { ascending: true })
+    .limit(ATTACHMENT_SCAN_LIMIT);
+  if (scanError) return { linked: 0, remaining: 0, error: scanError };
+
+  const messages = ((mediaMessages || []) as Array<Record<string, unknown>>)
+    .filter((m) => typeof m.media_storage_path === "string" && (m.media_storage_path as string).length > 0);
+  if (messages.length === 0) return { linked: 0, remaining: 0, error: null };
+
+  const { data: existing, error: existingError } = await sb
+    .from("lead_attachments")
+    .select("storage_path")
+    .eq("lead_id", leadId);
+  if (existingError) return { linked: 0, remaining: 0, error: existingError };
+  const linkedPaths = new Set((existing || []).map((r: { storage_path: string }) => r.storage_path));
+
+  const unlinked = messages.filter((m) => !linkedPaths.has(m.media_storage_path as string));
+  const slice = unlinked.slice(0, ATTACHMENT_LINK_BATCH);
+  const remaining = unlinked.length - slice.length;
+  if (slice.length === 0) return { linked: 0, remaining, error: null };
+
+  const rows = slice.map((m) => ({
+    workspace_id: workspaceId,
+    lead_id: leadId,
+    conversation_id: conversationId,
+    message_id: m.id,
+    storage_bucket: "inbox-media",
+    storage_path: m.media_storage_path,
+    media_mime_type: (m.media_mime_type as string | null) ?? null,
+    media_filename: (m.media_filename as string | null) ?? null,
+    media_size_bytes: (m.media_size_bytes as number | null) ?? null,
+    source: "whatsapp_conversation",
+    received_at: (m.created_at as string | null) ?? null,
+    linked_by: actorId,
+  }));
+
+  // ignoreDuplicates -> ON CONFLICT (lead_id, storage_path) DO NOTHING, so a
+  // concurrent linker racing the same rows is absorbed; a real integrity
+  // failure (bad path/bucket -> 23514) still surfaces here, unswallowed.
+  const { data: inserted, error: insertError } = await sb
+    .from("lead_attachments")
+    .upsert(rows, { onConflict: "lead_id,storage_path", ignoreDuplicates: true })
+    .select("id");
+  if (insertError) return { linked: 0, remaining, error: insertError };
+  return { linked: (inserted || []).length, remaining, error: null };
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
+  }
+  if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
+
+  const token = bearerToken(req);
+  if (!token) return json(req, { error: "Forbidden" }, 403);
+  const callerSb = createCallerClient(token);
+  const actorId = await getCallerUserId(callerSb);
+  if (!actorId) return json(req, { error: "Forbidden" }, 403);
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return json(req, { error: "Invalid JSON body" }, 400);
+  }
+
+  const workspaceId = body.workspace_id;
+  const action = body.action;
+  if (typeof workspaceId !== "string" || !workspaceId) return json(req, { error: "workspace_id is required" }, 400);
+  if (typeof action !== "string" || !VALID_ACTIONS.has(action)) return json(req, { error: "Unknown action" }, 400);
+
+  const serviceSb = createServiceClient();
+  const { data: actorProfile } = await serviceSb.from("profiles").select("full_name").eq("id", actorId).maybeSingle();
+  const actorName = actorProfile?.full_name?.trim() || "Staff";
+  const nowIso = new Date().toISOString();
+
+  // Present only when this call was made BY automations-tick acting on an
+  // automation's behalf (never sent by the browser) - threaded into every
+  // domain event this request causes so loopGuard can see the full
+  // causation chain. See _shared/automations/loopGuard.ts.
+  const automationContext = body._automation_context as { runId: string; automationId: string; correlationId: string; depth: number } | undefined;
+  const workspaceIdStr = workspaceId as string;
+  function emitEvent(eventType: EventType, entityType: string, entityId: string | null, payload: Record<string, unknown>, dedupeKey: string) {
+    return emitDomainEvent(serviceSb, {
+      workspaceId: workspaceIdStr, eventType, entityType, entityId, payload, dedupeKey,
+      causation: automationContext ? { runId: automationContext.runId, automationId: automationContext.automationId, correlationId: automationContext.correlationId, depth: automationContext.depth + 1 } : undefined,
+    });
+  }
+
+  // --- read-only ---------------------------------------------------------
+
+  if (action === "check_duplicates") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.view"))) return json(req, { error: "Forbidden" }, 403);
+    const phoneNormalized = normalizePhoneNumber(typeof body.phone === "string" ? body.phone : null);
+    // F5: conversation_id is interpolated into a PostgREST .or() filter in
+    // findDuplicateLeads - it must be a UUID, never a caller-crafted filter
+    // fragment.
+    const rawConversationId = typeof body.conversation_id === "string" ? body.conversation_id : "";
+    if (rawConversationId && !UUID_RE.test(rawConversationId)) return json(req, { error: "conversation_id must be a valid id" }, 400);
+    const conversationId = rawConversationId || null;
+    const candidates = await findDuplicateLeads(serviceSb, workspaceId, phoneNormalized, conversationId);
+    return json(req, { candidates });
+  }
+
+  // --- lead creation -------------------------------------------------------
+
+  // Idempotent & self-healing (Phase 2 remediation H2 + M1). Every
+  // invocation: resolve the ONE canonical lead for this conversation
+  // (already-linked / a prior partial conversion / genuinely new), then
+  // run each completion step (conversation link, attribution backfill,
+  // context copy, media links, audit) only where it is still missing. A
+  // retry after any partial failure finishes the job; it never creates a
+  // second lead and never claims created:true when a step failed.
+  if (action === "create_from_conversation") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.create"))) return json(req, { error: "Forbidden" }, 403);
+    const conversationId = body.conversation_id;
+    if (typeof conversationId !== "string" || !conversationId) return json(req, { error: "conversation_id is required" }, 400);
+    const force = body.force === true;
+
+    const { data: conversation } = await serviceSb
+      .from("inbox_conversations")
+      .select("id, workspace_id, display_name, phone_number, wa_id, lead_id, ai_summary, intake_payload")
+      .eq("id", conversationId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!conversation) return json(req, { error: "Conversation not found" }, 404);
+
+    // F3: sanitize prototype-pollution keys once, here, so BOTH the initial
+    // insert (intake: conversationIntake) and the merge path store the same
+    // safe shape.
+    const conversationIntake = sanitizeIntake(conversation.intake_payload);
+    const aiSummary = typeof conversation.ai_summary === "string" && conversation.ai_summary.trim() ? conversation.ai_summary.trim().slice(0, 2000) : null;
+    const phoneNormalized = normalizePhoneNumber(conversation.phone_number);
+
+    // 1-4: resolve the canonical lead.
+    let lead: Record<string, unknown> | null = null;
+    let created = false;
+    let typedMapped: string[] = [];
+
+    if (conversation.lead_id) {
+      const { data } = await serviceSb.from("leads").select("*").eq("id", conversation.lead_id).eq("workspace_id", workspaceId).maybeSingle();
+      lead = data ?? null;
+    }
+    if (!lead) {
+      const { data: priorByConversation } = await serviceSb.from("leads").select("*").eq("created_from_conversation_id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+      lead = priorByConversation ?? null;
+    }
+    if (!lead) {
+      if (!force) {
+        const duplicates = await findDuplicateLeads(serviceSb, workspaceId, phoneNormalized, null);
+        if (duplicates.length > 0) return json(req, { duplicates, created: false });
+      }
+      const displayName = conversation.display_name || null;
+      const typed = safeTypedLeadFields(intakeFieldsView(conversationIntake), { contact_name: displayName, email: null, company_name: null, estimated_value: null });
+      const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
+      const insertRes = await serviceSb
+        .from("leads")
+        .insert({
+          workspace_id: workspaceId,
+          contact_name: displayName,
+          phone: conversation.phone_number,
+          phone_normalized: phoneNormalized,
+          source: "whatsapp",
+          created_from_conversation_id: conversationId,
+          created_by: actorId,
+          pipeline_id: defaultPlacement.pipelineId,
+          pipeline_stage_id: defaultPlacement.stageId,
+          summary: aiSummary,
+          intake: conversationIntake,
+          ...typed.patch,
+        })
+        .select("*")
+        .single();
+      if (insertRes.error) {
+        // 23505 on leads_created_from_conversation_id_key: we lost the
+        // concurrent-create race. Adopt the winner and keep going - never
+        // an unhandled 500 for the expected race.
+        if ((insertRes.error as { code?: string }).code === "23505") {
+          const { data: canonical } = await serviceSb.from("leads").select("*").eq("created_from_conversation_id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+          if (!canonical) return json(req, { error: "Unable to create this lead" }, 500);
+          lead = canonical;
+        } else {
+          return json(req, { error: "Unable to create this lead" }, 500);
+        }
+      } else {
+        lead = insertRes.data;
+        created = true;
+        typedMapped = typed.mapped;
+      }
+    }
+    if (!lead) return json(req, { error: "Unable to create this lead" }, 500);
+    const leadId = lead.id as string;
+
+    // 5: ensure conversation -> lead link. Compare-and-set, exactly like
+    // link_conversation: only claim a still-unlinked conversation. If a
+    // concurrent link_conversation / create_from_conversation linked it to
+    // a DIFFERENT lead while this conversion was mid-flight, do NOT
+    // overwrite that winner - stop here (curated 409) BEFORE any
+    // attribution / context / attachment / audit work touches the losing
+    // lead. A lead this call just inserted is left as a harmless unlinked
+    // orphan (dedup detection surfaces it on the next attempt); no risky
+    // cleanup, and the created_from_conversation_id unique index is
+    // untouched. Do NOT report created:true if the link didn't land - a
+    // retry re-enters via priorByConversation and finishes.
+    const linkedThisCall = conversation.lead_id !== leadId;
+    if (linkedThisCall) {
+      const { error: linkError } = await serviceSb
+        .from("inbox_conversations")
+        .update({ lead_id: leadId })
+        .eq("id", conversationId)
+        .eq("workspace_id", workspaceId)
+        .is("lead_id", null);
+      if (linkError) return json(req, { error: "Saved the lead, but linking the conversation didn't finish. Open it again to complete." }, 500);
+      const { data: afterLink } = await serviceSb.from("inbox_conversations").select("lead_id").eq("id", conversationId).maybeSingle();
+      if (afterLink?.lead_id !== leadId) {
+        return json(req, { error: "This conversation was linked to another lead while the conversion was in progress." }, 409);
+      }
+    }
+
+    // 7: attribution backfill (additive, error-checked).
+    const { error: attrError } = await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
+    if (attrError) return json(req, { error: "Saved the lead, but updating attribution didn't finish. Open it again to complete." }, 500);
+
+    // 6: summary / intake context (safe deep merge, error-checked). A
+    // freshly inserted lead already carries both, so this is a no-op there;
+    // it heals a lead that pre-existed this conversation's context.
+    const ctx = await applyConversationContext(
+      serviceSb,
+      { id: leadId, summary: (lead.summary as string | null) ?? null, intake: lead.intake },
+      aiSummary,
+      conversationIntake,
+      {},
+    );
+    if (ctx.error) return json(req, { error: "Saved the lead, but copying the conversation details didn't finish. Open it again to complete." }, 500);
+
+    // 8: media attachment links (batched, error-checked).
+    const media = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
+    if (media.error) return json(req, { error: "Saved the lead, but linking the documents didn't finish. Open it again to complete." }, 500);
+
+    // 9: audit / domain events.
+    const intakeCopied = Object.keys(conversationIntake).length > 0;
+
+    // D-1: announce creation once the conversion FIRST reaches a fully
+    // completed state - not only on the call that INSERTed the lead. Every
+    // step above returns 500 on failure BEFORE this point, so if a prior
+    // attempt failed at link / attribution / context / media, this
+    // (successful) call is the first to get here and must announce. The
+    // gate is "this lead genuinely originated from THIS conversation"
+    // (never a lead that was link_conversation'd in - that lead already
+    // has its own lead.created). Idempotent on retry AND on a concurrent
+    // sibling: domain_events.dedupe_key ('lead.created:<leadId>') and the
+    // partial unique index on workspace_activity_log(lead_created) each
+    // collapse a repeat to one logical row.
+    const isConversationOriginLead = (lead.created_from_conversation_id as string | null) === conversationId;
+    if (isConversationOriginLead) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", leadId, {
+        source: "whatsapp", conversation_id: conversationId,
+        summary_copied: !!aiSummary, intake_copied: intakeCopied, typed_fields_mapped: typedMapped, attachments_linked: media.linked,
+      });
+      await emitEvent("lead.created", "lead", leadId, { entity_id: leadId, source: "whatsapp", conversation_id: conversationId }, `lead.created:${leadId}`);
+    }
+    if (linkedThisCall) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
+    }
+    if ((created && intakeCopied) || ctx.summary_copied || ctx.summary_overwritten || ctx.intake_changed) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", leadId, { conversation_id: conversationId, typed_fields_mapped: typedMapped, intake_new_keys: ctx.intake_new_keys });
+    }
+    if (media.linked > 0) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", leadId, { conversation_id: conversationId, count: media.linked });
+    }
+
+    return json(req, {
+      lead,
+      created,
+      // already_linked: the conversation already pointed at this lead on
+      // entry (nothing to do link-wise). completed_pending: this call
+      // finished a link a prior partial conversion had left undone (F9) -
+      // distinct from a fresh create so the UI can word it correctly.
+      already_linked: !created && !linkedThisCall,
+      completed_pending: !created && linkedThisCall,
+      context: {
+        summary_copied: created ? !!aiSummary : ctx.summary_copied,
+        summary_overwritten: ctx.summary_overwritten,
+        summary_skipped: ctx.summary_skipped,
+        intake_copied: intakeCopied,
+        intake_new_keys: ctx.intake_new_keys,
+        typed_fields_mapped: typedMapped,
+        attachments_linked: media.linked,
+        attachments_remaining: media.remaining,
+      },
+    });
+  }
+
+  if (action === "create_manual") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.create"))) return json(req, { error: "Forbidden" }, 403);
+    const contactName = typeof body.contact_name === "string" ? body.contact_name.trim() : "";
+    const source = body.source;
+    if (!contactName) return json(req, { error: "contact_name is required" }, 400);
+    if (typeof source !== "string" || !LEAD_SOURCES.has(source)) return json(req, { error: "A valid source is required" }, 400);
+    const force = body.force === true;
+    const phoneRaw = typeof body.phone === "string" ? body.phone : null;
+    const phoneNormalized = normalizePhoneNumber(phoneRaw);
+
+    if (phoneNormalized && !force) {
+      const duplicates = await findDuplicateLeads(serviceSb, workspaceId, phoneNormalized, null);
+      if (duplicates.length > 0) return json(req, { duplicates, created: false });
+    }
+
+    const defaultPlacement = await resolveDefaultPipelineFirstStage(serviceSb, workspaceId, actorId);
+    const { data: lead, error: leadError } = await serviceSb
+      .from("leads")
+      .insert({
+        workspace_id: workspaceId,
+        contact_name: contactName,
+        phone: phoneRaw,
+        phone_normalized: phoneNormalized,
+        email: typeof body.email === "string" ? body.email.trim() || null : null,
+        company_name: typeof body.company_name === "string" ? body.company_name.trim() || null : null,
+        source,
+        source_detail: typeof body.source_detail === "string" ? body.source_detail.trim() || null : null,
+        estimated_value: typeof body.estimated_value === "number" ? body.estimated_value : null,
+        created_by: actorId,
+        pipeline_id: defaultPlacement.pipelineId,
+        pipeline_stage_id: defaultPlacement.stageId,
+      })
+      .select("*")
+      .single();
+    if (leadError || !lead) return json(req, { error: "Unable to create this lead" }, 500);
+
+    await logActivity(serviceSb, workspaceId, actorId, "lead_created", "lead", lead.id, { source });
+    await emitEvent("lead.created", "lead", lead.id, { entity_id: lead.id, source }, `lead.created:${lead.id}`);
+    return json(req, { lead, created: true });
+  }
+
+  if (action === "link_conversation") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    const conversationId = body.conversation_id;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    if (typeof conversationId !== "string" || !conversationId) return json(req, { error: "conversation_id is required" }, 400);
+    // Phase 2: default true - carrying context is non-destructive (empty
+    // summary filled, intake deep-merged with existing values winning,
+    // attachments additive). overwrite_summary is the ONE opt-in that can
+    // replace a non-empty lead summary. Both sit behind lead.edit.
+    const applyContext = body.apply_context !== false;
+    const overwriteSummary = body.overwrite_summary === true;
+
+    const { data: lead } = await serviceSb.from("leads").select("id, summary, intake").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+    const { data: conversation } = await serviceSb.from("inbox_conversations").select("id, lead_id, ai_summary, intake_payload").eq("id", conversationId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!conversation) return json(req, { error: "Conversation not found" }, 404);
+
+    // M2: a conversation is never silently moved between leads.
+    if (conversation.lead_id && conversation.lead_id !== leadId) {
+      return json(req, { error: "This conversation is already linked to another lead." }, 409);
+    }
+    const alreadyLinked = conversation.lead_id === leadId;
+
+    if (!alreadyLinked) {
+      // Compare-and-set: only claim an unlinked conversation. If a
+      // concurrent call linked it first, our update matches 0 rows and the
+      // re-check below turns a foreign winner into a 409.
+      const { error: linkErr } = await serviceSb.from("inbox_conversations").update({ lead_id: leadId }).eq("id", conversationId).eq("workspace_id", workspaceId).is("lead_id", null);
+      if (linkErr) return json(req, { error: "Unable to link this conversation" }, 500);
+      const { data: after } = await serviceSb.from("inbox_conversations").select("lead_id").eq("id", conversationId).maybeSingle();
+      if (after?.lead_id && after.lead_id !== leadId) {
+        return json(req, { error: "This conversation is already linked to another lead." }, 409);
+      }
+    }
+
+    const { error: attrErr } = await backfillAttribution(serviceSb, "lead_id", leadId, "conversation_id", conversationId);
+    if (attrErr) return json(req, { error: "Linked the conversation, but updating attribution didn't finish. Try again to complete." }, 500);
+    if (!alreadyLinked) {
+      await logActivity(serviceSb, workspaceId, actorId, "lead_linked_conversation", "lead", leadId, { conversation_id: conversationId });
+    }
+
+    let context: Record<string, unknown> | null = null;
+    if (applyContext) {
+      const ctx = await applyConversationContext(
+        serviceSb,
+        lead as { id: string; summary: string | null; intake: unknown },
+        typeof conversation.ai_summary === "string" ? conversation.ai_summary : null,
+        sanitizeIntake(conversation.intake_payload), // F3
+        { overwriteSummary },
+      );
+      if (ctx.error) return json(req, { error: "Linked the conversation, but copying its details didn't finish. Try again to complete." }, 500);
+      const media = await linkConversationMediaToLead(serviceSb, workspaceId, leadId, conversationId, actorId);
+      if (media.error) return json(req, { error: "Linked the conversation, but linking the documents didn't finish. Try again to complete." }, 500);
+      context = {
+        summary_copied: ctx.summary_copied,
+        summary_overwritten: ctx.summary_overwritten,
+        summary_skipped: ctx.summary_skipped,
+        intake_new_keys: ctx.intake_new_keys,
+        attachments_linked: media.linked,
+        attachments_remaining: media.remaining,
+      };
+      if (ctx.summary_copied || ctx.summary_overwritten || ctx.intake_changed) {
+        await logActivity(serviceSb, workspaceId, actorId, "lead_intake_copied", "lead", leadId, {
+          conversation_id: conversationId, summary_overwritten: ctx.summary_overwritten, intake_new_keys: ctx.intake_new_keys,
+        });
+      }
+      if (media.linked > 0) {
+        await logActivity(serviceSb, workspaceId, actorId, "lead_attachments_linked", "lead", leadId, { conversation_id: conversationId, count: media.linked });
+      }
+    }
+
+    return json(req, { ok: true, already_linked: alreadyLinked, context });
+  }
+
+  // Read-only: mint a short-lived signed URL for a lead attachment. The
+  // lead_attachments row is a REFERENCE, not authority - the whole chain
+  // (bucket, path->workspace, lead, conversation, source message) is
+  // re-resolved against workspaceId before signing, because the service
+  // role bypasses storage RLS. lead.attachment.view is required (NOT
+  // lead.view - a lead viewer without it must not retrieve raw customer
+  // documents).
+  if (action === "sign_lead_attachment") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.attachment.view"))) {
+      return json(req, { error: "You don't have permission to open lead documents." }, 403);
+    }
+    const attachmentId = body.attachment_id;
+    if (typeof attachmentId !== "string" || !attachmentId) return json(req, { error: "attachment_id is required" }, 400);
+
+    const { data: attachment } = await serviceSb
+      .from("lead_attachments")
+      .select("id, workspace_id, lead_id, conversation_id, message_id, storage_bucket, storage_path")
+      .eq("id", attachmentId)
+      .eq("workspace_id", workspaceId)
+      .maybeSingle();
+    if (!attachment) return json(req, { error: "Attachment not found" }, 404);
+
+    // F8: the bucket / path->workspace / message-media checks below are
+    // belt-and-suspenders - the CHECK constraint pins storage_bucket and
+    // the lead_attachments_validate_workspace trigger already blocks any
+    // row whose path resolves elsewhere or disagrees with its source
+    // message (INSERT *and* UPDATE, even from service-role code). They are
+    // kept so a signed URL is never minted from a row that a future schema
+    // change, a manual patch, or a post-link message mutation slipped past.
+    if (attachment.storage_bucket !== "inbox-media") return json(req, { error: "Attachment not found" }, 404);
+    const pathWorkspace = deriveWorkspaceFromInboxPath(attachment.storage_path);
+    if (!pathWorkspace || pathWorkspace !== workspaceId.toLowerCase()) return json(req, { error: "Attachment not found" }, 404);
+
+    const { data: leadRow } = await serviceSb.from("leads").select("id").eq("id", attachment.lead_id).eq("workspace_id", workspaceId).maybeSingle();
+    if (!leadRow) return json(req, { error: "Attachment not found" }, 404);
+
+    if (attachment.conversation_id) {
+      const { data: conv } = await serviceSb.from("inbox_conversations").select("id").eq("id", attachment.conversation_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (!conv) return json(req, { error: "Attachment not found" }, 404);
+    }
+    if (attachment.message_id) {
+      const { data: msg } = await serviceSb.from("inbox_messages").select("id, media_storage_path").eq("id", attachment.message_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (!msg) return json(req, { error: "This document is no longer available." }, 404);
+      if (msg.media_storage_path !== attachment.storage_path) return json(req, { error: "Attachment not found" }, 404);
+    }
+
+    const { data: signed, error } = await serviceSb.storage.from("inbox-media").createSignedUrl(attachment.storage_path, 300);
+    if (error || !signed?.signedUrl) return json(req, { error: "Unable to open this file" }, 502);
+    return json(req, { url: signed.signedUrl });
+  }
+
+  // --- assignment ------------------------------------------------------------
+
+  if (action === "assign") {
+    const targetType = body.target_type;
+    const targetId = body.target_id;
+    const staffId = body.staff_id;
+    if (targetType !== "lead" && targetType !== "opportunity") return json(req, { error: "target_type must be 'lead' or 'opportunity'" }, 400);
+    if (typeof targetId !== "string" || !targetId) return json(req, { error: "target_id is required" }, 400);
+    if (typeof staffId !== "string" || !staffId) return json(req, { error: "staff_id is required" }, 400);
+
+    const requiredPermission = targetType === "lead" ? "lead.assign" : "opportunity.edit";
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, requiredPermission))) return json(req, { error: "Forbidden" }, 403);
+    if (!(await isWorkspaceMember(serviceSb, workspaceId, staffId))) return json(req, { error: "That person is not a member of this workspace" }, 400);
+
+    const table = targetType === "lead" ? "leads" : "opportunities";
+    const { data: target } = await serviceSb.from(table).select("id").eq("id", targetId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!target) return json(req, { error: `${targetType === "lead" ? "Lead" : "Opportunity"} not found` }, 404);
+
+    const { error } = await serviceSb.from(table).update({ assigned_to: staffId }).eq("id", targetId);
+    if (error) return json(req, { error: "Unable to assign this record" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, `${targetType}_assigned`, targetType, targetId, { staff_id: staffId });
+    return json(req, { ok: true });
+  }
+
+  // --- qualification / stage / lost / reopen (lead) ---------------------------
+
+  if (action === "set_qualification") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    const qualificationStatus = body.qualification_status;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    if (typeof qualificationStatus !== "string" || !QUALIFICATION_STATUSES.has(qualificationStatus)) return json(req, { error: "A valid qualification_status is required" }, 400);
+    const qualificationReason = typeof body.qualification_reason === "string" ? body.qualification_reason.trim() : "";
+    if (qualificationStatus === "not_qualified" && !qualificationReason) {
+      return json(req, { error: "A reason is required when marking a lead not qualified" }, 400);
+    }
+
+    const { data: lead } = await serviceSb.from("leads").select("id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+
+    const { error } = await serviceSb.from("leads").update({
+      qualification_status: qualificationStatus,
+      qualification_notes: typeof body.qualification_notes === "string" ? body.qualification_notes.trim() || null : undefined,
+      qualification_reason: qualificationReason || null,
+      estimated_value: typeof body.estimated_value === "number" ? body.estimated_value : undefined,
+    }).eq("id", leadId);
+    if (error) return json(req, { error: "Unable to update qualification" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "lead_qualification_changed", "lead", leadId, { qualification_status: qualificationStatus });
+    if (qualificationStatus === "qualified") {
+      await emitEvent("lead.qualified", "lead", leadId, { entity_id: leadId, qualification_status: qualificationStatus }, `lead.qualified:${leadId}:${nowIso}`);
+    }
+    return json(req, { ok: true });
+  }
+
+  if (action === "move_stage") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    const pipelineId = body.pipeline_id;
+    const pipelineStageId = body.pipeline_stage_id;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    if (typeof pipelineId !== "string" || !pipelineId) return json(req, { error: "pipeline_id is required" }, 400);
+    if (typeof pipelineStageId !== "string" || !pipelineStageId) return json(req, { error: "pipeline_stage_id is required" }, 400);
+
+    const { data: lead } = await serviceSb.from("leads").select("id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+    const { data: stage } = await serviceSb.from("pipeline_stages").select("id").eq("id", pipelineStageId).eq("workspace_id", workspaceId).eq("pipeline_id", pipelineId).maybeSingle();
+    if (!stage) return json(req, { error: "That stage does not belong to this workspace/pipeline" }, 400);
+
+    const { error } = await serviceSb.from("leads").update({ pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId }).eq("id", leadId);
+    if (error) return json(req, { error: "Unable to move this lead" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "lead_stage_changed", "lead", leadId, { pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId });
+    await emitEvent("lead.stage_changed", "lead", leadId, { entity_id: leadId, pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId }, `lead.stage_changed:${leadId}:${pipelineStageId}:${nowIso}`);
+    return json(req, { ok: true });
+  }
+
+  if (action === "mark_lead_lost") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    const { data: lead } = await serviceSb.from("leads").select("id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+
+    const { error } = await serviceSb.from("leads").update({
+      status: "lost",
+      lost_at: nowIso,
+      lost_reason: typeof body.lost_reason === "string" ? body.lost_reason.trim() || null : null,
+    }).eq("id", leadId);
+    if (error) return json(req, { error: "Unable to mark this lead lost" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "lead_marked_lost", "lead", leadId, {});
+    return json(req, { ok: true });
+  }
+
+  if (action === "reopen_lead") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    const { data: lead } = await serviceSb.from("leads").select("id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+
+    const { error } = await serviceSb.from("leads").update({ status: "active", lost_at: null }).eq("id", leadId);
+    if (error) return json(req, { error: "Unable to reopen this lead" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "lead_reopened", "lead", leadId, {});
+    return json(req, { ok: true });
+  }
+
+  // --- notes -------------------------------------------------------------
+
+  if (action === "add_note") {
+    const targetType = body.target_type;
+    const targetId = body.target_id;
+    const note = typeof body.note === "string" ? body.note.trim() : "";
+    if (targetType !== "lead" && targetType !== "opportunity") return json(req, { error: "target_type must be 'lead' or 'opportunity'" }, 400);
+    if (typeof targetId !== "string" || !targetId) return json(req, { error: "target_id is required" }, 400);
+    if (!note || note.length > 2000) return json(req, { error: "Note must be between 1 and 2000 characters" }, 400);
+
+    const requiredPermission = targetType === "lead" ? "lead.edit" : "opportunity.edit";
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, requiredPermission))) return json(req, { error: "Forbidden" }, 403);
+
+    const table = targetType === "lead" ? "leads" : "opportunities";
+    const { data: target } = await serviceSb.from(table).select("id").eq("id", targetId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!target) return json(req, { error: `${targetType === "lead" ? "Lead" : "Opportunity"} not found` }, 404);
+
+    const { error } = await serviceSb.from("crm_notes").insert({ workspace_id: workspaceId, target_type: targetType, target_id: targetId, author_id: actorId, author_name: actorName, body: note });
+    if (error) return json(req, { error: "Unable to save this note" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "note_added", targetType, targetId, {});
+    return json(req, { ok: true });
+  }
+
+  // --- opportunities -------------------------------------------------------
+
+  if (action === "create_opportunity") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "opportunity.create"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    if (!title) return json(req, { error: "title is required" }, 400);
+
+    const { data: lead } = await serviceSb.from("leads").select("id, pipeline_id, pipeline_stage_id").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+
+    // F4: validate CALLER-SUPPLIED pipeline / stage / owner against this
+    // workspace up front and return a clean 400 - do not let a cross-
+    // workspace id fall through to the DB trigger and surface as a 500.
+    // (Values derived from `lead` are already workspace-trusted.)
+    const bodyAssignedTo = typeof body.assigned_to === "string" ? body.assigned_to : null;
+    if (bodyAssignedTo && !(await isWorkspaceMember(serviceSb, workspaceId, bodyAssignedTo))) {
+      return json(req, { error: "That person is not a member of this workspace" }, 400);
+    }
+    if (typeof body.pipeline_id === "string") {
+      const { data: p } = await serviceSb.from("pipelines").select("id").eq("id", body.pipeline_id).eq("workspace_id", workspaceId).maybeSingle();
+      if (!p) return json(req, { error: "That pipeline does not belong to this workspace" }, 400);
+    }
+    let pipelineId = typeof body.pipeline_id === "string" ? body.pipeline_id : lead.pipeline_id;
+    let pipelineStageId = typeof body.pipeline_stage_id === "string" ? body.pipeline_stage_id : (pipelineId === lead.pipeline_id ? lead.pipeline_stage_id : null);
+
+    if (!pipelineId) {
+      const { data: defaultPipeline } = await serviceSb.from("pipelines").select("id").eq("workspace_id", workspaceId).eq("is_default", true).maybeSingle();
+      pipelineId = defaultPipeline?.id ?? null;
+      pipelineStageId = null;
+    }
+    if (typeof body.pipeline_stage_id === "string") {
+      const { data: s } = await serviceSb
+        .from("pipeline_stages").select("id")
+        .eq("id", body.pipeline_stage_id).eq("workspace_id", workspaceId)
+        .eq("pipeline_id", pipelineId ?? "00000000-0000-0000-0000-000000000000")
+        .maybeSingle();
+      if (!s) return json(req, { error: "That stage does not belong to this workspace/pipeline" }, 400);
+    }
+
+    const { data: opportunity, error } = await serviceSb
+      .from("opportunities")
+      .insert({
+        workspace_id: workspaceId,
+        lead_id: leadId,
+        pipeline_id: pipelineId,
+        pipeline_stage_id: pipelineStageId,
+        title,
+        description: typeof body.description === "string" ? body.description.trim() || null : null,
+        assigned_to: typeof body.assigned_to === "string" ? body.assigned_to : null,
+        estimated_value: typeof body.estimated_value === "number" ? body.estimated_value : null,
+        created_by: actorId,
+      })
+      .select("*")
+      .single();
+    if (error || !opportunity) return json(req, { error: "Unable to create this opportunity" }, 500);
+    await backfillAttribution(serviceSb, "opportunity_id", opportunity.id, "lead_id", leadId);
+    await logActivity(serviceSb, workspaceId, actorId, "opportunity_created", "opportunity", opportunity.id, { lead_id: leadId });
+    await emitEvent("opportunity.created", "opportunity", opportunity.id, { entity_id: opportunity.id, lead_id: leadId }, `opportunity.created:${opportunity.id}`);
+    return json(req, { opportunity });
+  }
+
+  if (action === "move_opportunity_stage") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "opportunity.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const opportunityId = body.opportunity_id;
+    const pipelineStageId = body.pipeline_stage_id;
+    if (typeof opportunityId !== "string" || !opportunityId) return json(req, { error: "opportunity_id is required" }, 400);
+    if (typeof pipelineStageId !== "string" || !pipelineStageId) return json(req, { error: "pipeline_stage_id is required" }, 400);
+
+    const { data: opportunity } = await serviceSb.from("opportunities").select("id, pipeline_id").eq("id", opportunityId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!opportunity) return json(req, { error: "Opportunity not found" }, 404);
+    const { data: stage } = await serviceSb.from("pipeline_stages").select("id").eq("id", pipelineStageId).eq("workspace_id", workspaceId).eq("pipeline_id", opportunity.pipeline_id).maybeSingle();
+    if (!stage) return json(req, { error: "That stage does not belong to this opportunity's pipeline" }, 400);
+
+    const { error } = await serviceSb.from("opportunities").update({ pipeline_stage_id: pipelineStageId }).eq("id", opportunityId);
+    if (error) return json(req, { error: "Unable to move this opportunity" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "opportunity_stage_changed", "opportunity", opportunityId, { pipeline_stage_id: pipelineStageId });
+    await emitEvent("opportunity.stage_changed", "opportunity", opportunityId, { entity_id: opportunityId, pipeline_stage_id: pipelineStageId }, `opportunity.stage_changed:${opportunityId}:${pipelineStageId}:${nowIso}`);
+    return json(req, { ok: true });
+  }
+
+  if (action === "mark_opportunity_won") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "opportunity.close"))) return json(req, { error: "Forbidden" }, 403);
+    const opportunityId = body.opportunity_id;
+    if (typeof opportunityId !== "string" || !opportunityId) return json(req, { error: "opportunity_id is required" }, 400);
+
+    const { data: opportunity } = await serviceSb.from("opportunities").select("id, status, lead_id").eq("id", opportunityId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!opportunity) return json(req, { error: "Opportunity not found" }, 404);
+    if (opportunity.status !== "open") return json(req, { error: "Only an open opportunity can be marked won" }, 409);
+
+    const { error } = await serviceSb.from("opportunities").update({
+      status: "won",
+      won_at: nowIso,
+      actual_value: typeof body.actual_value === "number" ? body.actual_value : null,
+    }).eq("id", opportunityId);
+    if (error) return json(req, { error: "Unable to mark this opportunity won" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "opportunity_won", "opportunity", opportunityId, {});
+    await emitEvent("opportunity.won", "opportunity", opportunityId, { entity_id: opportunityId, lead_id: opportunity.lead_id }, `opportunity.won:${opportunityId}`);
+
+    let customer = null;
+    if (body.create_customer === true) {
+      const { data: lead } = await serviceSb.from("leads").select("id, contact_name, phone, email, company_name").eq("id", opportunity.lead_id).maybeSingle();
+      const { data: createdCustomer, error: customerError } = await serviceSb
+        .from("customers")
+        .insert({
+          workspace_id: workspaceId,
+          lead_id: opportunity.lead_id,
+          opportunity_id: opportunityId,
+          name: lead?.contact_name || "Unknown",
+          phone: lead?.phone ?? null,
+          email: lead?.email ?? null,
+          company_name: lead?.company_name ?? null,
+          created_by: actorId,
+        })
+        .select("*")
+        .single();
+      if (!customerError && createdCustomer) {
+        customer = createdCustomer;
+        await serviceSb.from("leads").update({ status: "converted", converted_at: nowIso }).eq("id", opportunity.lead_id);
+        await backfillAttribution(serviceSb, "customer_id", createdCustomer.id, "opportunity_id", opportunityId);
+        await logActivity(serviceSb, workspaceId, actorId, "customer_created", "customer", createdCustomer.id, { lead_id: opportunity.lead_id, opportunity_id: opportunityId });
+        await emitEvent("customer.created", "customer", createdCustomer.id, { entity_id: createdCustomer.id, lead_id: opportunity.lead_id, opportunity_id: opportunityId }, `customer.created:${createdCustomer.id}`);
+      } else if (customerError?.code === "23505") {
+        // Idempotent retry: a customer already exists for this opportunity.
+        const { data: existingCustomer } = await serviceSb.from("customers").select("*").eq("opportunity_id", opportunityId).maybeSingle();
+        customer = existingCustomer ?? null;
+      }
+    }
+
+    return json(req, { ok: true, customer });
+  }
+
+  if (action === "mark_opportunity_lost") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "opportunity.close"))) return json(req, { error: "Forbidden" }, 403);
+    const opportunityId = body.opportunity_id;
+    if (typeof opportunityId !== "string" || !opportunityId) return json(req, { error: "opportunity_id is required" }, 400);
+
+    const { data: opportunity } = await serviceSb.from("opportunities").select("id, status").eq("id", opportunityId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!opportunity) return json(req, { error: "Opportunity not found" }, 404);
+    if (opportunity.status !== "open") return json(req, { error: "Only an open opportunity can be marked lost" }, 409);
+
+    const { error } = await serviceSb.from("opportunities").update({
+      status: "lost",
+      lost_at: nowIso,
+      lost_reason: typeof body.lost_reason === "string" ? body.lost_reason.trim() || null : null,
+    }).eq("id", opportunityId);
+    if (error) return json(req, { error: "Unable to mark this opportunity lost" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "opportunity_lost", "opportunity", opportunityId, {});
+    await emitEvent("opportunity.lost", "opportunity", opportunityId, { entity_id: opportunityId }, `opportunity.lost:${opportunityId}`);
+    return json(req, { ok: true });
+  }
+
+  // --- manual attribution override (Phase G) ---------------------------------
+  // "Never silently rewrite historical attribution" - this APPENDS a new
+  // attribution_events row (attribution_method='manual', confidence='exact'
+  // since a human is making an explicit, deliberate call) rather than
+  // editing any existing row. The previous best-known source is recorded in
+  // metadata for the explainability requirement, and a workspace_activity_log
+  // entry captures actor/reason - manual overrides require attribution.manage
+  // (stronger than the broad attribution.view every staff role gets).
+  if (action === "override_attribution") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "attribution.manage"))) return json(req, { error: "Forbidden" }, 403);
+    const targetType = body.target_type;
+    const targetId = body.target_id;
+    const newSource = typeof body.source === "string" ? body.source.trim() : "";
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+    if (targetType !== "lead" && targetType !== "opportunity" && targetType !== "customer") {
+      return json(req, { error: "target_type must be 'lead', 'opportunity', or 'customer'" }, 400);
+    }
+    if (typeof targetId !== "string" || !targetId) return json(req, { error: "target_id is required" }, 400);
+    if (!newSource) return json(req, { error: "source is required" }, 400);
+    if (!reason) return json(req, { error: "A reason is required for a manual attribution override" }, 400);
+
+    const table = targetType === "lead" ? "leads" : targetType === "opportunity" ? "opportunities" : "customers";
+    const { data: target } = await serviceSb.from(table).select("id").eq("id", targetId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!target) return json(req, { error: `${targetType} not found` }, 404);
+
+    const { data: previous } = await serviceSb
+      .from("attribution_events")
+      .select("source, attribution_confidence")
+      .eq(`${targetType}_id`, targetId)
+      .order("occurred_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const insertRow: Record<string, unknown> = {
+      workspace_id: workspaceId,
+      event_type: "manual_attribution_override",
+      occurred_at: nowIso,
+      platform: "manual",
+      source_type: "unknown",
+      source: newSource,
+      attribution_method: "manual",
+      attribution_confidence: "exact",
+      attribution_source: "manual",
+      metadata: { override: true, previous_source: previous?.source ?? null, previous_confidence: previous?.attribution_confidence ?? null, reason, overridden_by: actorId },
+    };
+    insertRow[`${targetType}_id`] = targetId;
+
+    const { data: attributionEvent, error } = await serviceSb.from("attribution_events").insert(insertRow).select("id").single();
+    if (error || !attributionEvent) return json(req, { error: "Unable to record this override" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "attribution_overridden", targetType, targetId, { new_source: newSource, reason });
+    await emitEvent("attribution.created", "attribution_event", attributionEvent.id, { entity_id: attributionEvent.id, target_type: targetType, target_id: targetId, source: newSource }, `attribution.created:${attributionEvent.id}`);
+    return json(req, { ok: true });
+  }
+
+  // action === "reopen_opportunity"
+  if (!(await hasWorkspacePermission(callerSb, workspaceId, "opportunity.close"))) return json(req, { error: "Forbidden" }, 403);
+  const opportunityId = body.opportunity_id;
+  if (typeof opportunityId !== "string" || !opportunityId) return json(req, { error: "opportunity_id is required" }, 400);
+  const { data: opportunity } = await serviceSb.from("opportunities").select("id, status").eq("id", opportunityId).eq("workspace_id", workspaceId).maybeSingle();
+  if (!opportunity) return json(req, { error: "Opportunity not found" }, 404);
+  if (opportunity.status === "open") return json(req, { error: "This opportunity is already open" }, 409);
+
+  const { error } = await serviceSb.from("opportunities").update({ status: "open", won_at: null, lost_at: null, lost_reason: null }).eq("id", opportunityId);
+  if (error) return json(req, { error: "Unable to reopen this opportunity" }, 500);
+  await logActivity(serviceSb, workspaceId, actorId, "opportunity_reopened", "opportunity", opportunityId, {});
+  return json(req, { ok: true });
+});

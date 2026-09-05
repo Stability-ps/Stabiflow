@@ -25,9 +25,13 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
     campaign.facebook_page_id ? sb.from("workspace_facebook_pages").select("is_active").eq("id", campaign.facebook_page_id).maybeSingle() : Promise.resolve({ data: null }),
     campaign.instagram_account_id ? sb.from("workspace_instagram_accounts").select("is_active").eq("id", campaign.instagram_account_id).maybeSingle() : Promise.resolve({ data: null }),
     campaign.draft_creative_id
-      ? sb.from("ad_creatives").select("primary_text, cta, destination_url, media_asset_id, platform_variant_id").eq("id", campaign.draft_creative_id).maybeSingle()
+      ? sb.from("ad_creatives").select("primary_text, cta, destination_url, media_asset_id, platform_variant_id, whatsapp_number_id").eq("id", campaign.draft_creative_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+
+  const { data: whatsappNumber } = creativeRow?.whatsapp_number_id
+    ? await sb.from("workspace_whatsapp_numbers").select("is_active").eq("id", creativeRow.whatsapp_number_id).maybeSingle()
+    : { data: null };
 
   let mediaWidthPx: number | null = null;
   let mediaHeightPx: number | null = null;
@@ -52,7 +56,7 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
       dailyBudgetMinorUnits: (campaign.daily_budget_minor_units as number) ?? null,
       lifetimeBudgetMinorUnits: (campaign.lifetime_budget_minor_units as number) ?? null,
       currency: campaign.currency as string,
-      startAt: campaign.start_at as string,
+      startAt: (campaign.start_at as string | null) ?? null, // null = "Start now"
       endAt: (campaign.end_at as string) ?? null,
       draftCreativeId: (campaign.draft_creative_id as string) ?? null,
       facebookPageId: (campaign.facebook_page_id as string) ?? null,
@@ -70,8 +74,10 @@ export async function loadReadinessInput(sb: AnySupabaseClient, campaign: Record
           mediaWidthPx,
           mediaHeightPx,
           mediaMimeType,
+          whatsappNumberId: creativeRow.whatsapp_number_id ?? null,
         }
       : null,
+    whatsappNumber: whatsappNumber ? { isActive: whatsappNumber.is_active } : null,
     tokenHealthy: null,
   };
 }

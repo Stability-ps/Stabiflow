@@ -27,7 +27,7 @@ export type ReadinessInput = {
     dailyBudgetMinorUnits: number | null;
     lifetimeBudgetMinorUnits: number | null;
     currency: string;
-    startAt: string;
+    startAt: string | null; // null = "Start now" (immediate publish)
     endAt: string | null;
     draftCreativeId: string | null;
     facebookPageId: string | null;
@@ -44,8 +44,15 @@ export type ReadinessInput = {
     mediaWidthPx: number | null;
     mediaHeightPx: number | null;
     mediaMimeType: string | null;
+    whatsappNumberId: string | null;
   } | null;
+  whatsappNumber: { isActive: boolean } | null;
   tokenHealthy: boolean | null; // null = not checked (readiness check without a live provider call)
+  // Injected clock, for deterministic tests. The readiness check is run
+  // AGAIN by ad-campaigns-publish immediately before a real publish, so a
+  // schedule that has gone stale while the page sat open is rejected at
+  // that point using the real current time.
+  now?: Date;
 };
 
 // Meta's documented minimum for a standard feed image ad. Not exhaustive
@@ -101,8 +108,9 @@ export function checkCampaignReadiness(input: ReadinessInput): ReadinessIssue[] 
     dailyBudgetMinorUnits: input.campaign.dailyBudgetMinorUnits,
     lifetimeBudgetMinorUnits: input.campaign.lifetimeBudgetMinorUnits,
     currency: input.campaign.currency,
-    startAt: new Date(input.campaign.startAt),
+    startAt: input.campaign.startAt ? new Date(input.campaign.startAt) : null,
     endAt: input.campaign.endAt ? new Date(input.campaign.endAt) : null,
+    now: input.now,
   });
   if (!budgetValidation.valid) {
     for (const issue of budgetValidation.issues) push("invalid_budget", issue);
@@ -118,6 +126,13 @@ export function checkCampaignReadiness(input: ReadinessInput): ReadinessIssue[] 
     }
     if (input.campaign.destinationType === "website" && !input.creative.destinationUrl) {
       push("missing_destination_url", "A destination URL is required for a website destination.");
+    }
+    if (input.campaign.destinationType === "whatsapp") {
+      if (!input.creative.whatsappNumberId) {
+        push("missing_whatsapp_number", "A WhatsApp number is required for a WhatsApp destination.");
+      } else if (!input.whatsappNumber || !input.whatsappNumber.isActive) {
+        push("whatsapp_number_inactive", "The selected WhatsApp number is not connected or not active.");
+      }
     }
     if (input.creative.mediaMimeType && !SUPPORTED_CREATIVE_MIME_TYPES.has(input.creative.mediaMimeType)) {
       push("unsupported_creative_media_type", `Media type "${input.creative.mediaMimeType}" is not supported for ads.`);

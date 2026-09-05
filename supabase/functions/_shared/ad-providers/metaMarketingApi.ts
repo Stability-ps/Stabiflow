@@ -54,9 +54,12 @@ export function buildCreateAdSetPayload(input: CreateAdSetInput): Record<string,
     status: input.status,
     optimization_goal: input.optimizationGoal,
     billing_event: input.billingEvent,
-    start_time: input.startTime,
     targeting: input.targeting,
   };
+  // "Start now" -> omit start_time entirely. Meta begins delivery when the
+  // ad set is activated, which the publish saga does after every object is
+  // created. A non-null value is a scheduled ISO start instant.
+  if (input.startTime) payload.start_time = input.startTime;
   if (input.endTime) payload.end_time = input.endTime;
   if (input.dailyBudgetMinorUnits != null) payload.daily_budget = String(input.dailyBudgetMinorUnits);
   if (input.lifetimeBudgetMinorUnits != null) payload.lifetime_budget = String(input.lifetimeBudgetMinorUnits);
@@ -74,6 +77,18 @@ export function buildCreateAdCreativePayload(input: CreateAdCreativeInput): Reco
   if (input.description) linkData.description = input.description;
   if (input.linkOrigin === "website" && input.destinationUrl) linkData.link = input.destinationUrl;
   if (input.linkOrigin === "page_profile") linkData.link = `https://www.facebook.com/${input.pageId}`;
+  if (input.linkOrigin === "whatsapp" && input.whatsappNumber) {
+    // Click-to-WhatsApp ad creative shape: a wa.me deep link combined with
+    // the WHATSAPP_MESSAGE call-to-action's app_destination. This is Meta's
+    // long-documented CTWA pattern, not a Phase 6/F invention - but, same
+    // as the error classifier's own disclosure, it has NOT been validated
+    // against a live ad account (no real Meta API call has been made
+    // anywhere in this module - see this file's header comment). Verify
+    // against a live ad account before any real spend flows through this
+    // destination type.
+    linkData.link = `https://wa.me/${input.whatsappNumber}`;
+    linkData.call_to_action = { type: input.cta, value: { app_destination: "WHATSAPP" } };
+  }
 
   const objectStorySpec: Record<string, unknown> = { page_id: input.pageId, link_data: linkData };
   if (input.instagramActorId) objectStorySpec.instagram_actor_id = input.instagramActorId;

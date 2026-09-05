@@ -19,6 +19,13 @@ export function envVar(name: string): string {
   return value;
 }
 
+/** Like envVar but returns null instead of throwing when unset - for
+ * genuinely optional config (e.g. a verification-only app id). */
+export function optionalEnvVar(name: string): string | null {
+  const value = Deno.env.get(name)?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
 export function corsHeaders(req: Request) {
   return {
     "Access-Control-Allow-Origin": req.headers.get("origin") || "*",

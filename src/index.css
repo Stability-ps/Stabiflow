@@ -6,6 +6,7 @@
    approved logo pack) land in Phase 4 - App shell + branding - not here. */
 @layer base {
   :root {
+    color-scheme: light;
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;
 
@@ -47,6 +48,7 @@
   }
 
   .dark {
+    color-scheme: dark;
     --background: 222 47% 8%;
     --foreground: 210 40% 98%;
 
@@ -92,5 +94,22 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  input,
+  textarea,
+  select {
+    color: hsl(var(--foreground));
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus {
+    -webkit-text-fill-color: hsl(var(--foreground));
+    box-shadow: 0 0 0 1000px hsl(var(--background)) inset;
+    caret-color: hsl(var(--foreground));
   }
 }

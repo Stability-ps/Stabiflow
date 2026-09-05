@@ -7,11 +7,18 @@ async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T
     // without the JSON body attached in every SDK version - fall back to a
     // generic message if the structured `error` field on the parsed body
     // (data) isn't available.
-    const message = (data as { error?: string } | null)?.error || error.message || `${name} failed`;
+    // workspaceSuspendedBody (shared by every suspension-gated function)
+    // puts a machine code in `error` and the human text in `message` -
+    // prefer `message` when present so a suspended-workspace action never
+    // surfaces a raw code like "workspace_suspended" instead of a real
+    // sentence.
+    const body = data as { error?: string; message?: string } | null;
+    const message = body?.message || body?.error || error.message || `${name} failed`;
     throw new Error(message);
   }
   if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
-    throw new Error((data as { error: string }).error);
+    const typed = data as { error: string; message?: string };
+    throw new Error(typed.message || typed.error);
   }
   return data as T;
 }
