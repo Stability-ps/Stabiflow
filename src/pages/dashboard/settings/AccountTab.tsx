@@ -8,6 +8,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { updateOwnProfile } from "@/lib/accountProfile";
+import { useOwnLegalAcceptances } from "@/hooks/useLegalAcceptances";
+
+const LEGAL_DOCUMENT_LABELS: Record<string, string> = {
+  privacy_policy: "Privacy Policy",
+  terms_of_service: "Terms of Service",
+};
+
+function formatAcceptedDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" });
+}
 
 function initials(name: string | null | undefined, email: string | null | undefined) {
   if (name?.trim()) {
@@ -21,6 +31,7 @@ export function AccountTab() {
   const { user, profile, refreshMemberships, signOut } = useAuth();
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
+  const { data: acceptances } = useOwnLegalAcceptances(user?.id);
 
   useEffect(() => {
     setFullName(profile?.full_name || "");
@@ -75,10 +86,29 @@ export function AccountTab() {
           <CardTitle>Legal</CardTitle>
           <CardDescription>How StabiFlow handles data, and your rights.</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4 text-sm">
-          <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="underline">Privacy Policy</Link>
-          <Link to="/legal/terms" target="_blank" rel="noreferrer" className="underline">Terms of Service</Link>
-          <Link to="/legal/data-deletion" target="_blank" rel="noreferrer" className="underline">Data Deletion</Link>
+        <CardContent className="space-y-4 text-sm">
+          <div className="flex flex-wrap gap-4">
+            <Link to="/legal/privacy" target="_blank" rel="noreferrer" className="underline">Privacy Policy</Link>
+            <Link to="/legal/terms" target="_blank" rel="noreferrer" className="underline">Terms of Service</Link>
+            <Link to="/legal/data-deletion" target="_blank" rel="noreferrer" className="underline">Data Deletion</Link>
+          </div>
+
+          <div>
+            <p className="mb-2 text-xs font-medium text-muted-foreground">Legal agreements</p>
+            <div className="space-y-1">
+              {(["privacy_policy", "terms_of_service"] as const).map((docType) => {
+                const accepted = acceptances?.find((a) => a.document_type === docType);
+                return (
+                  <p key={docType} className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">{LEGAL_DOCUMENT_LABELS[docType]}:</span>{" "}
+                    {accepted
+                      ? `Accepted ${formatAcceptedDate(accepted.accepted_at)} · Version ${accepted.document_version}`
+                      : "No recorded acceptance"}
+                  </p>
+                );
+              })}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>

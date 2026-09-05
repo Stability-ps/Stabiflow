@@ -1,8 +1,9 @@
 import { LegalLayout } from "@/pages/legal/LegalLayout";
+import { PRIVACY_POLICY_VERSION } from "@/lib/legalDocuments";
 
 export default function Privacy() {
   return (
-    <LegalLayout title="Privacy Policy" effectiveDate="2026-09-04">
+    <LegalLayout title="Privacy Policy" effectiveDate={PRIVACY_POLICY_VERSION}>
       <section>
         <p>
           This Privacy Policy describes what personal information StabiFlow collects and processes when a

@@ -66,4 +66,20 @@ describe("Signup consent gate", () => {
 
     await waitFor(() => expect(signUpMock).toHaveBeenCalledTimes(1));
   });
+
+  it("REGRESSION: a successful signup marks legal_acceptance_requested so the durable acceptance record is created once a session exists (see useAuth.tsx)", async () => {
+    signUpMock.mockResolvedValue({ error: null });
+    renderSignup();
+    await screen.findByLabelText(/full name/i);
+
+    fireEvent.change(screen.getByLabelText(/full name/i), { target: { value: "Jane Test" } });
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "jane@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "supersecret1" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(signUpMock).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ data: expect.objectContaining({ legal_acceptance_requested: true }) }) }),
+    ));
+  });
 });
