@@ -2780,6 +2780,7 @@ export type Database = {
           message_type: string
           next_retry_at: string | null
           provider_message_id: string | null
+          retention_claimed_at: string | null
           retry_claimed_at: string | null
           retry_count: number
           sender_type: string
@@ -2817,6 +2818,7 @@ export type Database = {
           message_type?: string
           next_retry_at?: string | null
           provider_message_id?: string | null
+          retention_claimed_at?: string | null
           retry_claimed_at?: string | null
           retry_count?: number
           sender_type: string
@@ -2854,6 +2856,7 @@ export type Database = {
           message_type?: string
           next_retry_at?: string | null
           provider_message_id?: string | null
+          retention_claimed_at?: string | null
           retry_claimed_at?: string | null
           retry_count?: number
           sender_type?: string
@@ -5138,6 +5141,43 @@ export type Database = {
       }
       next_lead_reference: { Args: { p_workspace_id: string }; Returns: string }
       normalize_phone_number: { Args: { p_raw: string }; Returns: string }
+      retention_claim_media_messages_batch: {
+        Args: { p_batch_size?: number; p_cutoff: string }
+        Returns: {
+          id: string
+          storage_bucket: string
+          storage_path: string
+        }[]
+      }
+      retention_confirm_media_message_deleted: {
+        Args: { p_message_id: string }
+        Returns: boolean
+      }
+      retention_delete_eligible_text_messages: {
+        Args: { p_batch_size?: number; p_cutoff: string }
+        Returns: number
+      }
+      retention_delete_empty_old_conversations: {
+        Args: { p_batch_size?: number; p_cutoff: string }
+        Returns: number
+      }
+      retention_delete_old_ai_usage_events: {
+        Args: { p_batch_size?: number; p_cutoff: string }
+        Returns: number
+      }
+      retention_delete_resolved_alerts: {
+        Args: { p_batch_size?: number; p_cutoff: string }
+        Returns: number
+      }
+      retention_delete_terminal_automation_runs: {
+        Args: { p_batch_size?: number; p_cutoff: string }
+        Returns: number
+      }
+      retention_preview_counts: { Args: never; Returns: Json }
+      retention_release_media_claim: {
+        Args: { p_message_id: string }
+        Returns: undefined
+      }
       set_workspace_inbox_ai_cap: {
         Args: { p_cap?: number; p_workspace_id: string }
         Returns: number

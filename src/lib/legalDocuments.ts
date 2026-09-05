@@ -6,7 +6,7 @@
 // "the current version" for evidence purposes. Keep these in sync with the
 // seed rows in supabase/migrations/20261004060000_legal_acceptance_tracking.sql
 // whenever a legal page's effective date changes.
-export const PRIVACY_POLICY_VERSION = "2026-09-04";
+export const PRIVACY_POLICY_VERSION = "2026-10-05";
 export const TERMS_OF_SERVICE_VERSION = "2026-08-28";
 
 export const PRIVACY_POLICY_PATH = "/legal/privacy";

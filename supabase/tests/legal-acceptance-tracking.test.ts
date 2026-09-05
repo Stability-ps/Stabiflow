@@ -30,7 +30,7 @@ describe("legal_document_versions", () => {
     const { data, error } = await admin.from("legal_document_versions").select("document_type, current_version").order("document_type");
     if (error) throw new Error(error.message);
     expect(data).toEqual([
-      { document_type: "privacy_policy", current_version: "2026-09-04" },
+      { document_type: "privacy_policy", current_version: "2026-10-05" },
       { document_type: "terms_of_service", current_version: "2026-08-28" },
     ]);
 
@@ -52,7 +52,7 @@ describe("accept_current_legal_terms()", () => {
     const rows = await ownRows(userId);
     const privacy = rows.find((r) => r.document_type === "privacy_policy");
     const terms = rows.find((r) => r.document_type === "terms_of_service");
-    expect(privacy?.document_version).toBe("2026-09-04");
+    expect(privacy?.document_version).toBe("2026-10-05");
     expect(terms?.document_version).toBe("2026-08-28");
     expect(privacy?.source).toBe("signup");
     expect(new Date(privacy!.accepted_at).getTime()).toBeGreaterThanOrEqual(before - 5000);
@@ -129,7 +129,7 @@ describe("legal_acceptances - RLS and write protection", () => {
       .eq("document_type", "privacy_policy");
     expect(error).toBeTruthy();
     const rows = await ownRows(userId);
-    expect(rows.find((r) => r.document_type === "privacy_policy")?.document_version).toBe("2026-09-04");
+    expect(rows.find((r) => r.document_type === "privacy_policy")?.document_version).toBe("2026-10-05");
   });
 
   it("direct delete is denied", async () => {

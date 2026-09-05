@@ -106,13 +106,25 @@ export default function Privacy() {
       <section>
         <h2>How long we keep information</h2>
         <p>
-          Business data - including WhatsApp messages, leads, and CRM records - remains retained while a
-          workspace is active, unless the workspace owner deletes it or another approved retention policy
-          applies. When a workspace owner deletes their workspace (Settings &gt; Delete Workspace), the
-          workspace&apos;s tenant-owned data is removed as part of that deletion, including WhatsApp messages,
-          leads, and stored integration credentials. We are evaluating configurable retention windows for
-          sensitive categories (such as WhatsApp messages and AI conversation content) as a future improvement;
-          any such change will be reflected in this policy before it takes effect.
+          A workspace&apos;s business records - leads, customers, opportunities, pipelines, notes, campaigns,
+          and other CRM/business data - are not automatically deleted by age. They remain for as long as the
+          workspace is active, unless the workspace owner deletes them individually or deletes the workspace
+          entirely (Settings &gt; Delete Workspace), which removes the workspace&apos;s tenant-owned data,
+          including stored integration credentials.
+        </p>
+        <p>
+          WhatsApp Inbox communication content - message text, media, and voice-note transcripts - may age out
+          automatically after up to 24 months under our platform retention policy. This does not delete the
+          CRM records built from that communication (a converted lead, its notes, and any linked business
+          data), and it never removes a message that is still part of an active delivery attempt, an
+          unresolved delivery failure, or a document a workspace has attached to one of its leads.
+        </p>
+        <p>
+          Certain internal operational records - such as resolved system alerts and completed automation run
+          history - are kept for a shorter period as part of normal service operation, since they exist to
+          help operate the product rather than as business records a workspace needs to keep. Legal and audit
+          records (such as evidence of Privacy Policy/Terms acceptance, and records of a workspace deletion)
+          follow their own, separate retention requirements and are not affected by any of the above.
         </p>
       </section>
 

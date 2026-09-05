@@ -48,6 +48,7 @@ const DEFAULT_FILES = [
   "supabase/tests/inbox-search-pagination.test.ts",
   "supabase/tests/whatsapp-webhook-diagnostics.test.ts",
   "supabase/tests/legal-acceptance-tracking.test.ts",
+  "supabase/tests/retention-v1.test.ts",
 ];
 
 function localEnvFromSupabase() {
