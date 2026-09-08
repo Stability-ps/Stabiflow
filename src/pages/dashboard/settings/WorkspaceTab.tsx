@@ -17,9 +17,72 @@ import { useWorkspaceProfile } from "@/hooks/useWorkspaceProfile";
 import { workspaceRoleRank } from "@/lib/workspaceRoles";
 import { slugify } from "@/lib/slug";
 import {
-  getWorkspaceLogoUrl, HEX_COLOR_RE, isWorkspaceSlugAvailable, normalizeHexColor, updateWorkspaceIdentity, updateWorkspaceProfile, uploadWorkspaceLogo,
+  getWorkspaceLogoUrl, HEX_COLOR_RE, isCompleteHexColor, isWorkspaceSlugAvailable, normalizeHexColor, updateWorkspaceIdentity, updateWorkspaceProfile, uploadWorkspaceLogo,
 } from "@/lib/workspaceProfile";
 import { deleteWorkspace, exportWorkspaceData } from "@/lib/workspaceLifecycle";
+
+// One colour field = one form value, exposed through two synchronized
+// controls (native colour picker + free-typed hex text). `invalid` is
+// computed by the parent (single source of truth, also gates Save); this
+// component only owns WHEN to show that error (not on every keystroke -
+// only after the field has been blurred at least once) and the picker's
+// "last known good colour" so a temporarily incomplete typed value (e.g.
+// "#80") never has to feed <input type="color">, which requires a valid
+// colour at all times.
+function BrandColorField({
+  id,
+  label,
+  value,
+  onChange,
+  disabled,
+  placeholder,
+  invalid,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  placeholder: string;
+  invalid: boolean;
+}) {
+  const [touched, setTouched] = useState(false);
+  const [lastValidColor, setLastValidColor] = useState("#000000");
+  const normalized = value.trim() ? normalizeHexColor(value) : null;
+  const complete = isCompleteHexColor(value);
+  useEffect(() => {
+    if (complete && normalized) setLastValidColor(normalized);
+  }, [complete, normalized]);
+  const pickerValue = complete && normalized ? normalized : lastValidColor;
+  const showError = touched && invalid;
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={pickerValue}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setTouched(true)}
+          disabled={disabled}
+          aria-label={`${label} picker`}
+          className="h-9 w-9 shrink-0 cursor-pointer rounded-md border p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+        <Input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setTouched(true)}
+          disabled={disabled}
+          placeholder={placeholder}
+          aria-invalid={showError}
+        />
+      </div>
+      {showError && <p className="text-xs text-destructive">Use a hex colour like {placeholder}.</p>}
+    </div>
+  );
+}
 
 export function WorkspaceTab() {
   const { currentWorkspaceId, currentMembership, refreshMemberships } = useAuth();
@@ -53,9 +116,20 @@ export function WorkspaceTab() {
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const slugCheckToken = useRef(0);
+  // Guards which workspace's data local form state was last hydrated from.
+  // The database is authoritative and a fresh MOUNT must always re-hydrate
+  // (this ref starts undefined on every new component instance, so the
+  // effect below still runs on the very next `data`) - but WITHOUT this
+  // guard, `useQuery`'s default staleTime:0 triggers a background refetch
+  // on every mount, and its resolution (a NEW `data` object reference for
+  // the SAME workspace) would re-run this effect and silently clobber
+  // whatever the user is mid-typing with the last-saved server value.
+  const hydratedWorkspaceId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
+    if (hydratedWorkspaceId.current === data.workspace.id) return;
+    hydratedWorkspaceId.current = data.workspace.id;
     setName(data.workspace.name);
     setSlug(data.workspace.slug);
     setDescription(data.settings.business_description || "");
@@ -69,7 +143,23 @@ export function WorkspaceTab() {
     setSecondaryColor(data.settings.secondary_brand_color || "");
     setAccentColor(data.settings.brand_accent_color || "");
     setDefaultCta(data.settings.default_ad_cta || "");
-    getWorkspaceLogoUrl(data.settings.logo_path).then(setLogoUrl);
+  }, [data]);
+
+  // Deliberately a SEPARATE, unguarded effect: unlike the typed form
+  // fields above, logo_path is never hand-edited, so there is nothing to
+  // "clobber" - it must always reflect the latest data.settings.logo_path
+  // (e.g. right after "Change logo" -> invalidateQueries -> a fresh
+  // data.settings.logo_path). The cleanup ignores a stale resolution if
+  // logo_path changes again before a previous lookup resolves.
+  useEffect(() => {
+    if (!data) return;
+    let cancelled = false;
+    getWorkspaceLogoUrl(data.settings.logo_path).then((url) => {
+      if (!cancelled) setLogoUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [data]);
 
   const handleSlugChange = (value: string) => {
@@ -270,7 +360,7 @@ export function WorkspaceTab() {
         </div>
 
         {canEdit && (
-          <Button onClick={handleSave} disabled={saving || !name.trim() || !slug || checkingSlug}>
+          <Button onClick={handleSave} disabled={saving || !name.trim() || !slug || checkingSlug || brandKitInvalid}>
             {saving ? "Saving..." : "Save changes"}
           </Button>
         )}
@@ -297,30 +387,9 @@ export function WorkspaceTab() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="ws-brand-primary">Primary colour</Label>
-            <div className="flex items-center gap-2">
-              <span className="h-9 w-9 shrink-0 rounded-md border" style={{ backgroundColor: primaryColorInvalid ? "transparent" : primaryColor || "transparent" }} aria-hidden="true" />
-              <Input id="ws-brand-primary" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} disabled={!canEdit} placeholder="#1F2937" aria-invalid={primaryColorInvalid} />
-            </div>
-            {primaryColorInvalid && <p className="text-xs text-destructive">Use a hex colour like #1F2937.</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ws-brand-secondary">Secondary colour</Label>
-            <div className="flex items-center gap-2">
-              <span className="h-9 w-9 shrink-0 rounded-md border" style={{ backgroundColor: secondaryColorInvalid ? "transparent" : secondaryColor || "transparent" }} aria-hidden="true" />
-              <Input id="ws-brand-secondary" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} disabled={!canEdit} placeholder="#64748B" aria-invalid={secondaryColorInvalid} />
-            </div>
-            {secondaryColorInvalid && <p className="text-xs text-destructive">Use a hex colour like #64748B.</p>}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ws-brand-accent">Accent colour</Label>
-            <div className="flex items-center gap-2">
-              <span className="h-9 w-9 shrink-0 rounded-md border" style={{ backgroundColor: accentColorInvalid ? "transparent" : accentColor || "transparent" }} aria-hidden="true" />
-              <Input id="ws-brand-accent" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} disabled={!canEdit} placeholder="#2563EB" aria-invalid={accentColorInvalid} />
-            </div>
-            {accentColorInvalid && <p className="text-xs text-destructive">Use a hex colour like #2563EB.</p>}
-          </div>
+          <BrandColorField id="ws-brand-primary" label="Primary colour" value={primaryColor} onChange={setPrimaryColor} disabled={!canEdit} placeholder="#1F2937" invalid={primaryColorInvalid} />
+          <BrandColorField id="ws-brand-secondary" label="Secondary colour" value={secondaryColor} onChange={setSecondaryColor} disabled={!canEdit} placeholder="#64748B" invalid={secondaryColorInvalid} />
+          <BrandColorField id="ws-brand-accent" label="Accent colour" value={accentColor} onChange={setAccentColor} disabled={!canEdit} placeholder="#2563EB" invalid={accentColorInvalid} />
         </div>
 
         <div className="space-y-1.5">
