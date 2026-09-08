@@ -19,6 +19,7 @@ const creativeStudioMock = vi.hoisted(() => ({
   generateBatchVisuals: vi.fn(),
   planBatchRender: vi.fn(),
   storeRenderedCreative: vi.fn(),
+  DEFAULT_REFERENCE_PREFERENCES: { keep_colours: false, keep_layout: false, keep_imagery: false, fresh_layout: false },
 }));
 vi.mock("@/lib/creativeStudio", () => creativeStudioMock);
 
@@ -99,5 +100,69 @@ describe("Creative Studio - batch image ads extension", () => {
     expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "workspace-1", businessContext: "A bakery in Cape Town", conceptCount: 4 }),
     );
+  });
+});
+
+describe("Creative Studio - reference-ads asset purpose + controls (approved plan)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("shows the purpose selector for an UNCLASSIFIED asset (asset_role null) - never gated on classification", () => {
+    mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: null }];
+    renderStudio();
+    fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
+    expect(screen.getByText("How should StabiFlow use this image?")).toBeInTheDocument();
+    expect(screen.queryByText(/Media Library classifies this as/)).not.toBeInTheDocument();
+  });
+
+  it("suggests (but does not force) the purpose from an already-classified asset", () => {
+    mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "reference_creative" }];
+    renderStudio();
+    fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
+    expect(screen.getByText(/Media Library classifies this as "Reference advert"/)).toBeInTheDocument();
+    // The suggested purpose pre-selects reference_creative, which reveals the reference controls.
+    expect(screen.getByText("How should StabiFlow use this reference?")).toBeInTheDocument();
+  });
+
+  it("reference preference controls stay hidden for product_image/background purposes", () => {
+    mocks.assets = [{ id: "asset-1", title: "product.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "product_image" }];
+    renderStudio();
+    fireEvent.click(screen.getByRole("button", { name: "Select product.jpg" }));
+    expect(screen.queryByText("How should StabiFlow use this reference?")).not.toBeInTheDocument();
+  });
+
+  it("passes asset_purpose and reference_preferences through to concept generation when Reference is chosen", async () => {
+    // Pre-classified so the purpose auto-suggests without driving the Radix
+    // Select's pointer interactions (covered structurally by the "suggests"
+    // test above) - this test's job is the checkbox -> payload wiring.
+    mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "reference_creative" }];
+    creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
+    renderStudio();
+    fireEvent.change(screen.getByLabelText(/what is the product or service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
+    expect(screen.getByText("How should StabiFlow use this reference?")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Keep similar colours"));
+    fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
+    await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
+    expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceMediaAssetId: "asset-1",
+        assetPurpose: "reference_creative",
+        referencePreferences: expect.objectContaining({ keep_colours: true, fresh_layout: false }),
+      }),
+    );
+  });
+
+  it("legacy no-reference workflow is unchanged: asset_purpose is not sent when nothing is selected", async () => {
+    mocks.assets = [];
+    creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
+    renderStudio();
+    fireEvent.change(screen.getByLabelText(/what is the product or service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
+    await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
+    const call = creativeStudioMock.generateVisualConcepts.mock.calls[0][0];
+    expect(call.assetPurpose).toBeNull();
   });
 });

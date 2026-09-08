@@ -219,3 +219,120 @@ describe("Creative Studio batch ads - tenant isolation & integrity", () => {
     expect(["rendering", "ready", "approved", "rejected", "failed"]).toContain(creatives?.[0]?.status);
   });
 });
+
+describe("Creative Studio - reference-ads + Brand Kit schema (approved plan)", () => {
+  let A: TestTenant;
+
+  beforeAll(async () => {
+    A = await createTestTenant("cs-reference-a");
+  });
+
+  afterAll(async () => {
+    await cleanupTenant(A);
+  });
+
+  it("an UNCLASSIFIED media asset (asset_role IS NULL) can still be used as a batch's source - asset_role is metadata, never a gate", async () => {
+    const asset = await seedMediaAsset(A.workspaceId, A.userId); // no asset_role override -> NULL
+    expect(asset.id).toBeTruthy();
+    const { data: batch, error } = await admin
+      .from("creative_studio_batches")
+      .insert({
+        workspace_id: A.workspaceId,
+        business_context: "A bakery in Cape Town",
+        created_by: A.userId,
+        source_media_asset_id: asset.id,
+      })
+      .select("*")
+      .single();
+    expect(error).toBeNull();
+    expect(batch?.source_media_asset_id).toBe(asset.id);
+  });
+
+  it("content_media_assets.asset_role accepts each of the four roles, and existing/unset rows stay NULL and valid", async () => {
+    for (const role of ["reference_creative", "product_image", "logo", "background"] as const) {
+      const { data, error } = await admin
+        .from("content_media_assets")
+        .insert({
+          workspace_id: A.workspaceId,
+          title: `role-${role}`,
+          storage_path: `${A.workspaceId}/role-${role}-${Date.now()}.png`,
+          mime_type: "image/png",
+          width_px: 100,
+          height_px: 100,
+          aspect_ratio: 1,
+          file_size_bytes: 100,
+          checksum_sha256: `checksum-${role}-${Date.now()}`,
+          created_by: A.userId,
+          asset_role: role,
+        })
+        .select("asset_role")
+        .single();
+      expect(error).toBeNull();
+      expect(data?.asset_role).toBe(role);
+    }
+    // Unset (the default for every pre-existing/legacy row) is still valid.
+    const unclassified = await seedMediaAsset(A.workspaceId, A.userId);
+    const { data: read } = await admin.from("content_media_assets").select("asset_role").eq("id", unclassified.id).single();
+    expect(read?.asset_role).toBeNull();
+  });
+
+  it("creative_studio_batches.reference_style/reference_preferences round-trip and default to NULL for a no-reference batch", async () => {
+    const referenceStyle = {
+      dominant_colors: ["#1f2937", "#f59e0b"],
+      layout_style: "split",
+      subject_position: "right third",
+      text_regions: ["top-left"],
+      visual_style: "clean product photography",
+      background_style: "soft gradient",
+      whitespace_level: "generous",
+      mood: "professional, calm",
+    };
+    const referencePreferences = { keep_colours: true, keep_layout: false, keep_imagery: false, fresh_layout: false };
+
+    const { data: withRef, error: errWithRef } = await admin
+      .from("creative_studio_batches")
+      .insert({
+        workspace_id: A.workspaceId,
+        business_context: "A bakery in Cape Town",
+        created_by: A.userId,
+        reference_style: referenceStyle,
+        reference_preferences: referencePreferences,
+      })
+      .select("reference_style, reference_preferences")
+      .single();
+    expect(errWithRef).toBeNull();
+    expect(withRef?.reference_style).toEqual(referenceStyle);
+    expect(withRef?.reference_preferences).toEqual(referencePreferences);
+
+    // Never OCR'd commercial fact - the shape stored is style-only, no
+    // headline/price/phone/CTA field exists on this object at all.
+    expect(Object.keys(withRef?.reference_style ?? {}).sort()).toEqual(
+      ["background_style", "dominant_colors", "layout_style", "mood", "subject_position", "text_regions", "visual_style", "whitespace_level"].sort(),
+    );
+
+    const { data: noRef, error: errNoRef } = await admin
+      .from("creative_studio_batches")
+      .insert({ workspace_id: A.workspaceId, business_context: "A bakery in Cape Town", created_by: A.userId })
+      .select("reference_style, reference_preferences")
+      .single();
+    expect(errNoRef).toBeNull();
+    expect(noRef?.reference_style).toBeNull();
+    expect(noRef?.reference_preferences).toBeNull();
+  });
+
+  it("workspace_settings accepts the new Brand Kit fields (secondary_brand_color, default_ad_cta) additively", async () => {
+    const { error } = await admin
+      .from("workspace_settings")
+      .update({ secondary_brand_color: "#64748b", default_ad_cta: "Get a free quote" })
+      .eq("workspace_id", A.workspaceId);
+    expect(error).toBeNull();
+    const { data } = await admin.from("workspace_settings").select("secondary_brand_color, default_ad_cta").eq("workspace_id", A.workspaceId).single();
+    expect(data?.secondary_brand_color).toBe("#64748b");
+    expect(data?.default_ad_cta).toBe("Get a free quote");
+  });
+
+  it("workspace_settings rejects a malformed hex colour (check constraint)", async () => {
+    const { error } = await admin.from("workspace_settings").update({ secondary_brand_color: "blue" }).eq("workspace_id", A.workspaceId);
+    expect(error).not.toBeNull();
+  });
+});

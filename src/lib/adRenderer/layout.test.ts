@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AD_LAYOUTS, AD_SIZES, AD_SIZE_DIMENSIONS } from "./spec";
-import { computeAdLayout, planTextStrings, type AdRenderInput } from "./layout";
+import { computeAdLayout, planTextStrings, resolveCta, RENDERER_FALLBACK_CTA, type AdRenderInput } from "./layout";
 
 const BASE: AdRenderInput = {
   layout: "split",
@@ -99,5 +99,34 @@ describe("computeAdLayout - brand kit", () => {
     const plan = computeAdLayout({ ...BASE, brand: { primary: "not-a-color", accent: "", ctaText: null } });
     expect(plan.width).toBe(1080);
     expect(plan.elements.length).toBeGreaterThan(0);
+  });
+});
+
+// CTA precedence (approved plan clarification #2): a user-edited/approved
+// or AI-generated creative CTA must ALWAYS win over workspace_settings.
+// default_ad_cta - the Brand Kit default is a fallback, never an override.
+describe("resolveCta - CTA precedence", () => {
+  it("keeps the creative's own CTA even when a Brand Kit default is set", () => {
+    expect(resolveCta("Book a demo", "Get a free quote")).toBe("Book a demo");
+  });
+  it("keeps the creative's own CTA when the Brand Kit default is null", () => {
+    expect(resolveCta("Book a demo", null)).toBe("Book a demo");
+  });
+  it("falls back to the Brand Kit default only when the creative CTA is empty", () => {
+    expect(resolveCta("", "Get a free quote")).toBe("Get a free quote");
+    expect(resolveCta(null, "Get a free quote")).toBe("Get a free quote");
+    expect(resolveCta("   ", "Get a free quote")).toBe("Get a free quote");
+  });
+  it("falls back to the renderer's last-resort default when both are empty", () => {
+    expect(resolveCta(null, null)).toBe(RENDERER_FALLBACK_CTA);
+    expect(resolveCta("", "")).toBe(RENDERER_FALLBACK_CTA);
+  });
+  it("never lets the Brand Kit default silently overwrite a real CTA (regression guard)", () => {
+    // A future edit that flips the precedence (e.g. defaultAdCta ?? creativeCta)
+    // would fail this the moment both are non-empty.
+    const own = "Reserve your spot";
+    const brandDefault = "Learn more today";
+    expect(resolveCta(own, brandDefault)).toBe(own);
+    expect(resolveCta(own, brandDefault)).not.toBe(brandDefault);
   });
 });

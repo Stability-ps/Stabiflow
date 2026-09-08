@@ -10,8 +10,30 @@ import {
   type ConceptCopySeed,
   type ConceptStudioInput,
 } from "../_shared/creativeStudio/generateConcepts.ts";
+import {
+  analyzeReferenceStyle,
+  buildReferenceGuidanceText,
+  isReferenceImageEligible,
+  shouldAnalyzeReference,
+  type ReferencePreferences,
+  type ReferenceStyle,
+} from "../_shared/creativeStudio/analyzeReference.ts";
+import { toDataUrl } from "../_shared/inbox/multimodalMedia.ts";
+import { CONTENT_MEDIA_BUCKET } from "../_shared/contentPublishExecution.ts";
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
+
+const ASSET_PURPOSES = new Set(["reference_creative", "product_image", "background"]);
+
+function parseReferencePreferences(v: unknown): ReferencePreferences {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  return {
+    keep_colours: o.keep_colours === true,
+    keep_layout: o.keep_layout === true,
+    keep_imagery: o.keep_imagery === true,
+    fresh_layout: o.fresh_layout === true,
+  };
+}
 
 function str(v: unknown, max: number): string | undefined {
   return typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined;
@@ -82,19 +104,64 @@ Deno.serve(async (req: Request) => {
     if (copySeeds.length === 0) copySeeds = undefined;
   }
 
-  // If a source media asset was named, make sure it's this workspace's.
+  // asset_purpose is how THIS generation wants to use the attached asset -
+  // it is independent of the asset's own (optional, nullable) Media
+  // Library asset_role classification. An unclassified asset (asset_role
+  // IS NULL, true for most existing Media Library items) can still be
+  // used as a reference: asset_role is reusable metadata/a UI hint, never
+  // an eligibility gate (clarification #1 on the approved plan).
+  const rawPurpose = typeof body.asset_purpose === "string" ? body.asset_purpose : null;
+  const assetPurpose = rawPurpose && ASSET_PURPOSES.has(rawPurpose) ? (rawPurpose as "reference_creative" | "product_image" | "background") : null;
+  const referencePreferences = parseReferencePreferences(body.reference_preferences);
+
+  // If a source media asset was named, make sure it's this workspace's -
+  // select the columns reference analysis needs so there is no second
+  // round-trip when asset_purpose is reference_creative.
+  let sourceAsset: { id: string; workspace_id: string; storage_path: string; mime_type: string; file_size_bytes: number } | null = null;
   if (sourceMediaAssetId) {
     const { data: asset } = await callerSb
       .from("content_media_assets")
-      .select("id, workspace_id")
+      .select("id, workspace_id, storage_path, mime_type, file_size_bytes")
       .eq("id", sourceMediaAssetId)
       .maybeSingle();
     if (!asset || asset.workspace_id !== workspaceId) {
       return json(req, { error: "source_media_asset_id not found in this workspace" }, 400);
     }
+    sourceAsset = asset;
   }
 
-  const input: ConceptStudioInput = { businessContext, audience, tone, conceptCount, copySeeds };
+  // -- Reference-style analysis: at most ONE vision call per batch, only
+  // when the caller actually asked to use the asset as a reference. A
+  // failure here degrades gracefully to "no reference guidance" rather
+  // than blocking copy/concept generation (same posture as the rest of
+  // Creative Studio's optional AI enrichments).
+  let referenceStyle: ReferenceStyle | null = null;
+  if (
+    sourceAsset &&
+    shouldAnalyzeReference({
+      purpose: assetPurpose,
+      sourceMediaAssetId: sourceAsset.id,
+      existingReferenceStyle: null,
+      existingReferenceSourceAssetId: null,
+    })
+  ) {
+    const eligibility = isReferenceImageEligible(sourceAsset.mime_type, sourceAsset.file_size_bytes);
+    if (!eligibility.eligible) {
+      return json(req, { error: eligibility.reason }, 400);
+    }
+    try {
+      const { data: bytes, error: downloadErr } = await callerSb.storage.from(CONTENT_MEDIA_BUCKET).download(sourceAsset.storage_path);
+      if (downloadErr || !bytes) throw new Error(downloadErr?.message ?? "download failed");
+      const dataUrl = toDataUrl(sourceAsset.mime_type, new Uint8Array(await bytes.arrayBuffer()));
+      referenceStyle = await analyzeReferenceStyle({ apiKey, model }, dataUrl);
+    } catch (err) {
+      console.error("creative-studio-concepts: reference analysis failed, continuing without it", err instanceof Error ? err.message : err);
+      referenceStyle = null;
+    }
+  }
+
+  const referenceGuidance = referenceStyle ? buildReferenceGuidanceText(referenceStyle, referencePreferences) : undefined;
+  const input: ConceptStudioInput = { businessContext, audience, tone, conceptCount, copySeeds, referenceGuidance };
 
   let concepts;
   try {
@@ -113,6 +180,8 @@ Deno.serve(async (req: Request) => {
       audience: audience ?? null,
       tone: tone ?? null,
       source_media_asset_id: sourceMediaAssetId,
+      reference_style: referenceStyle,
+      reference_preferences: referenceStyle ? referencePreferences : null,
       created_by: actorId,
     })
     .select("*")

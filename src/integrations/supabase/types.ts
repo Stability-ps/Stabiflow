@@ -1334,6 +1334,7 @@ export type Database = {
       }
       content_media_assets: {
         Row: {
+          asset_role: Database["public"]["Enums"]["content_asset_role"] | null
           aspect_ratio: number
           checksum_sha256: string
           created_at: string
@@ -1351,6 +1352,7 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          asset_role?: Database["public"]["Enums"]["content_asset_role"] | null
           aspect_ratio: number
           checksum_sha256: string
           created_at?: string
@@ -1368,6 +1370,7 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          asset_role?: Database["public"]["Enums"]["content_asset_role"] | null
           aspect_ratio?: number
           checksum_sha256?: string
           created_at?: string
@@ -1891,6 +1894,8 @@ export type Database = {
           error_detail: string | null
           id: string
           layouts: string[]
+          reference_preferences: Json | null
+          reference_style: Json | null
           sizes: string[]
           source_media_asset_id: string | null
           status: Database["public"]["Enums"]["creative_studio_batch_status"]
@@ -1906,6 +1911,8 @@ export type Database = {
           error_detail?: string | null
           id?: string
           layouts?: string[]
+          reference_preferences?: Json | null
+          reference_style?: Json | null
           sizes?: string[]
           source_media_asset_id?: string | null
           status?: Database["public"]["Enums"]["creative_studio_batch_status"]
@@ -1921,6 +1928,8 @@ export type Database = {
           error_detail?: string | null
           id?: string
           layouts?: string[]
+          reference_preferences?: Json | null
+          reference_style?: Json | null
           sizes?: string[]
           source_media_asset_id?: string | null
           status?: Database["public"]["Enums"]["creative_studio_batch_status"]
@@ -4417,6 +4426,7 @@ export type Database = {
           contact_phone: string | null
           created_at: string
           currency: string
+          default_ad_cta: string | null
           feature_flags: Json
           handoff_sla_enabled: boolean
           handoff_sla_minutes: number
@@ -4426,6 +4436,7 @@ export type Database = {
           match_customer_language: boolean
           outside_hours_auto_reply_enabled: boolean
           outside_hours_auto_reply_message: string | null
+          secondary_brand_color: string | null
           terminology: Json
           timezone: string
           updated_at: string
@@ -4445,6 +4456,7 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           currency?: string
+          default_ad_cta?: string | null
           feature_flags?: Json
           handoff_sla_enabled?: boolean
           handoff_sla_minutes?: number
@@ -4454,6 +4466,7 @@ export type Database = {
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
+          secondary_brand_color?: string | null
           terminology?: Json
           timezone?: string
           updated_at?: string
@@ -4473,6 +4486,7 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           currency?: string
+          default_ad_cta?: string | null
           feature_flags?: Json
           handoff_sla_enabled?: boolean
           handoff_sla_minutes?: number
@@ -4482,6 +4496,7 @@ export type Database = {
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
+          secondary_brand_color?: string | null
           terminology?: Json
           timezone?: string
           updated_at?: string
@@ -5189,6 +5204,7 @@ export type Database = {
         | "succeeded"
         | "partial"
         | "failed"
+      content_asset_role: "reference_creative" | "product_image" | "logo" | "background"
       content_asset_status: "active" | "archived"
       content_platform: "facebook" | "instagram" | "linkedin"
       content_post_status:
@@ -5398,6 +5414,7 @@ export const Constants = {
         "partial",
         "failed",
       ],
+      content_asset_role: ["reference_creative", "product_image", "logo", "background"],
       content_asset_status: ["active", "archived"],
       content_platform: ["facebook", "instagram", "linkedin"],
       content_post_status: [
