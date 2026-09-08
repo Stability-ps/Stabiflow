@@ -47,6 +47,15 @@ export function normalizeHexColor(value: string): string | null {
 
 export { HEX_COLOR_RE };
 
+/** True only for a complete, valid #RRGGBB - used to decide whether the
+ * native colour picker can sync to this value yet (an in-progress partial
+ * typed value like "#80" must not be pushed into <input type="color">,
+ * which requires a valid colour at all times). */
+export function isCompleteHexColor(value: string): value is string {
+  const norm = normalizeHexColor(value);
+  return !!norm && HEX_COLOR_RE.test(norm);
+}
+
 export async function updateWorkspaceProfile(workspaceId: string, input: WorkspaceProfileUpdate) {
   const { error } = await supabase.from("workspace_settings").update(input).eq("workspace_id", workspaceId);
   if (error) throw new Error(error.message);
