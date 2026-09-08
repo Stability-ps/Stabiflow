@@ -21,6 +21,7 @@ import {
   computeAdLayout,
   loadDrawableImage,
   renderAd,
+  resolveCta,
   type AdLayoutKind,
   type AdSizeKind,
 } from "@/lib/adRenderer";
@@ -29,10 +30,12 @@ import {
   generateVisualConcepts,
   planBatchRender,
   storeRenderedCreative,
+  type AssetPurpose,
   type CreativeBrandKit,
   type CreativeStudioAd,
   type CreativeStudioConcept,
   type CreativeVariant,
+  type ReferencePreferences,
 } from "@/lib/creativeStudio";
 
 type MediaAsset = { id: string; title: string; storage_path: string; width_px: number; height_px: number };
@@ -43,6 +46,8 @@ type Props = {
   audience: string;
   tone: string;
   sourceAssetId: string | null;
+  assetPurpose: AssetPurpose | null;
+  referencePreferences: ReferencePreferences;
   copyVariants: CreativeVariant[];
   mediaAssets: MediaAsset[];
   canPromoteToCampaign: boolean;
@@ -62,6 +67,8 @@ export function BatchAdStudio({
   audience,
   tone,
   sourceAssetId,
+  assetPurpose,
+  referencePreferences,
   copyVariants,
   mediaAssets,
   canPromoteToCampaign,
@@ -109,6 +116,8 @@ export function BatchAdStudio({
         audience: audience.trim() || undefined,
         tone: tone || undefined,
         sourceMediaAssetId: sourceAssetId,
+        assetPurpose,
+        referencePreferences,
         conceptCount: 4,
         copyVariants,
       });
@@ -180,7 +189,7 @@ export function BatchAdStudio({
           size: creative.size as AdSizeKind,
           headline: creative.headline,
           body: creative.body_text,
-          cta: creative.cta,
+          cta: resolveCta(creative.cta, brandKit.defaultCta),
           brandName: brandKit.name || "",
           contact: creative.contact_text ?? (brandKit.contactPhone || brandKit.contactEmail || null),
           price: creative.price_text ?? null,
@@ -274,7 +283,7 @@ export function BatchAdStudio({
         size: merged.size as AdSizeKind,
         headline: merged.headline,
         body: merged.body_text,
-        cta: merged.cta,
+        cta: resolveCta(merged.cta, brand.defaultCta),
         brandName: brand.name || "",
         contact: merged.contact_text ?? null,
         price: merged.price_text ?? null,

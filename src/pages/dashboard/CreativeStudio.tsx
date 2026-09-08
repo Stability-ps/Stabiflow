@@ -7,14 +7,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/EmptyState";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { BatchAdStudio } from "@/components/creative-studio/BatchAdStudio";
 import { useAuth } from "@/hooks/useAuth";
 import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
-import { generateCreativeCopy, type CreativeVariant } from "@/lib/creativeStudio";
+import {
+  generateCreativeCopy,
+  DEFAULT_REFERENCE_PREFERENCES,
+  type AssetPurpose,
+  type CreativeVariant,
+  type ReferencePreferences,
+} from "@/lib/creativeStudio";
+import { CONTENT_ASSET_ROLE_LABELS, type ContentAssetRole } from "@/lib/contentMediaAssets";
 
 const TONE_OPTIONS = ["Professional", "Friendly", "Playful", "Bold", "Trustworthy"];
+
+const ASSET_PURPOSE_OPTIONS: { value: AssetPurpose; label: string }[] = [
+  { value: "reference_creative", label: "Use as reference creative" },
+  { value: "product_image", label: "Use as product image" },
+  { value: "background", label: "Use as background/source image" },
+];
+
+// A classified Media Library asset_role suggests a matching purpose, but
+// never forces it - the user can always pick a different purpose, and an
+// unclassified asset (asset_role null) still offers every option.
+function suggestedPurpose(role: ContentAssetRole | null | undefined): AssetPurpose | null {
+  if (role === "reference_creative" || role === "product_image" || role === "background") return role;
+  return null;
+}
 
 // Creative Studio V1 (post-launch UI polish). Generates ad copy
 // variations via a single-shot OpenAI call (creative-studio-generate) -
@@ -37,10 +60,23 @@ export default function CreativeStudio() {
   const [audience, setAudience] = useState("");
   const [tone, setTone] = useState<string>("");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [assetPurpose, setAssetPurpose] = useState<AssetPurpose | null>(null);
+  const [referencePreferences, setReferencePreferences] = useState<ReferencePreferences>(DEFAULT_REFERENCE_PREFERENCES);
   const [variants, setVariants] = useState<CreativeVariant[] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const selectedAsset = mediaAssets?.find((asset) => asset.id === selectedAssetId) ?? null;
   const missingBusinessContext = !businessContext.trim();
+
+  function selectAsset(assetId: string | null) {
+    setSelectedAssetId(assetId);
+    setReferencePreferences(DEFAULT_REFERENCE_PREFERENCES);
+    if (!assetId) {
+      setAssetPurpose(null);
+      return;
+    }
+    const asset = mediaAssets?.find((a) => a.id === assetId);
+    setAssetPurpose(suggestedPurpose((asset as { asset_role?: ContentAssetRole | null } | undefined)?.asset_role ?? null));
+  }
 
   async function handleGenerate() {
     if (!currentWorkspaceId || missingBusinessContext) return;
@@ -128,7 +164,7 @@ export default function CreativeStudio() {
                         <p className="truncate text-sm font-medium" title={selectedAsset.title}>{selectedAsset.title}</p>
                         <p className="text-xs text-muted-foreground">{selectedAsset.width_px}×{selectedAsset.height_px}px</p>
                       </div>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => setSelectedAssetId(null)} aria-label={`Remove ${selectedAsset.title}`}>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => selectAsset(null)} aria-label={`Remove ${selectedAsset.title}`}>
                         <X className="mr-1 h-4 w-4" /> Remove
                       </Button>
                     </div>
@@ -138,7 +174,7 @@ export default function CreativeStudio() {
                       <button
                         key={asset.id}
                         type="button"
-                        onClick={() => setSelectedAssetId(selectedAssetId === asset.id ? null : asset.id)}
+                        onClick={() => selectAsset(selectedAssetId === asset.id ? null : asset.id)}
                         className={`overflow-hidden rounded-lg border-2 p-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${selectedAssetId === asset.id ? "border-primary bg-primary/5" : "border-border"}`}
                         title={asset.title}
                         aria-pressed={selectedAssetId === asset.id}
@@ -149,6 +185,61 @@ export default function CreativeStudio() {
                       </button>
                     ))}
                   </div>
+
+                  {selectedAsset && (
+                    <div className="mt-3 space-y-3 rounded-lg border p-3">
+                      <div>
+                        <Label htmlFor="creative-asset-purpose" className="mb-1 block text-sm font-medium">How should StabiFlow use this image?</Label>
+                        <Select value={assetPurpose ?? ""} onValueChange={(v) => { setAssetPurpose(v as AssetPurpose); setReferencePreferences(DEFAULT_REFERENCE_PREFERENCES); }}>
+                          <SelectTrigger id="creative-asset-purpose"><SelectValue placeholder="Choose a purpose" /></SelectTrigger>
+                          <SelectContent>
+                            {ASSET_PURPOSE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        {(selectedAsset as { asset_role?: ContentAssetRole | null }).asset_role && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Media Library classifies this as "{CONTENT_ASSET_ROLE_LABELS[(selectedAsset as { asset_role: ContentAssetRole }).asset_role]}" - a suggestion only, pick any purpose above.
+                          </p>
+                        )}
+                      </div>
+
+                      {assetPurpose === "reference_creative" && (
+                        <div>
+                          <p className="mb-2 text-sm font-medium">How should StabiFlow use this reference?</p>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm">
+                              <Checkbox checked={referencePreferences.keep_colours} onCheckedChange={(v) => setReferencePreferences((p) => ({ ...p, keep_colours: v === true, fresh_layout: false }))} />
+                              Keep similar colours
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <Checkbox checked={referencePreferences.keep_layout} onCheckedChange={(v) => setReferencePreferences((p) => ({ ...p, keep_layout: v === true, fresh_layout: false }))} />
+                              Keep similar layout
+                            </label>
+                            <label className="flex items-center gap-2 text-sm">
+                              <Checkbox checked={referencePreferences.keep_imagery} onCheckedChange={(v) => setReferencePreferences((p) => ({ ...p, keep_imagery: v === true, fresh_layout: false }))} />
+                              Keep similar imagery
+                            </label>
+                            <label className="flex items-center gap-2 text-sm border-t pt-2 mt-2">
+                              <Checkbox
+                                checked={referencePreferences.fresh_layout}
+                                onCheckedChange={(v) =>
+                                  setReferencePreferences(
+                                    v === true
+                                      ? { keep_colours: false, keep_layout: false, keep_imagery: false, fresh_layout: true }
+                                      : { ...referencePreferences, fresh_layout: false },
+                                  )
+                                }
+                              />
+                              Fresh layout using my branding
+                            </label>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            StabiFlow generates a genuinely new advert inspired by this one's style - it never reuses its exact artwork, text, prices or contact details.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : mediaAssets ? (
                 <div className="rounded-lg border border-dashed p-4">
@@ -214,6 +305,8 @@ export default function CreativeStudio() {
               audience={audience}
               tone={tone}
               sourceAssetId={selectedAssetId}
+              assetPurpose={assetPurpose}
+              referencePreferences={referencePreferences}
               copyVariants={variants ?? []}
               mediaAssets={(mediaAssets ?? []).map((a) => ({
                 id: a.id,

@@ -27,6 +27,11 @@ export type ConceptStudioInput = {
   // Optional: the copy the user already generated in stage 1, so the
   // model reuses/refines it instead of inventing unrelated wording.
   copySeeds?: ConceptCopySeed[];
+  // Optional: pre-formatted guidance text derived from a reference
+  // advert's cached style analysis (see analyzeReference.ts
+  // buildReferenceGuidanceText). Style inspiration only - never treated
+  // as a source of commercial fact, and it never overrides businessContext.
+  referenceGuidance?: string;
 };
 
 export type VisualConcept = {
@@ -78,6 +83,7 @@ export function buildInstructions(): string {
     "layoutStyle must be one of: split, full_bleed, bold_statement, professional_card.",
     "visualNotes: one line on colour palette / focal point / where text should overlay.",
     "Never invent specific facts, prices, discounts or claims the brief does not state. Never write in first person as the business.",
+    "If reference-advert style guidance is provided, it describes VISUAL STYLE ONLY (colours/layout/imagery/mood) - never treat it as a source of product facts, prices, contact details or copy; the Business/product/service brief above it is always the sole source of commercial fact.",
   ].join(" ");
 }
 
@@ -90,6 +96,9 @@ export function buildInputText(input: ConceptStudioInput): string {
     input.copySeeds.slice(0, 5).forEach((s, i) => {
       parts.push(`  ${i + 1}. headline="${s.headline}" primary="${s.primaryText}" cta="${s.cta}"`);
     });
+  }
+  if (input.referenceGuidance?.trim()) {
+    parts.push(input.referenceGuidance.trim());
   }
   parts.push(`Generate exactly ${clampConceptCount(input.conceptCount)} distinct visual concepts.`);
   return parts.join("\n");

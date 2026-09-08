@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { appendNoTextRule, buildInputText, clampConceptCount, NO_TEXT_RULE, parseConceptsResponse } from "./generateConcepts.ts";
+import { appendNoTextRule, buildInputText, buildInstructions, clampConceptCount, NO_TEXT_RULE, parseConceptsResponse } from "./generateConcepts.ts";
 
 Deno.test("clampConceptCount: normal value passes through", () => {
   assertEquals(clampConceptCount(4), 4);
@@ -88,4 +88,27 @@ Deno.test("parseConceptsResponse: rejects a concept with an empty required field
     Error,
     "empty required field",
   );
+});
+
+// -- referenceGuidance integration (reference-ads plan) ---------------------
+Deno.test("buildInputText: includes referenceGuidance when provided, after the brief", () => {
+  const t = buildInputText({
+    businessContext: "A bakery",
+    conceptCount: 2,
+    referenceGuidance: "A reference advert was provided as style inspiration: keep similar colours.",
+  });
+  assertStringIncludes(t, "A bakery");
+  assertStringIncludes(t, "keep similar colours");
+  // Guidance appears after the business brief, never before it - the
+  // brief stays the primary/first source of fact.
+  assertEquals(t.indexOf("A bakery") < t.indexOf("keep similar colours"), true);
+});
+Deno.test("buildInputText: omits any reference section when no guidance is given (unchanged legacy behaviour)", () => {
+  const t = buildInputText({ businessContext: "A bakery", conceptCount: 2 });
+  assertEquals(t.toLowerCase().includes("reference"), false);
+});
+Deno.test("buildInstructions: warns the model that reference guidance is style-only, never a source of commercial fact", () => {
+  const instructions = buildInstructions();
+  assertStringIncludes(instructions.toLowerCase(), "reference-advert style guidance");
+  assertStringIncludes(instructions, "sole source of commercial fact");
 });

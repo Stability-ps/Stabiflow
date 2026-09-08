@@ -27,7 +27,25 @@ export type WorkspaceProfileUpdate = {
   industry?: string | null;
   contact_email?: string | null;
   contact_phone?: string | null;
+  brand_primary_color?: string | null;
+  secondary_brand_color?: string | null;
+  brand_accent_color?: string | null;
+  default_ad_cta?: string | null;
 };
+
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+
+/** Empty input -> null (clears the field); a bare hex without "#" is
+ * normalized; anything else is left as-is so the DB check constraint
+ * (same regex) reports it rather than this silently swallowing a typo. */
+export function normalizeHexColor(value: string): string | null {
+  const v = value.trim();
+  if (!v) return null;
+  const withHash = v.startsWith("#") ? v : `#${v}`;
+  return HEX_COLOR_RE.test(withHash) ? withHash.toLowerCase() : withHash;
+}
+
+export { HEX_COLOR_RE };
 
 export async function updateWorkspaceProfile(workspaceId: string, input: WorkspaceProfileUpdate) {
   const { error } = await supabase.from("workspace_settings").update(input).eq("workspace_id", workspaceId);

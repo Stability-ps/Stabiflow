@@ -163,7 +163,7 @@ Deno.serve(async (req: Request) => {
       callerSb.from("workspaces").select("name").eq("id", workspaceId).maybeSingle(),
       callerSb
         .from("workspace_settings")
-        .select("brand_primary_color, brand_accent_color, brand_cta_text_color, ad_footer_disclaimer, logo_path, contact_email, contact_phone, website")
+        .select("brand_primary_color, brand_accent_color, brand_cta_text_color, ad_footer_disclaimer, default_ad_cta, logo_path, contact_email, contact_phone, website")
         .eq("workspace_id", workspaceId)
         .maybeSingle(),
     ]);
@@ -202,6 +202,9 @@ Deno.serve(async (req: Request) => {
         accent: settings?.brand_accent_color ?? null,
         ctaText: settings?.brand_cta_text_color ?? null,
         footerDisclaimer: settings?.ad_footer_disclaimer ?? null,
+        // Fallback CTA label only - never authoritative over a
+        // creative's own stored cta (see resolveCta in adRenderer/layout.ts).
+        defaultCta: settings?.default_ad_cta ?? null,
         contactEmail: settings?.contact_email ?? null,
         contactPhone: settings?.contact_phone ?? null,
         website: settings?.website ?? null,

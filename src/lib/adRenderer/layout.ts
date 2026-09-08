@@ -13,6 +13,22 @@
 
 import { AD_SIZE_DIMENSIONS, type AdLayoutKind, type AdSizeKind } from "./spec";
 
+// CTA precedence: a user-edited/approved creative CTA or an AI-generated
+// concept CTA (both already stored on creative_studio_creatives.cta at
+// the point this is called) ALWAYS wins. workspace_settings.default_ad_cta
+// is only a Brand Kit fallback for the (defensive/edge-case) situation
+// where the stored CTA is empty - it never overwrites a real one. The
+// literal "Learn more" is the last-resort default when neither exists.
+export const RENDERER_FALLBACK_CTA = "Learn more";
+
+export function resolveCta(creativeCta: string | null | undefined, defaultAdCta: string | null | undefined): string {
+  const own = (creativeCta ?? "").trim();
+  if (own) return own;
+  const fallback = (defaultAdCta ?? "").trim();
+  if (fallback) return fallback;
+  return RENDERER_FALLBACK_CTA;
+}
+
 export type RenderColor = string;
 
 export type TextRole = "headline" | "body" | "cta" | "contact" | "price" | "disclaimer" | "brandname";

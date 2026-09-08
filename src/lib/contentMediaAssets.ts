@@ -141,3 +141,21 @@ export async function restoreContentMediaAsset(assetId: string) {
   const { error } = await supabase.from("content_media_assets").update({ status: "active" }).eq("id", assetId);
   if (error) throw new Error(error.message);
 }
+
+export type ContentAssetRole = "reference_creative" | "product_image" | "logo" | "background";
+export const CONTENT_ASSET_ROLE_LABELS: Record<ContentAssetRole, string> = {
+  reference_creative: "Reference advert",
+  product_image: "Product image",
+  logo: "Logo",
+  background: "Background",
+};
+
+// Reusable Media Library metadata only - a UI hint/filter, never an
+// eligibility gate. An asset with asset_role = null stays fully usable
+// everywhere, including as a Creative Studio reference (see
+// creative-studio-concepts/index.ts: asset_purpose decides reference use
+// per-generation, independent of this classification).
+export async function updateContentMediaAssetRole(assetId: string, role: ContentAssetRole | null) {
+  const { error } = await supabase.from("content_media_assets").update({ asset_role: role }).eq("id", assetId);
+  if (error) throw new Error(error.message);
+}

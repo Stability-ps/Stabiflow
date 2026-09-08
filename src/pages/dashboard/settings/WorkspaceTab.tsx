@@ -17,7 +17,7 @@ import { useWorkspaceProfile } from "@/hooks/useWorkspaceProfile";
 import { workspaceRoleRank } from "@/lib/workspaceRoles";
 import { slugify } from "@/lib/slug";
 import {
-  getWorkspaceLogoUrl, isWorkspaceSlugAvailable, updateWorkspaceIdentity, updateWorkspaceProfile, uploadWorkspaceLogo,
+  getWorkspaceLogoUrl, HEX_COLOR_RE, isWorkspaceSlugAvailable, normalizeHexColor, updateWorkspaceIdentity, updateWorkspaceProfile, uploadWorkspaceLogo,
 } from "@/lib/workspaceProfile";
 import { deleteWorkspace, exportWorkspaceData } from "@/lib/workspaceLifecycle";
 
@@ -40,6 +40,10 @@ export function WorkspaceTab() {
   const [industry, setIndustry] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("");
+  const [secondaryColor, setSecondaryColor] = useState("");
+  const [accentColor, setAccentColor] = useState("");
+  const [defaultCta, setDefaultCta] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -61,6 +65,10 @@ export function WorkspaceTab() {
     setIndustry(data.settings.industry || "");
     setContactEmail(data.settings.contact_email || "");
     setContactPhone(data.settings.contact_phone || "");
+    setPrimaryColor(data.settings.brand_primary_color || "");
+    setSecondaryColor(data.settings.secondary_brand_color || "");
+    setAccentColor(data.settings.brand_accent_color || "");
+    setDefaultCta(data.settings.default_ad_cta || "");
     getWorkspaceLogoUrl(data.settings.logo_path).then(setLogoUrl);
   }, [data]);
 
@@ -94,10 +102,22 @@ export function WorkspaceTab() {
     }
   };
 
+  const primaryColorNorm = primaryColor.trim() ? normalizeHexColor(primaryColor) : null;
+  const secondaryColorNorm = secondaryColor.trim() ? normalizeHexColor(secondaryColor) : null;
+  const accentColorNorm = accentColor.trim() ? normalizeHexColor(accentColor) : null;
+  const primaryColorInvalid = !!primaryColor.trim() && !(primaryColorNorm && HEX_COLOR_RE.test(primaryColorNorm));
+  const secondaryColorInvalid = !!secondaryColor.trim() && !(secondaryColorNorm && HEX_COLOR_RE.test(secondaryColorNorm));
+  const accentColorInvalid = !!accentColor.trim() && !(accentColorNorm && HEX_COLOR_RE.test(accentColorNorm));
+  const brandKitInvalid = primaryColorInvalid || secondaryColorInvalid || accentColorInvalid;
+
   const handleSave = async () => {
     if (!currentWorkspaceId || !name.trim() || !slug) return;
     if (slugAvailable === false) {
       toast.error("Choose a different URL - that one is already taken.");
+      return;
+    }
+    if (brandKitInvalid) {
+      toast.error("Brand Kit colours must be a valid hex code, e.g. #1F2937.");
       return;
     }
     setSaving(true);
@@ -111,6 +131,10 @@ export function WorkspaceTab() {
         industry: industry.trim() || null,
         contact_email: contactEmail.trim() || null,
         contact_phone: contactPhone.trim() || null,
+        brand_primary_color: primaryColorNorm,
+        secondary_brand_color: secondaryColorNorm,
+        brand_accent_color: accentColorNorm,
+        default_ad_cta: defaultCta.trim() || null,
       });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["workspace-profile", currentWorkspaceId] }),
@@ -247,6 +271,66 @@ export function WorkspaceTab() {
 
         {canEdit && (
           <Button onClick={handleSave} disabled={saving || !name.trim() || !slug || checkingSlug}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Brand Kit</CardTitle>
+        <CardDescription>Used by Creative Studio to render adverts - logo, name and contact details come from the profile above.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex items-center gap-4 rounded-lg border border-dashed p-3">
+          <Avatar className="h-10 w-10 rounded-lg">
+            <AvatarImage src={logoUrl || undefined} alt={name} className="object-contain" />
+            <AvatarFallback className="rounded-lg text-sm">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 text-sm">
+            <p className="truncate font-medium">{name || "Untitled workspace"}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {[website, contactEmail || contactPhone].filter(Boolean).join(" · ") || "No website or contact details set yet"}
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="ws-brand-primary">Primary colour</Label>
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 shrink-0 rounded-md border" style={{ backgroundColor: primaryColorInvalid ? "transparent" : primaryColor || "transparent" }} aria-hidden="true" />
+              <Input id="ws-brand-primary" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} disabled={!canEdit} placeholder="#1F2937" aria-invalid={primaryColorInvalid} />
+            </div>
+            {primaryColorInvalid && <p className="text-xs text-destructive">Use a hex colour like #1F2937.</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ws-brand-secondary">Secondary colour</Label>
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 shrink-0 rounded-md border" style={{ backgroundColor: secondaryColorInvalid ? "transparent" : secondaryColor || "transparent" }} aria-hidden="true" />
+              <Input id="ws-brand-secondary" value={secondaryColor} onChange={(e) => setSecondaryColor(e.target.value)} disabled={!canEdit} placeholder="#64748B" aria-invalid={secondaryColorInvalid} />
+            </div>
+            {secondaryColorInvalid && <p className="text-xs text-destructive">Use a hex colour like #64748B.</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ws-brand-accent">Accent colour</Label>
+            <div className="flex items-center gap-2">
+              <span className="h-9 w-9 shrink-0 rounded-md border" style={{ backgroundColor: accentColorInvalid ? "transparent" : accentColor || "transparent" }} aria-hidden="true" />
+              <Input id="ws-brand-accent" value={accentColor} onChange={(e) => setAccentColor(e.target.value)} disabled={!canEdit} placeholder="#2563EB" aria-invalid={accentColorInvalid} />
+            </div>
+            {accentColorInvalid && <p className="text-xs text-destructive">Use a hex colour like #2563EB.</p>}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="ws-default-cta">Default CTA</Label>
+          <Input id="ws-default-cta" value={defaultCta} onChange={(e) => setDefaultCta(e.target.value)} disabled={!canEdit} maxLength={40} placeholder="e.g. Get a free quote" />
+          <p className="text-xs text-muted-foreground">Fallback only - a campaign's own CTA always takes priority over this.</p>
+        </div>
+
+        {canEdit && (
+          <Button onClick={handleSave} disabled={saving || !name.trim() || !slug || checkingSlug || brandKitInvalid}>
             {saving ? "Saving..." : "Save changes"}
           </Button>
         )}

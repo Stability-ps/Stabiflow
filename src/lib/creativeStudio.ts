@@ -59,6 +59,8 @@ export type CreativeStudioBatch = {
   audience: string | null;
   tone: string | null;
   source_media_asset_id: string | null;
+  reference_style: Record<string, unknown> | null;
+  reference_preferences: Record<string, unknown> | null;
   layouts: string[];
   sizes: string[];
   error_detail: string | null;
@@ -120,10 +122,34 @@ export type CreativeBrandKit = {
   accent: string | null;
   ctaText: string | null;
   footerDisclaimer: string | null;
+  // Brand Kit fallback CTA label - lowest priority; never overrides a
+  // creative's own stored cta. See resolveCta in lib/adRenderer/layout.ts.
+  defaultCta: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
   website: string | null;
   logoUrl: string | null;
+};
+
+// How THIS generation should use the attached asset - independent of the
+// asset's own (optional, nullable) Media Library asset_role classification.
+// "logo" is deliberately excluded here: a logo belongs in the Workspace
+// Brand Kit and is applied automatically by the renderer, never manually
+// attached per generation.
+export type AssetPurpose = "reference_creative" | "product_image" | "background";
+
+export type ReferencePreferences = {
+  keep_colours: boolean;
+  keep_layout: boolean;
+  keep_imagery: boolean;
+  fresh_layout: boolean;
+};
+
+export const DEFAULT_REFERENCE_PREFERENCES: ReferencePreferences = {
+  keep_colours: false,
+  keep_layout: false,
+  keep_imagery: false,
+  fresh_layout: false,
 };
 
 export function generateVisualConcepts(input: {
@@ -132,6 +158,8 @@ export function generateVisualConcepts(input: {
   audience?: string;
   tone?: string;
   sourceMediaAssetId?: string | null;
+  assetPurpose?: AssetPurpose | null;
+  referencePreferences?: ReferencePreferences;
   conceptCount: number;
   copyVariants?: CreativeVariant[];
 }) {
@@ -141,6 +169,8 @@ export function generateVisualConcepts(input: {
     audience: input.audience || undefined,
     tone: input.tone || undefined,
     source_media_asset_id: input.sourceMediaAssetId || undefined,
+    asset_purpose: input.assetPurpose || undefined,
+    reference_preferences: input.assetPurpose === "reference_creative" ? input.referencePreferences : undefined,
     concept_count: input.conceptCount,
     copy_variants: input.copyVariants && input.copyVariants.length > 0 ? input.copyVariants : undefined,
   });
