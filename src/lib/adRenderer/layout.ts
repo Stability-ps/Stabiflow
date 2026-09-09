@@ -161,6 +161,24 @@ function estimateFits(text: string, el: { maxWidth: number; minFontSize: number;
   return lines <= el.maxLines;
 }
 
+// The maximum vertical space a text block could occupy, so the NEXT
+// element can be positioned strictly below it regardless of the actual
+// text content. drawText() (canvas.ts) only ever SHRINKS fontSize while
+// fitting (never grows it) and never draws more than maxLines - so
+// maxLines at the starting fontSize is a guaranteed upper bound for any
+// input string, at any wrap outcome. A character-count-based guess (the
+// previous approach) diverges from the canvas's real font-metric
+// wrapping whenever a string's actual chars-per-line differs from the
+// guess's assumption - e.g. a large headline in a narrow Split panel
+// wraps to far more lines than a flat "N chars per line" estimate
+// expects, so the body text below started before the headline's last
+// line finished (the reported overlap bug). Reserving the worst case
+// trades a little extra whitespace for a headline that happens to be
+// short for a guarantee that it never overlaps whatever comes next.
+function maxTextBlockHeight(fontSize: number, lineHeight: number, maxLines: number): number {
+  return Math.round(fontSize * lineHeight * maxLines);
+}
+
 function text(role: TextRole, value: string, opts: Partial<TextElement> & Pick<TextElement, "x" | "y" | "maxWidth" | "fontSize">): TextElement {
   return {
     kind: "text",
@@ -250,9 +268,11 @@ export function computeAdLayout(input: AdRenderInput): AdLayoutPlan {
       y += Math.round(width * 0.032 * 2.2);
     }
     const headlineFs = Math.round(width * 0.082);
-    const headlineEl = track(text("headline", input.headline, { x: margin, y, maxWidth: innerW, fontSize: headlineFs, fontWeight: 800, color: onPrimary, lineHeight: 1.08, maxLines: 4 }));
+    const headlineLineHeight = 1.08;
+    const headlineMaxLines = 4;
+    const headlineEl = track(text("headline", input.headline, { x: margin, y, maxWidth: innerW, fontSize: headlineFs, fontWeight: 800, color: onPrimary, lineHeight: headlineLineHeight, maxLines: headlineMaxLines }));
     elements.push(headlineEl);
-    y += headlineFs * 1.1 * Math.min(4, Math.max(2, Math.ceil(input.headline.length / 18)));
+    y += maxTextBlockHeight(headlineFs, headlineLineHeight, headlineMaxLines);
     const bodyFs = Math.round(width * 0.036);
     elements.push(track(text("body", input.body, { x: margin, y, maxWidth: innerW, fontSize: bodyFs, color: onPrimary, maxLines: 5, lineHeight: 1.3 })));
     const ctaFs = Math.round(width * 0.036);
@@ -327,8 +347,10 @@ export function computeAdLayout(input: AdRenderInput): AdLayoutPlan {
       y += Math.round(width * 0.028 * 2);
     }
     const headlineFs = Math.round(width * 0.058);
-    elements.push(track(text("headline", input.headline, { x: margin, y, maxWidth: innerW, fontSize: headlineFs, fontWeight: 800, color: "#0f172a", lineHeight: 1.1, maxLines: 3 })));
-    y += Math.round(headlineFs * 1.15 * Math.min(3, Math.max(1, Math.ceil(input.headline.length / 24))));
+    const headlineLineHeight = 1.1;
+    const headlineMaxLines = 3;
+    elements.push(track(text("headline", input.headline, { x: margin, y, maxWidth: innerW, fontSize: headlineFs, fontWeight: 800, color: "#0f172a", lineHeight: headlineLineHeight, maxLines: headlineMaxLines })));
+    y += maxTextBlockHeight(headlineFs, headlineLineHeight, headlineMaxLines);
     const bodyFs = Math.round(width * 0.03);
     elements.push(track(text("body", input.body, { x: margin, y, maxWidth: innerW, fontSize: bodyFs, color: "#475569", maxLines: 3, lineHeight: 1.32 })));
     y += Math.round(bodyFs * 1.32 * 3) + Math.round(margin * 0.4);
@@ -338,9 +360,23 @@ export function computeAdLayout(input: AdRenderInput): AdLayoutPlan {
       y += Math.round(width * 0.028 * 1.8);
     }
     const ctaFs = Math.round(width * 0.032);
-    ctaPill(margin, height - margin - (ctaFs + Math.round(ctaFs * 0.7) * 2), estCtaWidth(ctaFs), ctaFs, accent, input.cta, "left", brand).forEach((e) => elements.push(e));
+    const ctaBlockH = ctaFs + Math.round(ctaFs * 0.7) * 2;
+    const ctaGap = Math.round(margin * 0.3);
+    // The card's fixed bottom-anchored CTA position keeps a clean,
+    // consistent look when content is short (unchanged from before) -
+    // but headline/body/infoBits above are already reserved at their
+    // worst-case (maxLines) height, so for once that worst case is
+    // reached the CTA must move down with it rather than staying fixed
+    // and getting run into (confirmed collision, reproducible even with
+    // normal-length body copy at 1080x1080 - the card area is short
+    // enough that the fixed anchor was already too close).
+    const ctaFixedY = height - margin - ctaBlockH;
+    const ctaY = Math.max(ctaFixedY, y + ctaGap);
+    ctaPill(margin, ctaY, estCtaWidth(ctaFs), ctaFs, accent, input.cta, "left", brand).forEach((e) => elements.push(e));
     if (input.disclaimer) {
-      elements.push(track(text("disclaimer", input.disclaimer, { x: margin, y: height - Math.round(margin * 0.55), maxWidth: innerW, fontSize: Math.round(width * 0.016), color: "#94a3b8", maxLines: 1, lineHeight: 1.15 })));
+      const disclaimerFixedY = height - Math.round(margin * 0.55);
+      const disclaimerY = Math.max(disclaimerFixedY, ctaY + ctaBlockH + ctaGap);
+      elements.push(track(text("disclaimer", input.disclaimer, { x: margin, y: disclaimerY, maxWidth: innerW, fontSize: Math.round(width * 0.016), color: "#94a3b8", maxLines: 1, lineHeight: 1.15 })));
     }
   }
 

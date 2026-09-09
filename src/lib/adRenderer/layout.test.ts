@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AD_LAYOUTS, AD_SIZES, AD_SIZE_DIMENSIONS } from "./spec";
-import { computeAdLayout, planTextStrings, resolveCta, RENDERER_FALLBACK_CTA, type AdRenderInput } from "./layout";
+import { computeAdLayout, planTextStrings, resolveCta, RENDERER_FALLBACK_CTA, type AdRenderInput, type TextElement } from "./layout";
 
 const BASE: AdRenderInput = {
   layout: "split",
@@ -128,5 +128,88 @@ describe("resolveCta - CTA precedence", () => {
     const brandDefault = "Learn more today";
     expect(resolveCta(own, brandDefault)).toBe(own);
     expect(resolveCta(own, brandDefault)).not.toBe(brandDefault);
+  });
+});
+
+// Production regression: Split (and professional_card) layouts advanced
+// the cursor from headline to body using a character-count guess
+// (`Math.ceil(headline.length / N)`) that diverges from the canvas's real
+// font-metric wrapping - a large headline in Split's narrow panel wraps
+// to more lines than the guess assumed, so the body text started before
+// the headline's last line finished. The fix reserves the headline's
+// WORST-CASE height (maxLines at the starting font size) - a guaranteed
+// upper bound, since drawText() (canvas.ts) only ever shrinks fontSize or
+// clips at maxLines, never exceeds it - so body can never collide
+// regardless of the actual headline content.
+function findText(plan: ReturnType<typeof computeAdLayout>, role: TextElement["role"]): TextElement {
+  const el = plan.elements.find((e): e is TextElement => e.kind === "text" && e.role === role);
+  if (!el) throw new Error(`No "${role}" text element in plan`);
+  return el;
+}
+
+function headlineWorstCaseBottom(headline: TextElement): number {
+  // Math.round to match maxTextBlockHeight()'s own rounding in layout.ts -
+  // this is a same-pixel comparison, not a looser tolerance.
+  return headline.y + Math.round(headline.fontSize * headline.lineHeight * headline.maxLines);
+}
+
+describe("computeAdLayout - headline/body never overlap (production overlap regression)", () => {
+  const HEADLINES = {
+    short: "Fast",
+    long: "Expert Care for Your Vehicle and Family Every Single Day",
+    multiLine: "Keep Your Fleet Moving",
+    reportedExamples: ["Expert Care for Your Vehicle", "Keep Your Fleet Moving", "Your Family's Safety Matters"],
+  };
+
+  for (const [label, headline] of Object.entries(HEADLINES).flatMap((entry) =>
+    Array.isArray(entry[1]) ? entry[1].map((h, i) => [`${entry[0]}[${i}]`, h] as const) : [entry as readonly [string, string]],
+  )) {
+    it(`split @ 1080x1080: body starts at/after the headline's worst-case height ("${label}")`, () => {
+      const plan = computeAdLayout({ ...BASE, layout: "split", size: "1080x1080", headline });
+      const h = findText(plan, "headline");
+      const b = findText(plan, "body");
+      expect(b.y).toBeGreaterThanOrEqual(headlineWorstCaseBottom(h));
+    });
+
+    it(`split @ 1080x1350: body starts at/after the headline's worst-case height ("${label}")`, () => {
+      const plan = computeAdLayout({ ...BASE, layout: "split", size: "1080x1350", headline });
+      const h = findText(plan, "headline");
+      const b = findText(plan, "body");
+      expect(b.y).toBeGreaterThanOrEqual(headlineWorstCaseBottom(h));
+    });
+
+    it(`professional_card: body starts at/after the headline's worst-case height ("${label}")`, () => {
+      const plan = computeAdLayout({ ...BASE, layout: "professional_card", headline });
+      const h = findText(plan, "headline");
+      const b = findText(plan, "body");
+      expect(b.y).toBeGreaterThanOrEqual(headlineWorstCaseBottom(h));
+    });
+  }
+
+  it("headline + long body copy: body's own reserved block still ends before the CTA pill for split", () => {
+    const longBody =
+      "Our certified technicians provide comprehensive vehicle care including diagnostics, brakes, suspension, and full-service maintenance so your family never gets stranded on the road again.";
+    const plan = computeAdLayout({ ...BASE, layout: "split", size: "1080x1350", headline: "Keep Your Fleet Moving", body: longBody });
+    const b = findText(plan, "body");
+    const ctaRect = plan.elements.find((e) => e.kind === "rect" && e.y > b.y);
+    expect(ctaRect).toBeDefined();
+    // The body's own worst-case block (its maxLines at its fontSize) must
+    // not run past where the CTA pill begins.
+    const bodyWorstCaseBottom = b.y + b.fontSize * b.lineHeight * b.maxLines;
+    expect(bodyWorstCaseBottom).toBeLessThanOrEqual((ctaRect as { y: number }).y);
+  });
+
+  it("full_bleed layout is unaffected by the Split/professional_card fix (regression guard)", () => {
+    for (const headline of HEADLINES.reportedExamples) {
+      const plan = computeAdLayout({ ...BASE, layout: "full_bleed", headline });
+      const h = findText(plan, "headline");
+      const b = findText(plan, "body");
+      // full_bleed builds bottom-up with fixed reservations - body is
+      // always ABOVE the headline in paint order/position here, so the
+      // invariant is simply that neither element's box collides with the
+      // CTA pill, which full_bleed already guarantees structurally.
+      expect(h.y).toBeGreaterThan(0);
+      expect(b.y).toBeGreaterThan(0);
+    }
   });
 });

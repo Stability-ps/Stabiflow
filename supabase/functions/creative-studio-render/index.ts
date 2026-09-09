@@ -22,6 +22,7 @@ import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/worksp
 import { CONTENT_MEDIA_BUCKET } from "../_shared/contentPublishExecution.ts";
 import { readPngDimensions, registerContentMediaAsset } from "../_shared/creativeStudio/mediaAssets.ts";
 import { buildContactLine, parseContactFields, resolveBrandSnapshot, type BrandSnapshot } from "../_shared/creativeStudio/brandSnapshot.ts";
+import { countNewCombos } from "../_shared/creativeStudio/comboCap.ts";
 
 const LAYOUTS = new Set(["split", "full_bleed", "bold_statement", "professional_card"]);
 const SIZE_DIMS: Record<string, { width: number; height: number }> = {
@@ -111,12 +112,17 @@ Deno.serve(async (req: Request) => {
     }[];
     if (concepts.length === 0) return json(req, { error: "No concepts with a ready visual to render" }, 400);
 
-    const combos = concepts.length * layouts.length * sizes.length;
-    const { count: existingCount } = await callerSb
+    // Only combos that don't already exist count against the cap - see
+    // comboCap.ts for why (a re-plan of an already-fully-planned batch,
+    // e.g. reopening a saved generation, is idempotent and must never be
+    // rejected just because the SAME combos were already counted once
+    // before).
+    const { data: existingRows } = await callerSb
       .from("creative_studio_creatives")
-      .select("id", { count: "exact", head: true })
+      .select("concept_id, layout, size")
       .eq("batch_id", batchId);
-    if ((existingCount ?? 0) + combos > MAX_CREATIVES_PER_BATCH) {
+    const { existingCount, newCombos } = countNewCombos(existingRows ?? [], concepts, layouts, sizes);
+    if (existingCount + newCombos > MAX_CREATIVES_PER_BATCH) {
       return json(req, { error: `That would exceed the ${MAX_CREATIVES_PER_BATCH}-creative limit for one batch. Pick fewer concepts, layouts or sizes.` }, 400);
     }
 

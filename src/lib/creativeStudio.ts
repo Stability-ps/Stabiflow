@@ -7,13 +7,47 @@ export type CreativeVariant = {
   cta: string;
 };
 
+// supabase-js's FunctionsHttpError hardcodes error.message to "Edge
+// Function returned a non-2xx status code" and leaves `data` null on any
+// non-2xx response - the function's actual JSON error body is only
+// reachable via error.context (the raw Response). Without this, every
+// error from every creative-studio-* function surfaced as that one
+// generic string regardless of what the function returned. Mirrors the
+// same error.context handling already used in adCampaigns.ts/integrations.ts.
+async function readErrorPayloadFromContext(error: unknown): Promise<unknown> {
+  const context = (error as { context?: unknown } | null)?.context;
+  if (!context || typeof context !== "object") return null;
+  const maybeResponse = context as { json?: () => Promise<unknown>; text?: () => Promise<string>; clone?: () => unknown };
+  const source = typeof maybeResponse.clone === "function" ? (maybeResponse.clone() as typeof maybeResponse) : maybeResponse;
+  if (typeof source.json === "function") {
+    try {
+      return await source.json();
+    } catch {
+      // fall through to text
+    }
+  }
+  if (typeof source.text === "function") {
+    try {
+      const text = await source.text();
+      return text ? JSON.parse(text) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(name, { body });
   // Mirrors the same message/error-code preference used across
   // adCampaigns.ts/contentFunctions.ts/inbox.ts - workspaceSuspendedBody
   // and similar structured error bodies put the human text in `message`.
+  // These are always our own human-authored sentences (see the edge
+  // functions' json(req, { error: "..." }, status) calls) - never a raw
+  // stack trace or secret - so surfacing them to the UI is safe.
   if (error) {
-    const parsed = data as { error?: string; message?: string } | null;
+    const contextPayload = await readErrorPayloadFromContext(error);
+    const parsed = (contextPayload ?? data) as { error?: string; message?: string } | null;
     const message = parsed?.message || parsed?.error || error.message || `${name} failed`;
     throw new Error(message);
   }
