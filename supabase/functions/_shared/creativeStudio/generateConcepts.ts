@@ -32,6 +32,11 @@ export type ConceptStudioInput = {
   // buildReferenceGuidanceText). Style inspiration only - never treated
   // as a source of commercial fact, and it never overrides businessContext.
   referenceGuidance?: string;
+  // Optional: free-text scene/mood direction the user typed for the
+  // visual (one-click form's "Visual direction" field). Folded into the
+  // background-only visualPrompt guidance - never a source of commercial
+  // fact, and still subject to appendNoTextRule() like every other prompt.
+  visualDirection?: string;
 };
 
 export type VisualConcept = {
@@ -100,6 +105,9 @@ export function buildInputText(input: ConceptStudioInput): string {
   if (input.referenceGuidance?.trim()) {
     parts.push(input.referenceGuidance.trim());
   }
+  if (input.visualDirection?.trim()) {
+    parts.push(`Visual direction for the background (style/scene inspiration only, still no text/logos in visualPrompt): ${input.visualDirection.trim()}`);
+  }
   parts.push(`Generate exactly ${clampConceptCount(input.conceptCount)} distinct visual concepts.`);
   return parts.join("\n");
 }
@@ -165,6 +173,27 @@ export function parseConceptsResponse(raw: unknown): VisualConcept[] {
       visualNotes: visualNotes.trim(),
     };
   });
+}
+
+// User-supplied campaign text precedence (instruction #9): user text >
+// AI-generated text > (brand-default CTA / system fallback, applied
+// later by resolveCta in lib/adRenderer/layout.ts - out of scope here).
+// A non-blank override is applied to EVERY concept verbatim - visual
+// variety across concepts is preserved, campaign text is not. A blank/
+// undefined override leaves the AI's own per-concept text untouched.
+export type UserCopyOverride = { headline?: string; body?: string; cta?: string };
+
+export function applyCopyOverrides(concepts: VisualConcept[], overrides: UserCopyOverride | undefined): VisualConcept[] {
+  const headline = overrides?.headline?.trim();
+  const body = overrides?.body?.trim();
+  const cta = overrides?.cta?.trim();
+  if (!headline && !body && !cta) return concepts;
+  return concepts.map((c) => ({
+    ...c,
+    headline: headline || c.headline,
+    supportingText: body || c.supportingText,
+    cta: cta || c.cta,
+  }));
 }
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;

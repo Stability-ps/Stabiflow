@@ -21,6 +21,7 @@ import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermissio
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 import { CONTENT_MEDIA_BUCKET } from "../_shared/contentPublishExecution.ts";
 import { readPngDimensions, registerContentMediaAsset } from "../_shared/creativeStudio/mediaAssets.ts";
+import { buildContactLine, parseContactFields, resolveBrandSnapshot, type BrandSnapshot } from "../_shared/creativeStudio/brandSnapshot.ts";
 
 const LAYOUTS = new Set(["split", "full_bleed", "bold_statement", "professional_card"]);
 const SIZE_DIMS: Record<string, { width: number; height: number }> = {
@@ -86,7 +87,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: batch } = await callerSb
       .from("creative_studio_batches")
-      .select("id, workspace_id")
+      .select("id, workspace_id, brand_snapshot, contact_fields")
       .eq("id", batchId)
       .maybeSingle();
     if (!batch || batch.workspace_id !== workspaceId) return json(req, { error: "Batch not found" }, 404);
@@ -158,19 +159,34 @@ Deno.serve(async (req: Request) => {
       .eq("workspace_id", workspaceId)
       .order("created_at", { ascending: true });
 
-    // Brand kit.
-    const [{ data: ws }, { data: settings }] = await Promise.all([
-      callerSb.from("workspaces").select("name").eq("id", workspaceId).maybeSingle(),
-      callerSb
-        .from("workspace_settings")
-        .select("brand_primary_color, brand_accent_color, brand_cta_text_color, ad_footer_disclaimer, default_ad_cta, logo_path, contact_email, contact_phone, website")
-        .eq("workspace_id", workspaceId)
-        .maybeSingle(),
-    ]);
+    // Brand kit: ALWAYS prefer the batch's own brand_snapshot - it is what
+    // this batch was actually generated with (instruction #7). Only
+    // batches created before Brand Profiles existed have a null
+    // snapshot; those fall back to live workspace_settings exactly as
+    // before (pre-existing behaviour, unchanged).
+    const brandSnapshot: BrandSnapshot =
+      (batch.brand_snapshot as BrandSnapshot | null) ??
+      (await (async () => {
+        const resolved = await resolveBrandSnapshot(callerSb, workspaceId, null);
+        return "error" in resolved ? ({ name: "" } as BrandSnapshot) : resolved.snapshot;
+      })());
+    const contactFields = parseContactFields((batch as { contact_fields?: unknown }).contact_fields);
 
     let logoUrl: string | null = null;
-    if (settings?.logo_path) {
-      const { data: signed } = await callerSb.storage.from(WORKSPACE_ASSETS_BUCKET).createSignedUrl(settings.logo_path, SIGNED_URL_SECONDS);
+    if (brandSnapshot.logoMediaAssetId) {
+      const { data: logoAsset } = await callerSb
+        .from("content_media_assets")
+        .select("storage_path, workspace_id")
+        .eq("id", brandSnapshot.logoMediaAssetId)
+        .maybeSingle();
+      if (logoAsset && (logoAsset as { workspace_id: string }).workspace_id === workspaceId) {
+        const { data: signed } = await callerSb.storage
+          .from(CONTENT_MEDIA_BUCKET)
+          .createSignedUrl((logoAsset as { storage_path: string }).storage_path, SIGNED_URL_SECONDS);
+        logoUrl = signed?.signedUrl ?? null;
+      }
+    } else if (brandSnapshot.logoPath) {
+      const { data: signed } = await callerSb.storage.from(WORKSPACE_ASSETS_BUCKET).createSignedUrl(brandSnapshot.logoPath, SIGNED_URL_SECONDS);
       logoUrl = signed?.signedUrl ?? null;
     }
 
@@ -197,18 +213,25 @@ Deno.serve(async (req: Request) => {
       ok: true,
       creatives: creatives ?? [],
       brand: {
-        name: ws?.name ?? "",
-        primary: settings?.brand_primary_color ?? null,
-        accent: settings?.brand_accent_color ?? null,
-        ctaText: settings?.brand_cta_text_color ?? null,
-        footerDisclaimer: settings?.ad_footer_disclaimer ?? null,
+        name: brandSnapshot.name ?? "",
+        primary: brandSnapshot.primary,
+        secondary: brandSnapshot.secondary,
+        accent: brandSnapshot.accent,
+        ctaText: brandSnapshot.ctaText,
+        footerDisclaimer: brandSnapshot.footerDisclaimer,
         // Fallback CTA label only - never authoritative over a
         // creative's own stored cta (see resolveCta in adRenderer/layout.ts).
-        defaultCta: settings?.default_ad_cta ?? null,
-        contactEmail: settings?.contact_email ?? null,
-        contactPhone: settings?.contact_phone ?? null,
-        website: settings?.website ?? null,
+        defaultCta: brandSnapshot.defaultCta,
+        contactEmail: brandSnapshot.contactEmail,
+        contactPhone: brandSnapshot.contactPhone,
+        whatsapp: brandSnapshot.whatsapp,
+        website: brandSnapshot.website,
+        address: brandSnapshot.address,
         logoUrl,
+        // The deterministic "info bits" contact line (instruction #16),
+        // pre-joined server-side from only the fields this batch chose to
+        // show - the client draws it verbatim, no further field logic.
+        contactLine: buildContactLine(brandSnapshot, contactFields),
       },
       conceptVisualUrls: conceptVisual,
     });
