@@ -360,9 +360,23 @@ export function computeAdLayout(input: AdRenderInput): AdLayoutPlan {
       y += Math.round(width * 0.028 * 1.8);
     }
     const ctaFs = Math.round(width * 0.032);
-    ctaPill(margin, height - margin - (ctaFs + Math.round(ctaFs * 0.7) * 2), estCtaWidth(ctaFs), ctaFs, accent, input.cta, "left", brand).forEach((e) => elements.push(e));
+    const ctaBlockH = ctaFs + Math.round(ctaFs * 0.7) * 2;
+    const ctaGap = Math.round(margin * 0.3);
+    // The card's fixed bottom-anchored CTA position keeps a clean,
+    // consistent look when content is short (unchanged from before) -
+    // but headline/body/infoBits above are already reserved at their
+    // worst-case (maxLines) height, so for once that worst case is
+    // reached the CTA must move down with it rather than staying fixed
+    // and getting run into (confirmed collision, reproducible even with
+    // normal-length body copy at 1080x1080 - the card area is short
+    // enough that the fixed anchor was already too close).
+    const ctaFixedY = height - margin - ctaBlockH;
+    const ctaY = Math.max(ctaFixedY, y + ctaGap);
+    ctaPill(margin, ctaY, estCtaWidth(ctaFs), ctaFs, accent, input.cta, "left", brand).forEach((e) => elements.push(e));
     if (input.disclaimer) {
-      elements.push(track(text("disclaimer", input.disclaimer, { x: margin, y: height - Math.round(margin * 0.55), maxWidth: innerW, fontSize: Math.round(width * 0.016), color: "#94a3b8", maxLines: 1, lineHeight: 1.15 })));
+      const disclaimerFixedY = height - Math.round(margin * 0.55);
+      const disclaimerY = Math.max(disclaimerFixedY, ctaY + ctaBlockH + ctaGap);
+      elements.push(track(text("disclaimer", input.disclaimer, { x: margin, y: disclaimerY, maxWidth: innerW, fontSize: Math.round(width * 0.016), color: "#94a3b8", maxLines: 1, lineHeight: 1.15 })));
     }
   }
 

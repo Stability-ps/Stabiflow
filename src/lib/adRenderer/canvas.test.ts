@@ -111,3 +111,96 @@ describe("cover/contain geometry", () => {
     expect(r.dh).toBeLessThanOrEqual(1080);
   });
 });
+
+// Targeted verification requested after the Split overlap fix: does
+// professional_card have the SAME class of collision, given its CTA pill
+// is positioned at a FIXED bottom-anchored y independent of how far the
+// headline/body/infoBits content cursor actually reaches? Unlike Split
+// (whose CTA is also bottom-anchored but whose body has generous
+// headroom below it), professional_card's card area is much shorter, so
+// this is worth checking directly rather than assuming safety by
+// analogy - real fillRect/fillText draw order + positions, not just the
+// pure layout.ts reservation math.
+type DrawEvent = { kind: "rect"; y: number; h: number } | { kind: "text"; text: string; y: number };
+
+function makeOrderedCanvas(glyphWidth: number): { canvas: CanvasLike; events: DrawEvent[] } {
+  const events: DrawEvent[] = [];
+  const ctx: Ctx2DLike = {
+    canvas: { width: 0, height: 0 },
+    fillStyle: "",
+    font: "",
+    textBaseline: "",
+    textAlign: "",
+    fillRect: (_x, y, _w, h) => events.push({ kind: "rect", y, h }),
+    fillText: (text, _x, y) => events.push({ kind: "text", text, y }),
+    measureText: (text: string) => ({ width: text.length * glyphWidth }),
+    drawImage: () => {},
+    save: () => {},
+    restore: () => {},
+    beginPath: () => {},
+    rect: () => {},
+    clip: () => {},
+    createLinearGradient: () => ({ addColorStop: () => {} }) as unknown as CanvasGradient,
+  };
+  const canvas: CanvasLike = {
+    width: 0,
+    height: 0,
+    getContext: () => ctx,
+    convertToBlob: async () => new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
+  };
+  return { canvas, events };
+}
+
+describe("professional_card - CTA collision risk (targeted verification, not assumed)", () => {
+  const NORMAL_BODY = "Certified technicians you can trust.";
+  const LONG_BODY =
+    "Our certified technicians provide comprehensive vehicle care including diagnostics, brakes, suspension, and full-service maintenance so your family never gets stranded on the road again.";
+  const LONG_HEADLINE = "Expert Care for Your Vehicle and Family Every Single Day of the Year";
+
+  const CASES: { label: string; size: AdRenderInput["size"]; headline: string; body: string }[] = [
+    { label: "normal body @ 1080x1080", size: "1080x1080", headline: "Keep Your Fleet Moving", body: NORMAL_BODY },
+    { label: "long body @ 1080x1080", size: "1080x1080", headline: "Keep Your Fleet Moving", body: LONG_BODY },
+    { label: "long headline + long body @ 1080x1080", size: "1080x1080", headline: LONG_HEADLINE, body: LONG_BODY },
+    { label: "normal body @ 1080x1350", size: "1080x1350", headline: "Keep Your Fleet Moving", body: NORMAL_BODY },
+    { label: "long body @ 1080x1350", size: "1080x1350", headline: "Keep Your Fleet Moving", body: LONG_BODY },
+    { label: "long headline + long body @ 1080x1350", size: "1080x1350", headline: LONG_HEADLINE, body: LONG_BODY },
+  ];
+
+  for (const { label, size, headline, body } of CASES) {
+    it(`${label}: body/infoBits text never reaches the CTA pill's top edge`, async () => {
+      const plan = computeAdLayout({
+        ...BASE,
+        layout: "professional_card",
+        size,
+        headline,
+        body,
+        cta: "Contact Us Today", // distinctive words, won't collide with body/headline content below
+        price: "From R499",
+        contact: "021 555 0100",
+      });
+      // professional_card always pushes exactly 2 structural rects
+      // (image/placeholder area, white card area) before the CTA pill's
+      // own rect - a realistic glyph width (~0.5x fontSize, matching
+      // this file's GLYPH_ADVANCE convention) drives real wrapping.
+      const { canvas, events } = makeOrderedCanvas(0.52 * 63 /* approx professional_card headline fontSize@1080 */);
+      await renderAd(plan, {}, { createCanvas: () => canvas });
+      const rects = events.filter((e): e is Extract<DrawEvent, { kind: "rect" }> => e.kind === "rect");
+      expect(rects.length).toBe(3);
+      const ctaRectY = rects[2].y;
+
+      const ctaWords = new Set("contact us today".split(" "));
+      const nonCtaTextEvents = events.filter(
+        (e): e is Extract<DrawEvent, { kind: "text" }> => e.kind === "text" && !ctaWords.has(e.text.toLowerCase()),
+      );
+      const maxNonCtaTextY = Math.max(...nonCtaTextEvents.map((e) => e.y));
+
+      if (maxNonCtaTextY >= ctaRectY) {
+        // Collision reproduced - fail loudly with the exact numbers so
+        // this is a real, actionable regression rather than a silent
+        // pass/fail.
+        throw new Error(`Collision: body/infoBits text at y=${maxNonCtaTextY} reaches into the CTA pill starting at y=${ctaRectY} (case: ${label})`);
+      }
+      expect(maxNonCtaTextY).toBeLessThan(ctaRectY);
+    });
+  }
+});
