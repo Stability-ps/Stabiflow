@@ -107,14 +107,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(CURRENT_WORKSPACE_STORAGE_KEY),
   );
   const mounted = useRef(true);
+  const bootstrappedUserId = useRef<string | null>(null);
 
   const setCurrentWorkspaceId = (id: string) => {
     setCurrentWorkspaceIdState(id);
     localStorage.setItem(CURRENT_WORKSPACE_STORAGE_KEY, id);
   };
 
-  const loadProfileAndMemberships = async (userId: string) => {
-    setMembershipsLoading(true);
+  const loadProfileAndMemberships = async (userId: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setMembershipsLoading(true);
     const [{ data: profileRow }, { data: membershipRows }] = await Promise.all([
       supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
       supabase
@@ -157,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(initialSession);
       setUser(initialSession?.user ?? null);
       if (initialSession?.user) {
+        bootstrappedUserId.current = initialSession.user.id;
         void maybeRecordLegalAcceptance(initialSession.user);
         loadProfileAndMemberships(initialSession.user.id).finally(() => setLoading(false));
       } else {
@@ -165,13 +167,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Supabase's client re-notifies this listener (TOKEN_REFRESHED, or a
+    // re-emitted SIGNED_IN) whenever the tab regains visibility, regardless
+    // of whether anything actually changed. A re-notification for the SAME
+    // user is a silent background refresh, not a real sign-in - it must not
+    // flip membershipsLoading back to true, which is what unmounted the
+    // whole authenticated shell (via RequireWorkspace) on every tab switch.
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!mounted.current) return;
+      const nextUserId = nextSession?.user?.id ?? null;
+      const isSameUser = nextUserId !== null && nextUserId === bootstrappedUserId.current;
       setSession(nextSession);
       setUser(nextSession?.user ?? null);
+      bootstrappedUserId.current = nextUserId;
       if (nextSession?.user) {
         void maybeRecordLegalAcceptance(nextSession.user);
-        loadProfileAndMemberships(nextSession.user.id);
+        loadProfileAndMemberships(nextSession.user.id, { silent: isSameUser });
       } else {
         setProfile(null);
         setMemberships([]);
