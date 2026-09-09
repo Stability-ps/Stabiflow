@@ -1,5 +1,12 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { appendNoTextRule, buildInputText, buildInstructions, clampConceptCount, NO_TEXT_RULE, parseConceptsResponse } from "./generateConcepts.ts";
+import { appendNoTextRule, applyCopyOverrides, buildInputText, buildInstructions, clampConceptCount, NO_TEXT_RULE, parseConceptsResponse, type VisualConcept } from "./generateConcepts.ts";
+
+function fixtureConcepts(): VisualConcept[] {
+  return [
+    { conceptName: "A", headline: "AI headline A", supportingText: "AI body A", cta: "AI CTA A", visualPrompt: "p. no text, no logos.", layoutStyle: "split", visualNotes: "n" },
+    { conceptName: "B", headline: "AI headline B", supportingText: "AI body B", cta: "AI CTA B", visualPrompt: "p. no text, no logos.", layoutStyle: "split", visualNotes: "n" },
+  ];
+}
 
 Deno.test("clampConceptCount: normal value passes through", () => {
   assertEquals(clampConceptCount(4), 4);
@@ -107,6 +114,59 @@ Deno.test("buildInputText: omits any reference section when no guidance is given
   const t = buildInputText({ businessContext: "A bakery", conceptCount: 2 });
   assertEquals(t.toLowerCase().includes("reference"), false);
 });
+Deno.test("buildInputText: includes visualDirection as background-only style/scene guidance", () => {
+  const t = buildInputText({
+    businessContext: "A bakery",
+    conceptCount: 2,
+    visualDirection: "A warm sunrise over a rustic counter",
+  });
+  assertStringIncludes(t, "A warm sunrise over a rustic counter");
+  assertStringIncludes(t, "Visual direction");
+});
+Deno.test("buildInputText: omits visual direction section when not provided", () => {
+  const t = buildInputText({ businessContext: "A bakery", conceptCount: 2 });
+  assertEquals(t.includes("Visual direction"), false);
+});
+Deno.test("buildInputText: reference guidance and visual direction coexist without one overwriting the other", () => {
+  const t = buildInputText({
+    businessContext: "A bakery",
+    conceptCount: 2,
+    referenceGuidance: "keep similar colours",
+    visualDirection: "a warm sunrise scene",
+  });
+  assertStringIncludes(t, "keep similar colours");
+  assertStringIncludes(t, "a warm sunrise scene");
+});
+Deno.test("applyCopyOverrides: a supplied headline is applied verbatim to every concept, unchanged (instruction #9/#10)", () => {
+  const out = applyCopyOverrides(fixtureConcepts(), { headline: "User headline" });
+  assertEquals(out[0].headline, "User headline");
+  assertEquals(out[1].headline, "User headline");
+  // Only headline was overridden - body/cta stay AI-generated.
+  assertEquals(out[0].supportingText, "AI body A");
+  assertEquals(out[0].cta, "AI CTA A");
+});
+Deno.test("applyCopyOverrides: a blank/undefined override leaves the AI's own per-concept text untouched (instruction #11)", () => {
+  const out = applyCopyOverrides(fixtureConcepts(), { headline: "   ", body: undefined });
+  assertEquals(out[0].headline, "AI headline A");
+  assertEquals(out[1].headline, "AI headline B");
+});
+Deno.test("applyCopyOverrides: no overrides object at all is a pure no-op (returns the same concepts)", () => {
+  const concepts = fixtureConcepts();
+  const out = applyCopyOverrides(concepts, undefined);
+  assertEquals(out, concepts);
+});
+Deno.test("applyCopyOverrides: a custom campaign CTA overrides every concept's AI CTA (instruction #8)", () => {
+  const out = applyCopyOverrides(fixtureConcepts(), { cta: "Book a free quote" });
+  assertEquals(out[0].cta, "Book a free quote");
+  assertEquals(out[1].cta, "Book a free quote");
+});
+Deno.test("applyCopyOverrides: headline/body/cta overrides are independent - only the supplied fields change", () => {
+  const out = applyCopyOverrides(fixtureConcepts(), { body: "User body only" });
+  assertEquals(out[0].headline, "AI headline A");
+  assertEquals(out[0].supportingText, "User body only");
+  assertEquals(out[0].cta, "AI CTA A");
+});
+
 Deno.test("buildInstructions: warns the model that reference guidance is style-only, never a source of commercial fact", () => {
   const instructions = buildInstructions();
   assertStringIncludes(instructions.toLowerCase(), "reference-advert style guidance");

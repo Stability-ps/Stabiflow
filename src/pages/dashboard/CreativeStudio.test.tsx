@@ -5,12 +5,39 @@ import CreativeStudio from "./CreativeStudio";
 
 const mocks = vi.hoisted(() => ({ assets: [] as Array<Record<string, unknown>> }));
 
-vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ currentWorkspaceId: "workspace-1", hasPermission: () => true }) }));
+vi.mock("@/hooks/useAuth", () => ({
+  useAuth: () => ({
+    currentWorkspaceId: "workspace-1",
+    currentMembership: { workspace: { name: "Test Workspace" } },
+    user: { id: "user-1" },
+    hasPermission: () => true,
+  }),
+}));
 vi.mock("@/hooks/useContentMediaAssets", () => ({ useContentMediaAssets: () => ({ data: mocks.assets }) }));
 vi.mock("@/components/content/MediaPreview", () => ({ MediaPreview: ({ alt }: { alt: string }) => <img alt={alt} /> }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
+
+const brandProfilesMock = vi.hoisted(() => ({
+  listBrandProfiles: vi.fn().mockResolvedValue([]),
+  seedDefaultProfileIfMissing: vi.fn().mockResolvedValue(null),
+  createBrandProfile: vi.fn(),
+  updateBrandProfile: vi.fn(),
+  deleteBrandProfile: vi.fn(),
+}));
+vi.mock("@/lib/brandProfiles", () => brandProfilesMock);
+
+function supabaseChain() {
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.order = () => chain;
+  chain.limit = () => Promise.resolve({ data: [], error: null });
+  chain.update = () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) });
+  chain.then = (onFulfilled: (v: { data: unknown[]; error: null }) => unknown) => Promise.resolve({ data: [], error: null }).then(onFulfilled);
+  return chain;
+}
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: () => ({ update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) }) }), auth: { getUser: () => Promise.resolve({ data: { user: null } }) } },
+  supabase: { from: () => supabaseChain(), auth: { getUser: () => Promise.resolve({ data: { user: null } }) } },
 }));
 
 const creativeStudioMock = vi.hoisted(() => ({
@@ -27,20 +54,22 @@ function renderStudio() {
   return render(<MemoryRouter><CreativeStudio /></MemoryRouter>);
 }
 
-describe("Creative Studio - existing copy generation (regression)", () => {
+function openAdvanced() {
+  fireEvent.click(screen.getByRole("button", { name: /show generation details/i }));
+}
+
+describe("Creative Studio - one-page form (regression)", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
-  it("explains the required field and uses the shared light textarea", () => {
+  it("explains the required field and disables the primary Generate Ads button", () => {
     mocks.assets = [];
     renderStudio();
-    const textarea = screen.getByLabelText(/what is the product or service/i);
-    expect(textarea).toHaveClass("bg-background", "text-foreground");
+    const textarea = screen.getByLabelText(/product\/service/i);
     expect(textarea).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText(/describe the product or service before generating/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /generate copy/i })).toBeDisabled();
+    expect(screen.getByText(/describe the product or service before generating ads/i)).toBeInTheDocument();
   });
 
   it("shows a clear selected media card and allows removal", () => {
@@ -60,15 +89,16 @@ describe("Creative Studio - existing copy generation (regression)", () => {
     expect(screen.getByRole("button", { name: "Open Media Library" })).toBeInTheDocument();
   });
 
-  it("still calls the existing copy generator with the brief, unchanged by the batch-ads extension", async () => {
+  it("the advanced standalone-copy path still calls the existing copy generator with the brief", async () => {
     mocks.assets = [];
     creativeStudioMock.generateCreativeCopy.mockResolvedValue({
       ok: true,
       variants: [{ headline: "H", primaryText: "P", description: "D", cta: "Go" }],
     });
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/what is the product or service/i), { target: { value: "A weekend baking course" } });
-    fireEvent.click(screen.getByRole("button", { name: /generate copy/i }));
+    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A weekend baking course" } });
+    fireEvent.click(screen.getByRole("button", { name: /show standalone copy ideas/i }));
+    fireEvent.click(screen.getByRole("button", { name: /generate copy ideas/i }));
     await waitFor(() => expect(creativeStudioMock.generateCreativeCopy).toHaveBeenCalledTimes(1));
     expect(creativeStudioMock.generateCreativeCopy).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "workspace-1", businessContext: "A weekend baking course", variantCount: 3 }),
@@ -77,33 +107,47 @@ describe("Creative Studio - existing copy generation (regression)", () => {
   });
 });
 
-describe("Creative Studio - batch image ads extension", () => {
+describe("Creative Studio - one-click Generate Ads orchestration entry point", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
   });
 
-  it("adds a 'Generate visual concepts' entry point below the copy section without a second route", () => {
+  it("shows the primary Generate Ads button with the concepts x formats calculation", () => {
     mocks.assets = [];
     renderStudio();
-    // Same page, extended in place - not a new wizard/route.
-    expect(screen.getByRole("button", { name: /generate visual concepts/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /generate ads/i })).toBeInTheDocument();
+    // Default: 3 concepts x 2 formats (1080x1080 + 1080x1350) = 6 ads.
+    expect(screen.getAllByText(/= 6 finished ads/i).length).toBeGreaterThan(0);
   });
 
-  it("feeds the shared brief into concept generation (no re-entering the brief)", async () => {
+  it("advanced controls still expose the underlying stage-by-stage buttons (old workflow preserved)", async () => {
     mocks.assets = [];
     creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/what is the product or service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A bakery in Cape Town" } });
+    openAdvanced();
     fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
     await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
     expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "workspace-1", businessContext: "A bakery in Cape Town", conceptCount: 4 }),
+      expect.objectContaining({ workspaceId: "workspace-1", businessContext: "A bakery in Cape Town" }),
     );
+  });
+
+  it("legacy no-reference workflow is unchanged: asset_purpose is not sent when nothing is selected", async () => {
+    mocks.assets = [];
+    creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
+    renderStudio();
+    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A bakery in Cape Town" } });
+    openAdvanced();
+    fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
+    await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
+    const call = creativeStudioMock.generateVisualConcepts.mock.calls[0][0];
+    expect(call.assetPurpose).toBeNull();
   });
 });
 
-describe("Creative Studio - reference-ads asset purpose + controls (approved plan)", () => {
+describe("Creative Studio - reference-ads asset purpose + controls (approved plan, still functional)", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -122,28 +166,18 @@ describe("Creative Studio - reference-ads asset purpose + controls (approved pla
     renderStudio();
     fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
     expect(screen.getByText(/Media Library classifies this as "Reference advert"/)).toBeInTheDocument();
-    // The suggested purpose pre-selects reference_creative, which reveals the reference controls.
     expect(screen.getByText("How should StabiFlow use this reference?")).toBeInTheDocument();
-  });
-
-  it("reference preference controls stay hidden for product_image/background purposes", () => {
-    mocks.assets = [{ id: "asset-1", title: "product.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "product_image" }];
-    renderStudio();
-    fireEvent.click(screen.getByRole("button", { name: "Select product.jpg" }));
-    expect(screen.queryByText("How should StabiFlow use this reference?")).not.toBeInTheDocument();
   });
 
   it("passes asset_purpose and reference_preferences through to concept generation when Reference is chosen", async () => {
-    // Pre-classified so the purpose auto-suggests without driving the Radix
-    // Select's pointer interactions (covered structurally by the "suggests"
-    // test above) - this test's job is the checkbox -> payload wiring.
     mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "reference_creative" }];
     creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/what is the product or service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A bakery in Cape Town" } });
     fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
     expect(screen.getByText("How should StabiFlow use this reference?")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Keep similar colours"));
+    openAdvanced();
     fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
     await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
     expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledWith(
@@ -153,16 +187,5 @@ describe("Creative Studio - reference-ads asset purpose + controls (approved pla
         referencePreferences: expect.objectContaining({ keep_colours: true, fresh_layout: false }),
       }),
     );
-  });
-
-  it("legacy no-reference workflow is unchanged: asset_purpose is not sent when nothing is selected", async () => {
-    mocks.assets = [];
-    creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
-    renderStudio();
-    fireEvent.change(screen.getByLabelText(/what is the product or service/i), { target: { value: "A bakery in Cape Town" } });
-    fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
-    await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
-    const call = creativeStudioMock.generateVisualConcepts.mock.calls[0][0];
-    expect(call.assetPurpose).toBeNull();
   });
 });

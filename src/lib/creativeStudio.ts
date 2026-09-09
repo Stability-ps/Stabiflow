@@ -67,6 +67,13 @@ export type CreativeStudioBatch = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  brand_profile_id: string | null;
+  brand_snapshot: Record<string, unknown> | null;
+  visual_direction: string | null;
+  user_headline: string | null;
+  user_body_text: string | null;
+  user_cta: string | null;
+  contact_fields: string[];
 };
 
 export type CreativeStudioConcept = {
@@ -119,6 +126,7 @@ export type CreativeStudioAd = {
 export type CreativeBrandKit = {
   name: string;
   primary: string | null;
+  secondary: string | null;
   accent: string | null;
   ctaText: string | null;
   footerDisclaimer: string | null;
@@ -127,8 +135,13 @@ export type CreativeBrandKit = {
   defaultCta: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  whatsapp: string | null;
   website: string | null;
+  address: string | null;
   logoUrl: string | null;
+  // Pre-joined deterministic contact "info bits" line, already filtered
+  // server-side to the batch's chosen contact_fields (instruction #16).
+  contactLine: string | null;
 };
 
 // How THIS generation should use the attached asset - independent of the
@@ -152,6 +165,9 @@ export const DEFAULT_REFERENCE_PREFERENCES: ReferencePreferences = {
   fresh_layout: false,
 };
 
+export type UserCopyOverride = { headline?: string; body?: string; cta?: string };
+export type ContactFieldKey = "phone" | "whatsapp" | "website" | "email" | "address";
+
 export function generateVisualConcepts(input: {
   workspaceId: string;
   businessContext: string;
@@ -162,6 +178,10 @@ export function generateVisualConcepts(input: {
   referencePreferences?: ReferencePreferences;
   conceptCount: number;
   copyVariants?: CreativeVariant[];
+  brandProfileId?: string | null;
+  visualDirection?: string;
+  userCopy?: UserCopyOverride;
+  contactFields?: ContactFieldKey[];
 }) {
   return invoke<{ ok: true; batch: CreativeStudioBatch; concepts: CreativeStudioConcept[] }>("creative-studio-concepts", {
     workspace_id: input.workspaceId,
@@ -173,6 +193,13 @@ export function generateVisualConcepts(input: {
     reference_preferences: input.assetPurpose === "reference_creative" ? input.referencePreferences : undefined,
     concept_count: input.conceptCount,
     copy_variants: input.copyVariants && input.copyVariants.length > 0 ? input.copyVariants : undefined,
+    brand_profile_id: input.brandProfileId || undefined,
+    visual_direction: input.visualDirection?.trim() || undefined,
+    user_copy:
+      input.userCopy && (input.userCopy.headline?.trim() || input.userCopy.body?.trim() || input.userCopy.cta?.trim())
+        ? input.userCopy
+        : undefined,
+    contact_fields: input.contactFields && input.contactFields.length > 0 ? input.contactFields : undefined,
   });
 }
 

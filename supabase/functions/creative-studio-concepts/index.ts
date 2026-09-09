@@ -5,6 +5,7 @@
 // Responses API shape; this function persists the result (unlike
 // creative-studio-generate, which only returns text).
 import {
+  applyCopyOverrides,
   clampConceptCount,
   generateVisualConcepts,
   type ConceptCopySeed,
@@ -22,6 +23,7 @@ import { toDataUrl } from "../_shared/inbox/multimodalMedia.ts";
 import { CONTENT_MEDIA_BUCKET } from "../_shared/contentPublishExecution.ts";
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
+import { parseContactFields, resolveBrandSnapshot } from "../_shared/creativeStudio/brandSnapshot.ts";
 
 const ASSET_PURPOSES = new Set(["reference_creative", "product_image", "background"]);
 
@@ -113,6 +115,26 @@ Deno.serve(async (req: Request) => {
   const rawPurpose = typeof body.asset_purpose === "string" ? body.asset_purpose : null;
   const assetPurpose = rawPurpose && ASSET_PURPOSES.has(rawPurpose) ? (rawPurpose as "reference_creative" | "product_image" | "background") : null;
   const referencePreferences = parseReferencePreferences(body.reference_preferences);
+  const visualDirection = str(body.visual_direction, 500);
+
+  // brand_profile_id is optional - omitting it means "use this
+  // workspace's legacy Brand Kit" (instruction #6 compatibility path).
+  const brandProfileId = typeof body.brand_profile_id === "string" && body.brand_profile_id ? body.brand_profile_id : null;
+  const brandResolution = await resolveBrandSnapshot(callerSb, workspaceId, brandProfileId);
+  if ("error" in brandResolution) return json(req, { error: brandResolution.error }, 400);
+  const { snapshot: brandSnapshot, resolvedProfileId } = brandResolution;
+
+  // User-supplied campaign text (instruction #9): authoritative over
+  // whatever the AI generates. Applied to every concept verbatim after
+  // generation, below - the AI still writes conceptName/visualPrompt/
+  // layoutStyle/visualNotes even when copy is fully user-supplied,
+  // because those describe the VISUAL, not the campaign text.
+  const rawUserCopy = body.user_copy && typeof body.user_copy === "object" ? (body.user_copy as Record<string, unknown>) : null;
+  const userHeadline = str(rawUserCopy?.headline, 120);
+  const userBodyText = str(rawUserCopy?.body, 400);
+  const userCta = str(rawUserCopy?.cta, 40);
+
+  const contactFields = parseContactFields(body.contact_fields);
 
   // If a source media asset was named, make sure it's this workspace's -
   // select the columns reference analysis needs so there is no second
@@ -161,11 +183,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const referenceGuidance = referenceStyle ? buildReferenceGuidanceText(referenceStyle, referencePreferences) : undefined;
-  const input: ConceptStudioInput = { businessContext, audience, tone, conceptCount, copySeeds, referenceGuidance };
+  const input: ConceptStudioInput = { businessContext, audience, tone, conceptCount, copySeeds, referenceGuidance, visualDirection };
 
   let concepts;
   try {
     concepts = await generateVisualConcepts({ apiKey, model }, input);
+    concepts = applyCopyOverrides(concepts, { headline: userHeadline, body: userBodyText, cta: userCta });
   } catch (err) {
     console.error("creative-studio-concepts: generation failed", err instanceof Error ? err.message : err);
     return json(req, { error: "Unable to generate visual concepts right now. Try again shortly." }, 502);
@@ -182,6 +205,13 @@ Deno.serve(async (req: Request) => {
       source_media_asset_id: sourceMediaAssetId,
       reference_style: referenceStyle,
       reference_preferences: referenceStyle ? referencePreferences : null,
+      brand_profile_id: resolvedProfileId,
+      brand_snapshot: brandSnapshot,
+      visual_direction: visualDirection ?? null,
+      user_headline: userHeadline ?? null,
+      user_body_text: userBodyText ?? null,
+      user_cta: userCta ?? null,
+      contact_fields: contactFields,
       created_by: actorId,
     })
     .select("*")
@@ -191,6 +221,10 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Could not start a creative batch." }, 500);
   }
 
+  // concepts already carries user-authoritative text overrides (instruction
+  // #9), applied verbatim to every concept just above via
+  // applyCopyOverrides() - visual variety across concepts is preserved,
+  // campaign text is not.
   const conceptRows = concepts.map((c, i) => ({
     batch_id: batch.id,
     workspace_id: workspaceId,

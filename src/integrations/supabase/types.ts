@@ -1888,7 +1888,10 @@ export type Database = {
       creative_studio_batches: {
         Row: {
           audience: string | null
+          brand_profile_id: string | null
+          brand_snapshot: Json | null
           business_context: string
+          contact_fields: string[]
           created_at: string
           created_by: string | null
           error_detail: string | null
@@ -1901,11 +1904,18 @@ export type Database = {
           status: Database["public"]["Enums"]["creative_studio_batch_status"]
           tone: string | null
           updated_at: string
+          user_body_text: string | null
+          user_cta: string | null
+          user_headline: string | null
+          visual_direction: string | null
           workspace_id: string
         }
         Insert: {
           audience?: string | null
+          brand_profile_id?: string | null
+          brand_snapshot?: Json | null
           business_context: string
+          contact_fields?: string[]
           created_at?: string
           created_by?: string | null
           error_detail?: string | null
@@ -1918,11 +1928,18 @@ export type Database = {
           status?: Database["public"]["Enums"]["creative_studio_batch_status"]
           tone?: string | null
           updated_at?: string
+          user_body_text?: string | null
+          user_cta?: string | null
+          user_headline?: string | null
+          visual_direction?: string | null
           workspace_id: string
         }
         Update: {
           audience?: string | null
+          brand_profile_id?: string | null
+          brand_snapshot?: Json | null
           business_context?: string
+          contact_fields?: string[]
           created_at?: string
           created_by?: string | null
           error_detail?: string | null
@@ -1935,9 +1952,20 @@ export type Database = {
           status?: Database["public"]["Enums"]["creative_studio_batch_status"]
           tone?: string | null
           updated_at?: string
+          user_body_text?: string | null
+          user_cta?: string | null
+          user_headline?: string | null
+          visual_direction?: string | null
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "creative_studio_batches_brand_profile_id_fkey"
+            columns: ["brand_profile_id"]
+            isOneToOne: false
+            referencedRelation: "creative_brand_profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "creative_studio_batches_created_by_fkey"
             columns: ["created_by"]
@@ -1954,6 +1982,87 @@ export type Database = {
           },
           {
             foreignKeyName: "creative_studio_batches_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creative_brand_profiles: {
+        Row: {
+          accent_color: string | null
+          address: string | null
+          company_name: string
+          contact_email: string | null
+          contact_phone: string | null
+          created_at: string
+          cta_text_color: string | null
+          default_cta: string | null
+          footer_disclaimer: string | null
+          id: string
+          is_default: boolean
+          logo_media_asset_id: string | null
+          name: string
+          primary_color: string | null
+          secondary_color: string | null
+          updated_at: string
+          website: string | null
+          whatsapp_number: string | null
+          workspace_id: string
+        }
+        Insert: {
+          accent_color?: string | null
+          address?: string | null
+          company_name: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          cta_text_color?: string | null
+          default_cta?: string | null
+          footer_disclaimer?: string | null
+          id?: string
+          is_default?: boolean
+          logo_media_asset_id?: string | null
+          name: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          updated_at?: string
+          website?: string | null
+          whatsapp_number?: string | null
+          workspace_id: string
+        }
+        Update: {
+          accent_color?: string | null
+          address?: string | null
+          company_name?: string
+          contact_email?: string | null
+          contact_phone?: string | null
+          created_at?: string
+          cta_text_color?: string | null
+          default_cta?: string | null
+          footer_disclaimer?: string | null
+          id?: string
+          is_default?: boolean
+          logo_media_asset_id?: string | null
+          name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          updated_at?: string
+          website?: string | null
+          whatsapp_number?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_brand_profiles_logo_media_asset_id_fkey"
+            columns: ["logo_media_asset_id"]
+            isOneToOne: false
+            referencedRelation: "content_media_assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_brand_profiles_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
