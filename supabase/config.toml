@@ -431,6 +431,17 @@ verify_jwt = false
 [functions.whatsapp-outbound-retry-tick]
 verify_jwt = false
 
+# Called by Paystack's servers - authenticity is the x-paystack-signature
+# HMAC-SHA512 of the raw body (PAYSTACK_SECRET_KEY), never a Supabase JWT.
+[functions.paystack-webhook]
+verify_jwt = false
+
+# Cron-triggered only (pg_cron -> pg_net, see
+# 20261014060000_paystack_billing.sql) - authorises itself via the
+# x-cron-secret header (BILLING_CRON_SECRET), never a Supabase JWT.
+[functions.billing-reconcile-tick]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

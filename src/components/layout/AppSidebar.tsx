@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/layout/BrandLogo";
-import { isNavItemActive, NAV_ITEMS, type NavChild } from "@/lib/navigation";
+import { isNavItemActive, NAV_ITEMS, type NavChild, type NavItem } from "@/lib/navigation";
 
 function isChildActive(child: NavChild, pathname: string): boolean {
   if (child.external) return false;
@@ -12,7 +12,10 @@ function isChildActive(child: NavChild, pathname: string): boolean {
   return pathname === childPath || pathname.startsWith(`${childPath}/`);
 }
 
-export function AppSidebar() {
+// `items` defaults to the full list; AppLayout passes the feature-flag
+// filtered list (see filterNavItems) so this component stays a pure
+// presentational list.
+export function AppSidebar({ items = NAV_ITEMS }: { items?: NavItem[] }) {
   const { pathname } = useLocation();
 
   return (
@@ -31,7 +34,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAV_ITEMS.map((item) => {
+              {items.map((item) => {
                 const active = isNavItemActive(item.path, pathname);
                 return (
                   <SidebarMenuItem key={item.path}>

@@ -4,13 +4,18 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { WorkspaceStatusBanner } from "@/components/layout/WorkspaceStatusBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
+import { filterNavItems } from "@/lib/featureFlags";
+import { NAV_ITEMS } from "@/lib/navigation";
 
 export function AppLayout() {
   const location = useLocation();
+  const { isEnabled } = useFeatureFlags();
+  const navItems = filterNavItems(NAV_ITEMS, isEnabled);
 
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <AppSidebar items={navItems} />
       <div className="flex min-h-screen w-full min-w-0 flex-col">
         <AppHeader />
         <WorkspaceStatusBanner />

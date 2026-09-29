@@ -1,6 +1,7 @@
 import {
-  BarChart3, Contact, FileText, LayoutDashboard, Megaphone, MessageCircle, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
+  BarChart3, Building2, Contact, CreditCard, FileText, LayoutDashboard, Megaphone, MessageCircle, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
 } from "lucide-react";
+import type { FeatureFlagKey } from "@/lib/featureFlags";
 
 export type NavChild = {
   label: string;
@@ -9,20 +10,28 @@ export type NavChild = {
   // WhatsApp-filtered context rather than a page owned by this section.
   to: string;
   external?: boolean;
+  /** Hidden when this module flag is off (see src/lib/featureFlags.ts). */
+  flag?: FeatureFlagKey;
 };
 
-export type NavItem = { label: string; path: string; icon: LucideIcon; children?: NavChild[] };
+export type NavItem = { label: string; path: string; icon: LucideIcon; children?: NavChild[]; flag?: FeatureFlagKey };
 
 // The primary sections from the StabiFlow product brief. "WhatsApp" is the
 // one section with its own child navigation - the Inbox, Contacts and
 // Templates pages plus filtered links into the shared Automations and
 // Analytics modules and its own Settings view. Every other item is a
 // single page.
+//
+// Launch navigation: items with a `flag` are advanced StabiFlow modules,
+// hidden unless the workspace's feature flag is on (grandfathered
+// workspaces and platform operators keep them). Items without a flag are
+// the focused Business Studio launch surface every workspace sees.
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", path: "/app", icon: LayoutDashboard },
-  { label: "Content", path: "/app/content", icon: FileText },
-  { label: "Campaigns", path: "/app/campaigns", icon: Megaphone },
-  { label: "Creative Studio", path: "/app/creative-studio", icon: Palette },
+  { label: "My Business", path: "/app/business", icon: Building2 },
+  { label: "Content", path: "/app/content", icon: FileText, flag: "module.content" },
+  { label: "Campaigns", path: "/app/campaigns", icon: Megaphone, flag: "module.campaigns" },
+  { label: "Creative Studio", path: "/app/creative-studio", icon: Palette, flag: "module.creative_studio" },
   {
     // path is the section root (the index route redirects to /inbox). Using
     // the root - not a child path - is what lets the single sidebar item
@@ -30,21 +39,23 @@ export const NAV_ITEMS: NavItem[] = [
     label: "WhatsApp",
     path: "/app/whatsapp",
     icon: MessageCircle,
+    flag: "module.whatsapp",
     children: [
       { label: "Inbox", to: "/app/whatsapp/inbox" },
       { label: "Contacts", to: "/app/whatsapp/contacts" },
       { label: "Templates", to: "/app/whatsapp/templates" },
-      { label: "Automations", to: "/app/automations?trigger=conversation", external: true },
+      { label: "Automations", to: "/app/automations?trigger=conversation", external: true, flag: "module.automations" },
       { label: "Analytics", to: "/app/whatsapp/analytics" },
       { label: "Settings", to: "/app/whatsapp/settings" },
     ],
   },
-  { label: "Leads", path: "/app/leads", icon: Users },
-  { label: "Customers", path: "/app/customers", icon: Contact },
-  { label: "Analytics", path: "/app/analytics", icon: BarChart3 },
-  { label: "Flow AI", path: "/app/flow-ai", icon: Sparkles },
-  { label: "Automations", path: "/app/automations", icon: Workflow },
-  { label: "Integrations", path: "/app/integrations", icon: Plug },
+  { label: "Leads", path: "/app/leads", icon: Users, flag: "module.leads" },
+  { label: "Customers", path: "/app/customers", icon: Contact, flag: "module.customers" },
+  { label: "Analytics", path: "/app/analytics", icon: BarChart3, flag: "module.analytics" },
+  { label: "Flow AI", path: "/app/flow-ai", icon: Sparkles, flag: "module.flow_ai" },
+  { label: "Automations", path: "/app/automations", icon: Workflow, flag: "module.automations" },
+  { label: "Integrations", path: "/app/integrations", icon: Plug, flag: "module.integrations" },
+  { label: "Billing", path: "/app/billing", icon: CreditCard },
   { label: "Settings", path: "/app/settings", icon: Settings },
 ];
 
