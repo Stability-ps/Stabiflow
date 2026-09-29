@@ -12,7 +12,7 @@
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
 import {
   isUuid, reasonOf, secretStatus, validateFlagUpdate, validateOverride, validatePlan, validatePlanEntitlement, validatePrice, validatePriceUpdate,
-  validateSettingUpdate,
+  validateLegalDraft, validateSettingUpdate,
 } from "../_shared/operator/adminValidation.ts";
 
 const PAGE = 50;
@@ -353,6 +353,58 @@ Deno.serve(async (req: Request) => {
         if (error) return json(req, { error: "Could not update template" }, 400);
         await audit(sb, { operator: actorId, action: "update_template", targetType: "profile_template", targetId: key, before, after: data });
         return json(req, { ok: true, template: data });
+      }
+
+      // -- Legal documents -----------------------------------------------------------
+      case "list_legal": {
+        const [docs, versions, stats] = await Promise.all([
+          sb.from("legal_documents").select("id, document_type, version, title, body, change_summary, effective_at, status, published_at, created_at, updated_at").order("created_at", { ascending: false }),
+          sb.from("legal_document_versions").select("document_type, current_version, effective_at"),
+          sb.rpc("legal_acceptance_stats"),
+        ]);
+        return json(req, { ok: true, documents: docs.data ?? [], currentVersions: versions.data ?? [], acceptanceStats: stats.data ?? [] });
+      }
+
+      case "save_legal_draft": {
+        const v = validateLegalDraft(body.document);
+        if (!v.ok) return json(req, { error: v.error }, 400);
+        const { id, ...fields } = v.value;
+        if (id) {
+          const { data: before } = await sb.from("legal_documents").select("*").eq("id", id).maybeSingle();
+          if (!before) return json(req, { error: "Document not found" }, 404);
+          if (before.status !== "draft") return json(req, { error: "Published documents can't be edited - create a new version" }, 400);
+          const { data, error } = await sb.from("legal_documents").update(fields).eq("id", id).select("*").single();
+          if (error) return json(req, { error: error.message.includes("legal_documents_document_type_version_key") ? "That version number already exists" : "Could not save draft" }, 400);
+          await audit(sb, { operator: actorId, action: "update_legal_draft", targetType: "legal_document", targetId: id, before: { version: before.version, title: before.title }, after: { version: data.version, title: data.title } });
+          return json(req, { ok: true, document: data });
+        }
+        const { data, error } = await sb.from("legal_documents").insert({ ...fields, status: "draft", created_by: actorId }).select("*").single();
+        if (error) return json(req, { error: error.message.includes("legal_documents_document_type_version_key") ? "That version number already exists" : "Could not save draft" }, 400);
+        await audit(sb, { operator: actorId, action: "create_legal_draft", targetType: "legal_document", targetId: data.id, after: { document_type: data.document_type, version: data.version } });
+        return json(req, { ok: true, document: data });
+      }
+
+      case "delete_legal_draft": {
+        if (!isUuid(body.document_id)) return json(req, { error: "document_id is required" }, 400);
+        const { data: before } = await sb.from("legal_documents").select("id, status, document_type, version").eq("id", body.document_id).maybeSingle();
+        if (!before) return json(req, { error: "Document not found" }, 404);
+        if (before.status !== "draft") return json(req, { error: "Only drafts can be deleted - published versions are kept as history" }, 400);
+        await sb.from("legal_documents").delete().eq("id", before.id);
+        await audit(sb, { operator: actorId, action: "delete_legal_draft", targetType: "legal_document", targetId: before.id, before });
+        return json(req, { ok: true });
+      }
+
+      case "publish_legal": {
+        if (!isUuid(body.document_id)) return json(req, { error: "document_id is required" }, 400);
+        const r = reasonOf(body.reason);
+        if (!r.ok) return json(req, { error: r.error }, 400);
+        const { data: before } = await sb.from("legal_documents").select("document_type, version, status").eq("id", body.document_id).maybeSingle();
+        if (!before) return json(req, { error: "Document not found" }, 404);
+        const { data: result, error } = await sb.rpc("publish_legal_document", { p_document_id: body.document_id, p_operator_id: actorId });
+        if (error) return json(req, { error: "Could not publish" }, 500);
+        if (result !== "published") return json(req, { error: `This version is already ${String(result).replace("already_", "")}` }, 400);
+        await audit(sb, { operator: actorId, action: "publish_legal_document", targetType: "legal_document", targetId: String(body.document_id), reason: r.value, before, after: { status: "published" } });
+        return json(req, { ok: true });
       }
 
       // -- System ------------------------------------------------------------------

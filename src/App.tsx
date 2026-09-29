@@ -22,6 +22,8 @@ import Billing from "@/pages/dashboard/Billing";
 import BusinessStudio from "@/pages/dashboard/BusinessStudio";
 import Documents from "@/pages/dashboard/Documents";
 import PublicProfile from "@/pages/PublicProfile";
+import Pricing from "@/pages/Pricing";
+import { LegalDocumentPage, LegalIndexPage } from "@/pages/legal/LegalDocumentPage";
 import { FeatureGate } from "@/components/FeatureGate";
 import Content from "@/pages/dashboard/Content";
 import ContentCalendar from "@/pages/dashboard/content/Calendar";
@@ -80,9 +82,17 @@ export function AppRoutes() {
       />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
       <Route path="/b/:slug" element={<PublicProfile />} />
-      <Route path="/legal/privacy" element={<Privacy />} />
-      <Route path="/legal/terms" element={<Terms />} />
-      <Route path="/legal/data-deletion" element={<DataDeletion />} />
+      {/* Admin-published versions take over from the in-code pages once
+          the owner publishes one (Admin -> Pages & legal). */}
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/legal" element={<LegalIndexPage />} />
+      <Route path="/legal/privacy" element={<LegalDocumentPage type="privacy_policy" fallback={<Privacy />} />} />
+      <Route path="/legal/terms" element={<LegalDocumentPage type="terms_of_service" fallback={<Terms />} />} />
+      <Route path="/legal/data-deletion" element={<LegalDocumentPage type="data_deletion" fallback={<DataDeletion />} />} />
+      <Route path="/legal/subscription-terms" element={<LegalDocumentPage type="subscription_terms" />} />
+      <Route path="/legal/refunds" element={<LegalDocumentPage type="refund_policy" />} />
+      <Route path="/legal/cookies" element={<LegalDocumentPage type="cookie_policy" />} />
+      <Route path="/legal/ai-and-data" element={<LegalDocumentPage type="ai_data_disclosure" />} />
       <Route
         element={
           <RequireAuth>

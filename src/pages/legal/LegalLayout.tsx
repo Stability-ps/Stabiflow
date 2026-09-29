@@ -16,10 +16,11 @@ export function LegalLayout({ title, effectiveDate, children }: { title: string;
           <Link to="/">
             <BrandLogo variant="full" className="h-7" />
           </Link>
-          <nav className="flex gap-4 text-sm text-muted-foreground">
+          <nav className="flex flex-wrap justify-end gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <Link to="/legal/privacy" className="hover:text-foreground">Privacy Policy</Link>
             <Link to="/legal/terms" className="hover:text-foreground">Terms of Service</Link>
             <Link to="/legal/data-deletion" className="hover:text-foreground">Data Deletion</Link>
+            <Link to="/legal" className="hover:text-foreground">All policies</Link>
             <Link to="/contact" className="hover:text-foreground">Contact</Link>
             <Link to="/login" className="hover:text-foreground">Sign In</Link>
           </nav>

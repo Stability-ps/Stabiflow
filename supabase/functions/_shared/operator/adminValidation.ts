@@ -189,3 +189,44 @@ export const PLATFORM_SECRETS: { name: string; area: string; required: boolean }
 export function secretStatus(get: (name: string) => string | undefined) {
   return PLATFORM_SECRETS.map((s) => ({ ...s, configured: !!get(s.name)?.trim() }));
 }
+
+export const LEGAL_DOCUMENT_TYPES = [
+  "privacy_policy", "terms_of_service", "cookie_policy", "refund_policy", "subscription_terms", "ai_data_disclosure", "data_deletion",
+] as const;
+
+export type LegalDraftInput = {
+  id: string | null;
+  document_type: (typeof LEGAL_DOCUMENT_TYPES)[number];
+  version: string;
+  title: string;
+  body: string;
+  change_summary: string | null;
+  effective_at: string;
+};
+
+export function validateLegalDraft(input: unknown): Result<LegalDraftInput> {
+  if (!isObj(input)) return { ok: false, error: "Document is required" };
+  const type = input.document_type;
+  if (typeof type !== "string" || !(LEGAL_DOCUMENT_TYPES as readonly string[]).includes(type)) return { ok: false, error: "Unknown document type" };
+  const version = typeof input.version === "string" ? input.version.trim() : "";
+  if (!/^[0-9A-Za-z._-]{1,40}$/.test(version)) return { ok: false, error: "Version must be letters, numbers, dots or dashes (e.g. 2026-10-15)" };
+  const title = text(input.title, 200);
+  if (!title) return { ok: false, error: "Title is required" };
+  const body = typeof input.body === "string" ? input.body.replace(/\r\n/g, "\n").trim() : "";
+  if (body.length < 20) return { ok: false, error: "The document text is too short" };
+  if (body.length > 200_000) return { ok: false, error: "The document text is too long" };
+  const t = Date.parse(String(input.effective_at ?? ""));
+  if (!Number.isFinite(t)) return { ok: false, error: "Effective date is required" };
+  return {
+    ok: true,
+    value: {
+      id: isUuid(input.id) ? input.id : null,
+      document_type: type as LegalDraftInput["document_type"],
+      version,
+      title,
+      body,
+      change_summary: text(input.change_summary, 1000),
+      effective_at: new Date(t).toISOString(),
+    },
+  };
+}

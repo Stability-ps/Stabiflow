@@ -10,6 +10,7 @@ import { OperatorBilling } from "@/pages/operator/OperatorBilling";
 import { OperatorSettings } from "@/pages/operator/OperatorSettings";
 import { OperatorSystem } from "@/pages/operator/OperatorSystem";
 import { OperatorBusinessStudio } from "@/pages/operator/OperatorBusinessStudio";
+import { OperatorPagesLegal } from "@/pages/operator/OperatorPagesLegal";
 
 const TABS = [
   { value: "overview", label: "Overview", el: <OperatorOverview /> },
@@ -18,6 +19,7 @@ const TABS = [
   { value: "flags", label: "Feature flags", el: <OperatorFlags /> },
   { value: "billing", label: "Subscriptions & payments", el: <OperatorBilling /> },
   { value: "business-studio", label: "Business Studio", el: <OperatorBusinessStudio /> },
+  { value: "pages", label: "Pages & legal", el: <OperatorPagesLegal /> },
   { value: "settings", label: "Settings & content", el: <OperatorSettings /> },
   { value: "system", label: "System & audit", el: <OperatorSystem /> },
 ] as const;

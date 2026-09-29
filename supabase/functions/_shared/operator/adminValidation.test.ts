@@ -72,3 +72,14 @@ Deno.test("secretStatus reports configured/missing only - never the value", () =
   assertEquals(JSON.stringify(rows).includes("supersecret"), false);
   assertEquals(rows.find((r) => r.name === "OPENAI_API_KEY")?.configured, false);
 });
+
+import { validateLegalDraft } from "./adminValidation.ts";
+
+Deno.test("validateLegalDraft checks type, version shape, length and effective date", () => {
+  const ok = validateLegalDraft({ document_type: "refund_policy", version: "2026-10-15", title: "Refund Policy", body: "## Refunds\nOnce-off purchases are refundable within 7 days.", effective_at: "2026-10-15" });
+  assertEquals(ok.ok, true);
+  assertEquals(validateLegalDraft({ document_type: "eula", version: "1", title: "x", body: "x".repeat(30), effective_at: "2026-10-15" }).ok, false);
+  assertEquals(validateLegalDraft({ document_type: "refund_policy", version: "v 1!", title: "x", body: "x".repeat(30), effective_at: "2026-10-15" }).ok, false);
+  assertEquals(validateLegalDraft({ document_type: "refund_policy", version: "1", title: "x", body: "short", effective_at: "2026-10-15" }).ok, false);
+  assertEquals(validateLegalDraft({ document_type: "refund_policy", version: "1", title: "x", body: "x".repeat(30), effective_at: "not a date" }).ok, false);
+});

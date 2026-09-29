@@ -122,6 +122,7 @@ export default function LandingPage() {
             <a href="#features" className="transition hover:text-foreground">Features</a>
             <a href="#how-it-works" className="transition hover:text-foreground">How it works</a>
             <a href="#security" className="transition hover:text-foreground">Security</a>
+            <Link to="/pricing" className="transition hover:text-foreground">Pricing</Link>
             <a href="#faq" className="transition hover:text-foreground">FAQ</a>
             <a href="#contact" className="transition hover:text-foreground">Contact</a>
           </nav>

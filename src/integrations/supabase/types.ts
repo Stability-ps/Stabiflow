@@ -4720,6 +4720,69 @@ export type Database = {
         }
         Relationships: []
       }
+      legal_documents: {
+        Row: {
+          body: string
+          change_summary: string | null
+          created_at: string
+          created_by: string | null
+          document_type: string
+          effective_at: string
+          id: string
+          published_at: string | null
+          published_by: string | null
+          status: string
+          title: string
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          body: string
+          change_summary?: string | null
+          created_at?: string
+          created_by?: string | null
+          document_type: string
+          effective_at: string
+          id?: string
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          body?: string
+          change_summary?: string | null
+          created_at?: string
+          created_by?: string | null
+          document_type?: string
+          effective_at?: string
+          id?: string
+          published_at?: string | null
+          published_by?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "legal_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "legal_documents_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           body: string | null
@@ -7010,6 +7073,14 @@ export type Database = {
         Args: { p_name: string; p_slug: string }
         Returns: string
       }
+      current_legal_versions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          current_version: string
+          document_type: string
+          effective_at: string
+        }[]
+      }
       customer_360: {
         Args: { p_customer_id: string; p_workspace_id: string }
         Returns: Json
@@ -7366,11 +7437,32 @@ export type Database = {
         Args: { p_exclude_workspace_id?: string; p_slug: string }
         Returns: boolean
       }
+      legal_acceptance_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          acceptances: number
+          document_type: string
+          document_version: string
+          last_accepted_at: string
+        }[]
+      }
+      my_legal_acceptance_status: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       next_lead_reference: { Args: { p_workspace_id: string }; Returns: string }
       normalize_phone_number: { Args: { p_raw: string }; Returns: string }
       platform_setting_int: {
         Args: { p_default: number; p_key: string }
         Returns: number
+      }
+      publish_legal_document: {
+        Args: { p_document_id: string; p_operator_id: string }
+        Returns: string
+      }
+      reaccept_current_legal_terms: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       reject_business_fact_proposal: {
         Args: { p_proposal_id: string }
