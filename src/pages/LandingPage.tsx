@@ -2,6 +2,7 @@ import { ArrowRight, BarChart3, Building2, CheckCircle2, Megaphone, MessageSquar
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/layout/BrandLogo";
+import { readText, usePublicSettings } from "@/hooks/usePublicSettings";
 
 const featureCards = [
   {
@@ -107,6 +108,8 @@ const faqs = [
 ];
 
 export default function LandingPage() {
+  const { data: settings } = usePublicSettings();
+  const hero = settings?.["content.home_hero"];
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-xl">
@@ -145,10 +148,11 @@ export default function LandingPage() {
 
               <div className="space-y-5">
                 <h1 className="max-w-xl text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                  Create. Advertise. Connect. Convert.
+                  {readText(hero, "title", 120) ?? "Create. Advertise. Connect. Convert."}
                 </h1>
                 <p className="max-w-xl text-lg leading-8 text-muted-foreground">
-                  StabiFlow brings Meta advertising, Facebook and Instagram business assets, WhatsApp customer conversations, leads, content, analytics and automation into one workspace.
+                  {readText(hero, "subtitle", 300) ??
+                    "StabiFlow brings Meta advertising, Facebook and Instagram business assets, WhatsApp customer conversations, leads, content, analytics and automation into one workspace."}
                 </p>
               </div>
 

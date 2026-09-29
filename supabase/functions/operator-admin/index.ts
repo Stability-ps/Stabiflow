@@ -326,6 +326,35 @@ Deno.serve(async (req: Request) => {
         return json(req, { ok: true });
       }
 
+      // -- Business Studio oversight ---------------------------------------------------
+      case "business_studio": {
+        const [scans, docs, hosted, pending, templates] = await Promise.all([
+          sb.from("website_scans").select("id, workspace_id, requested_url, final_url, purpose, status, pages_fetched, error, created_at, workspaces(name)").order("created_at", { ascending: false }).limit(PAGE),
+          sb.from("business_documents").select("id, workspace_id, title, template_key, watermarked, page_count, created_at, workspaces(name)").order("created_at", { ascending: false }).limit(PAGE),
+          sb.from("hosted_profiles").select("workspace_id, slug, is_published, published_at, updated_at, workspaces(name)").order("updated_at", { ascending: false }).limit(PAGE),
+          count(sb.from("business_fact_proposals").select("id", { count: "exact", head: true }).eq("status", "pending")),
+          sb.from("profile_templates").select("*").order("sort_order"),
+        ]);
+        return json(req, { ok: true, scans: scans.data ?? [], documents: docs.data ?? [], hostedProfiles: hosted.data ?? [], pendingProposals: pending, templates: templates.data ?? [] });
+      }
+
+      case "update_template": {
+        const key = typeof body.template_key === "string" ? body.template_key : "";
+        const u = body.update && typeof body.update === "object" ? (body.update as Record<string, unknown>) : {};
+        const patch: Record<string, unknown> = {};
+        if (typeof u.name === "string" && u.name.trim()) patch.name = u.name.trim().slice(0, 80);
+        if (typeof u.description === "string") patch.description = u.description.trim().slice(0, 500) || null;
+        if (typeof u.is_premium === "boolean") patch.is_premium = u.is_premium;
+        if (typeof u.is_active === "boolean") patch.is_active = u.is_active;
+        if (Object.keys(patch).length === 0) return json(req, { error: "Nothing to update" }, 400);
+        const { data: before } = await sb.from("profile_templates").select("*").eq("key", key).maybeSingle();
+        if (!before) return json(req, { error: "Template not found" }, 404);
+        const { data, error } = await sb.from("profile_templates").update({ ...patch, updated_at: new Date().toISOString() }).eq("key", key).select("*").single();
+        if (error) return json(req, { error: "Could not update template" }, 400);
+        await audit(sb, { operator: actorId, action: "update_template", targetType: "profile_template", targetId: key, before, after: data });
+        return json(req, { ok: true, template: data });
+      }
+
       // -- System ------------------------------------------------------------------
       case "system_status": {
         const since7 = new Date(Date.now() - 7 * DAY).toISOString();

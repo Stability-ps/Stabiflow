@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { WorkspaceStatusBanner } from "@/components/layout/WorkspaceStatusBanner";
+import { PlatformNotice } from "@/components/layout/PlatformNotice";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { filterNavItems } from "@/lib/featureFlags";
@@ -18,6 +19,7 @@ export function AppLayout() {
       <AppSidebar items={navItems} />
       <div className="flex min-h-screen w-full min-w-0 flex-col">
         <AppHeader />
+        <PlatformNotice />
         <WorkspaceStatusBanner />
         <main className="flex-1 overflow-auto p-4 sm:p-6">
           {/* Keyed by pathname so a crash on one route doesn't linger

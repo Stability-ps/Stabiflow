@@ -11,6 +11,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppRoutes } from "@/App";
 
@@ -23,13 +24,19 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+// Same provider tree as the real App root (App.tsx wraps AppRoutes in a
+// QueryClientProvider). The supabase mock has no `from`, so public-settings
+// queries fail and the landing page must fall back to its built-in copy.
 function renderAt(path: string) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <AppRoutes />
-      </MemoryRouter>
-    </AuthProvider>,
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <AppRoutes />
+        </MemoryRouter>
+      </AuthProvider>
+    </QueryClientProvider>,
   );
 }
 
