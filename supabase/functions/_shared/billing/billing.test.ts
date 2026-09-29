@@ -27,8 +27,10 @@ Deno.test("mock mode is refused next to a live secret key", () => {
     Deno.env.set("PAYSTACK_SECRET_KEY", "sk_test_xyz");
     assertEquals(paystackConfigFromEnv().mockMode, true);
   } finally {
-    prevKey === undefined ? Deno.env.delete("PAYSTACK_SECRET_KEY") : Deno.env.set("PAYSTACK_SECRET_KEY", prevKey);
-    prevMock === undefined ? Deno.env.delete("PAYSTACK_MOCK_MODE") : Deno.env.set("PAYSTACK_MOCK_MODE", prevMock);
+    if (prevKey === undefined) Deno.env.delete("PAYSTACK_SECRET_KEY");
+    else Deno.env.set("PAYSTACK_SECRET_KEY", prevKey);
+    if (prevMock === undefined) Deno.env.delete("PAYSTACK_MOCK_MODE");
+    else Deno.env.set("PAYSTACK_MOCK_MODE", prevMock);
   }
 });
 

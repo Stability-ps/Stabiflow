@@ -39,8 +39,18 @@ export function decodeEntities(s: string): string {
   });
 }
 
+/** Replaces control characters (except tab/newline/CR) with spaces. */
+function stripControlChars(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const c = ch.charCodeAt(0);
+    out += (c < 32 && c !== 9 && c !== 10 && c !== 13) || c === 127 ? " " : ch;
+  }
+  return out;
+}
+
 export function collapse(s: string): string {
-  return s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, " ").replace(/[ \t ]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return stripControlChars(s).replace(/[ \t ]+/g, " ").replace(/\s*\n\s*/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function attr(tag: string, name: string): string | null {
