@@ -12,6 +12,8 @@ import { EmptyState } from "@/components/EmptyState";
 import { FactListSection, type FactField } from "@/components/business/FactListSection";
 import { ProvenanceBadge } from "@/components/business/ProvenanceBadge";
 import { BrandProfileSelector } from "@/components/creative-studio/BrandProfileSelector";
+import { ProposalReview } from "@/components/business/ProposalReview";
+import { WebsiteMonitorCard } from "@/components/business/WebsiteMonitorCard";
 import { useAuth } from "@/hooks/useAuth";
 import {
   COUNTRY_IDENTIFIER_SCHEMES, computeCompleteness, fetchBusinessIdentity, identifierSchemeLabel, updateBusinessIdentity,
@@ -191,6 +193,16 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
               Still missing: {completeness.items.filter((i) => !i.done).map((i) => i.label).join(", ")}
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Changes to review</CardTitle>
+          <CardDescription>Details found on your website or in your documents. Nothing changes until you accept it.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="You're up to date - nothing waiting for review." />
         </CardContent>
       </Card>
 
@@ -381,6 +393,8 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         defaults={{ is_public: true }}
         summarize={(r) => `${String(r.name)}${r.issuer ? ` · ${String(r.issuer)}` : ""}${r.expires_on ? ` · expires ${String(r.expires_on)}` : ""}`}
       />
+
+      <WebsiteMonitorCard workspaceId={currentWorkspaceId} defaultUrl={identity.website ?? ""} canEdit={canEdit} />
 
       <FactListSection
         {...listProps}

@@ -442,6 +442,17 @@ verify_jwt = false
 [functions.billing-reconcile-tick]
 verify_jwt = false
 
+# Public hosted business profiles - anonymous visitors, no JWT. Returns only
+# what get_public_business_profile() exposes (published + entitled only).
+[functions.business-profile-public]
+verify_jwt = false
+
+# Cron-triggered only (pg_cron -> pg_net, see
+# 20261016060000_business_studio.sql) - x-cron-secret header
+# (WEBSITE_MONITOR_CRON_SECRET), never a Supabase JWT.
+[functions.website-monitor-tick]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.

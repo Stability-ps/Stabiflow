@@ -1,5 +1,5 @@
 import {
-  BarChart3, Building2, Contact, CreditCard, FileText, LayoutDashboard, Megaphone, MessageCircle, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
+  BarChart3, Building2, Contact, CreditCard, FileText, Files, Wand2, LayoutDashboard, Megaphone, MessageCircle, Palette, Plug, Settings, Sparkles, Users, Workflow, type LucideIcon,
 } from "lucide-react";
 import type { FeatureFlagKey } from "@/lib/featureFlags";
 
@@ -27,8 +27,10 @@ export type NavItem = { label: string; path: string; icon: LucideIcon; children?
 // workspaces and platform operators keep them). Items without a flag are
 // the focused Business Studio launch surface every workspace sees.
 export const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", path: "/app", icon: LayoutDashboard },
+  { label: "Home", path: "/app", icon: LayoutDashboard },
+  { label: "Business Studio", path: "/app/business-studio", icon: Wand2, flag: "module.business_studio" },
   { label: "My Business", path: "/app/business", icon: Building2 },
+  { label: "Documents", path: "/app/documents", icon: Files },
   { label: "Content", path: "/app/content", icon: FileText, flag: "module.content" },
   { label: "Campaigns", path: "/app/campaigns", icon: Megaphone, flag: "module.campaigns" },
   { label: "Creative Studio", path: "/app/creative-studio", icon: Palette, flag: "module.creative_studio" },

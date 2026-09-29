@@ -1769,6 +1769,152 @@ export type Database = {
           },
         ]
       }
+      business_documents: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          page_count: number | null
+          status: string
+          storage_path: string | null
+          template_key: string
+          title: string
+          watermarked: boolean
+          workspace_id: string
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          page_count?: number | null
+          status?: string
+          storage_path?: string | null
+          template_key: string
+          title: string
+          watermarked?: boolean
+          workspace_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          page_count?: number | null
+          status?: string
+          storage_path?: string | null
+          template_key?: string
+          title?: string
+          watermarked?: boolean
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_documents_template_key_fkey"
+            columns: ["template_key"]
+            isOneToOne: false
+            referencedRelation: "profile_templates"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "business_documents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_fact_proposals: {
+        Row: {
+          applied_ref: string | null
+          created_at: string
+          current_value: Json | null
+          evidence: string | null
+          evidence_url: string | null
+          extraction_method: string
+          field: string | null
+          id: string
+          origin: string
+          proposed: Json
+          reviewed_at: string | null
+          reviewed_by: string | null
+          scan_id: string | null
+          status: string
+          target: string
+          workspace_id: string
+        }
+        Insert: {
+          applied_ref?: string | null
+          created_at?: string
+          current_value?: Json | null
+          evidence?: string | null
+          evidence_url?: string | null
+          extraction_method: string
+          field?: string | null
+          id?: string
+          origin: string
+          proposed: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scan_id?: string | null
+          status?: string
+          target: string
+          workspace_id: string
+        }
+        Update: {
+          applied_ref?: string | null
+          created_at?: string
+          current_value?: Json | null
+          evidence?: string | null
+          evidence_url?: string | null
+          extraction_method?: string
+          field?: string | null
+          id?: string
+          origin?: string
+          proposed?: Json
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scan_id?: string | null
+          status?: string
+          target?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_fact_proposals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_fact_proposals_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "website_scans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_fact_proposals_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       business_identifiers: {
         Row: {
           confirmed_at: string | null
@@ -3693,6 +3839,64 @@ export type Database = {
         }
         Relationships: []
       }
+      hosted_profiles: {
+        Row: {
+          created_at: string
+          document_id: string | null
+          is_published: boolean
+          published_at: string | null
+          show_enquiry: boolean
+          slug: string
+          template_key: string
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          document_id?: string | null
+          is_published?: boolean
+          published_at?: string | null
+          show_enquiry?: boolean
+          slug: string
+          template_key?: string
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string | null
+          is_published?: boolean
+          published_at?: string | null
+          show_enquiry?: boolean
+          slug?: string
+          template_key?: string
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hosted_profiles_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "business_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hosted_profiles_template_key_fkey"
+            columns: ["template_key"]
+            isOneToOne: false
+            referencedRelation: "profile_templates"
+            referencedColumns: ["key"]
+          },
+          {
+            foreignKeyName: "hosted_profiles_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox_alerts: {
         Row: {
           alert_type: string
@@ -4814,6 +5018,60 @@ export type Database = {
           },
         ]
       }
+      platform_admin_audit: {
+        Row: {
+          action: string
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          id: string
+          operator_user_id: string
+          reason: string | null
+          target_id: string | null
+          target_type: string
+          workspace_id: string | null
+        }
+        Insert: {
+          action: string
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          id?: string
+          operator_user_id: string
+          reason?: string | null
+          target_id?: string | null
+          target_type: string
+          workspace_id?: string | null
+        }
+        Update: {
+          action?: string
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          id?: string
+          operator_user_id?: string
+          reason?: string | null
+          target_id?: string | null
+          target_type?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_admin_audit_operator_user_id_fkey"
+            columns: ["operator_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_admin_audit_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_deletion_log: {
         Row: {
           cleanup_status: Json
@@ -4932,6 +5190,39 @@ export type Database = {
           },
         ]
       }
+      profile_templates: {
+        Row: {
+          config: Json
+          description: string | null
+          is_active: boolean
+          is_premium: boolean
+          key: string
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          description?: string | null
+          is_active?: boolean
+          is_premium?: boolean
+          key: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          description?: string | null
+          is_active?: boolean
+          is_premium?: boolean
+          key?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -5039,6 +5330,168 @@ export type Database = {
           },
           {
             foreignKeyName: "revenue_events_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_monitors: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          frequency_days: number
+          last_checked_at: string | null
+          last_scan_id: string | null
+          next_check_at: string
+          updated_at: string
+          url: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          frequency_days?: number
+          last_checked_at?: string | null
+          last_scan_id?: string | null
+          next_check_at?: string
+          updated_at?: string
+          url: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          frequency_days?: number
+          last_checked_at?: string | null
+          last_scan_id?: string | null
+          next_check_at?: string
+          updated_at?: string
+          url?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_monitors_last_scan_id_fkey"
+            columns: ["last_scan_id"]
+            isOneToOne: false
+            referencedRelation: "website_scans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "website_monitors_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_scan_pages: {
+        Row: {
+          content_hash: string | null
+          fetched_at: string
+          http_status: number | null
+          id: string
+          scan_id: string
+          text_excerpt: string | null
+          title: string | null
+          url: string
+          workspace_id: string
+        }
+        Insert: {
+          content_hash?: string | null
+          fetched_at?: string
+          http_status?: number | null
+          id?: string
+          scan_id: string
+          text_excerpt?: string | null
+          title?: string | null
+          url: string
+          workspace_id: string
+        }
+        Update: {
+          content_hash?: string | null
+          fetched_at?: string
+          http_status?: number | null
+          id?: string
+          scan_id?: string
+          text_excerpt?: string | null
+          title?: string | null
+          url?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_scan_pages_scan_id_fkey"
+            columns: ["scan_id"]
+            isOneToOne: false
+            referencedRelation: "website_scans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "website_scan_pages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      website_scans: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          final_url: string | null
+          id: string
+          pages_fetched: number
+          purpose: string
+          requested_url: string
+          status: string
+          summary: Json
+          workspace_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          final_url?: string | null
+          id?: string
+          pages_fetched?: number
+          purpose?: string
+          requested_url: string
+          status?: string
+          summary?: Json
+          workspace_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          final_url?: string | null
+          id?: string
+          pages_fetched?: number
+          purpose?: string
+          requested_url?: string
+          status?: string
+          summary?: Json
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "website_scans_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "website_scans_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -6287,6 +6740,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _workspace_access_plans: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          plan_code: string
+          plan_id: string
+          source: string
+          tier_rank: number
+        }[]
+      }
+      _workspace_entitlements: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          enabled: boolean
+          entitlement_key: string
+          kind: string
+          limit_value: number
+          source: string
+          unlimited: boolean
+          used: number
+        }[]
+      }
+      accept_business_fact_proposal: {
+        Args: { p_edited?: Json; p_proposal_id: string }
+        Returns: string
+      }
       accept_current_legal_terms: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -6400,6 +6878,10 @@ export type Database = {
           p_source?: string
         }
         Returns: Json
+      }
+      assert_workspace_billing_reader: {
+        Args: { p_workspace_id: string }
+        Returns: undefined
       }
       backfill_lead_pipeline_placement: {
         Args: { p_workspace_id: string }
@@ -6751,6 +7233,7 @@ export type Database = {
           source_label: string
         }[]
       }
+      get_public_business_profile: { Args: { p_slug: string }; Returns: Json }
       get_recent_whatsapp_webhook_events: {
         Args: { p_limit?: number; p_workspace_id: string }
         Returns: {
@@ -6867,6 +7350,10 @@ export type Database = {
         Args: { p_flag_key: string; p_workspace_id: string }
         Returns: boolean
       }
+      is_hosted_profile_slug_available: {
+        Args: { p_slug: string }
+        Returns: boolean
+      }
       is_platform_operator: {
         Args: Record<PropertyKey, never>
         Returns: boolean
@@ -6884,6 +7371,10 @@ export type Database = {
       platform_setting_int: {
         Args: { p_default: number; p_key: string }
         Returns: number
+      }
+      reject_business_fact_proposal: {
+        Args: { p_proposal_id: string }
+        Returns: string
       }
       set_workspace_inbox_ai_cap: {
         Args: { p_cap?: number; p_workspace_id: string }

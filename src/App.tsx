@@ -19,6 +19,9 @@ import AcceptInvitation from "@/pages/AcceptInvitation";
 import Home from "@/pages/dashboard/Home";
 import MyBusiness from "@/pages/dashboard/MyBusiness";
 import Billing from "@/pages/dashboard/Billing";
+import BusinessStudio from "@/pages/dashboard/BusinessStudio";
+import Documents from "@/pages/dashboard/Documents";
+import PublicProfile from "@/pages/PublicProfile";
 import { FeatureGate } from "@/components/FeatureGate";
 import Content from "@/pages/dashboard/Content";
 import ContentCalendar from "@/pages/dashboard/content/Calendar";
@@ -76,6 +79,7 @@ export function AppRoutes() {
         }
       />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      <Route path="/b/:slug" element={<PublicProfile />} />
       <Route path="/legal/privacy" element={<Privacy />} />
       <Route path="/legal/terms" element={<Terms />} />
       <Route path="/legal/data-deletion" element={<DataDeletion />} />
@@ -91,6 +95,8 @@ export function AppRoutes() {
         <Route path="/app" element={<Home />} />
         <Route path="/app/business" element={<MyBusiness />} />
         <Route path="/app/billing" element={<Billing />} />
+        <Route path="/app/business-studio" element={<FeatureGate flag="module.business_studio"><BusinessStudio /></FeatureGate>} />
+        <Route path="/app/documents" element={<Documents />} />
         <Route path="/app/content" element={<FeatureGate flag="module.content"><Content /></FeatureGate>}>
           <Route index element={<Navigate to="media-library" replace />} />
           <Route path="calendar" element={<ContentCalendar />} />

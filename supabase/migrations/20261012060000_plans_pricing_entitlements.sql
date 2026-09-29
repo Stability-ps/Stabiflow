@@ -292,10 +292,13 @@ create policy "entitlement_definitions_read_anon" on public.entitlement_definiti
 
 -- Canonical evaluator ------------------------------------------------------------
 
--- Which plans currently grant access to a workspace, with where each came
--- from. Service-role / member / operator only.
-create or replace function public.workspace_access_plans(p_workspace_id uuid)
-returns table (plan_id uuid, plan_code text, tier_rank integer, source text)
+-- The evaluator is split into UNCHECKED internal functions (_-prefixed,
+-- executable only by the function owner / service role) and the public,
+-- authorised wrappers. Internal callers that have their own authorisation
+-- story (e.g. the anonymous hosted-profile read) use the _ versions.
+
+create or replace function public.assert_workspace_billing_reader(p_workspace_id uuid)
+returns void
 language plpgsql
 stable
 security definer
@@ -307,8 +310,18 @@ begin
      and not public.is_platform_operator() then
     raise exception 'Not authorized for this workspace' using errcode = '42501';
   end if;
+end;
+$$;
 
-  return query
+-- Which plans currently grant access to a workspace, with where each came
+-- from.
+create or replace function public._workspace_access_plans(p_workspace_id uuid)
+returns table (plan_id uuid, plan_code text, tier_rank integer, source text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
   select p.id, p.code, p.tier_rank, 'free'::text
   from public.billing_plans p
   where p.plan_kind = 'free' and p.is_active
@@ -329,10 +342,22 @@ begin
   where wp.workspace_id = p_workspace_id
     and wp.status = 'paid'
     and (wp.access_expires_at is null or wp.access_expires_at > now());
+$$;
+
+create or replace function public.workspace_access_plans(p_workspace_id uuid)
+returns table (plan_id uuid, plan_code text, tier_rank integer, source text)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform public.assert_workspace_billing_reader(p_workspace_id);
+  return query select * from public._workspace_access_plans(p_workspace_id);
 end;
 $$;
 
-create or replace function public.get_workspace_entitlements(p_workspace_id uuid)
+create or replace function public._workspace_entitlements(p_workspace_id uuid)
 returns table (
   entitlement_key text,
   kind text,
@@ -342,16 +367,13 @@ returns table (
   used bigint,
   source text
 )
-language plpgsql
+language sql
 stable
 security definer
 set search_path = public
 as $$
-begin
-  -- workspace_access_plans performs the authorization check.
-  return query
   with plans as (
-    select * from public.workspace_access_plans(p_workspace_id)
+    select * from public._workspace_access_plans(p_workspace_id)
   ),
   granted as (
     select
@@ -403,6 +425,26 @@ begin
   left join ov on ov.k = d.key
   left join usage us on us.k = d.key
   order by d.sort_order, d.key;
+$$;
+
+create or replace function public.get_workspace_entitlements(p_workspace_id uuid)
+returns table (
+  entitlement_key text,
+  kind text,
+  enabled boolean,
+  limit_value bigint,
+  unlimited boolean,
+  used bigint,
+  source text
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  perform public.assert_workspace_billing_reader(p_workspace_id);
+  return query select * from public._workspace_entitlements(p_workspace_id);
 end;
 $$;
 
@@ -473,6 +515,12 @@ begin
 end;
 $$;
 
+revoke execute on function public._workspace_access_plans(uuid) from public, anon, authenticated;
+revoke execute on function public._workspace_entitlements(uuid) from public, anon, authenticated;
+revoke execute on function public.assert_workspace_billing_reader(uuid) from public, anon;
+grant execute on function public._workspace_access_plans(uuid) to service_role;
+grant execute on function public._workspace_entitlements(uuid) to service_role;
+grant execute on function public.assert_workspace_billing_reader(uuid) to authenticated, service_role;
 revoke execute on function public.workspace_access_plans(uuid) from public, anon;
 revoke execute on function public.get_workspace_entitlements(uuid) from public, anon;
 revoke execute on function public.workspace_has_entitlement(uuid, text) from public, anon;

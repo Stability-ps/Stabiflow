@@ -5,7 +5,7 @@ import { NAV_ITEMS } from "./navigation";
 describe("feature-flag navigation filtering", () => {
   it("launch posture: with no module flags on, only the focused launch navigation remains", () => {
     const items = filterNavItems(NAV_ITEMS, toFlagLookup([{ flag_key: "module.business_studio", enabled: true, reason: "everyone" }]));
-    expect(items.map((i) => i.label)).toEqual(["Dashboard", "My Business", "Billing", "Settings"]);
+    expect(items.map((i) => i.label)).toEqual(["Home", "Business Studio", "My Business", "Documents", "Billing", "Settings"]);
   });
 
   it("unloaded flags read as off, so gated modules never flash into view", () => {
