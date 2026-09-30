@@ -5,7 +5,8 @@ const MARK = "__sfOverlay";
 let instances = 0;
 
 /**
- * Makes a mobile overlay (drawer / bottom sheet) behave like a native one:
+ * Makes a mobile overlay (drawer / bottom sheet / phone dialog) behave like a
+ * native one:
  *
  * - Opening pushes a history entry (same URL), so the device/browser Back
  *   button closes the overlay instead of leaving the page.
@@ -28,9 +29,7 @@ let instances = 0;
  * entry left behind by something else (another overlay, or a reload while an
  * overlay entry was current) is never mistaken for this overlay's own.
  */
-export function useOverlayHistory(open: boolean, onClose: () => void) {
-  const navigate = useNavigate();
-  const location = useLocation();
+export function useOverlayHistoryEntry(open: boolean, onClose: () => void) {
   const pushed = useRef(false);
   const [instance] = useState(() => ++instances);
   const generation = useRef(0);
@@ -103,6 +102,28 @@ export function useOverlayHistory(open: boolean, onClose: () => void) {
     pushEntry();
   }, [open, pushEntry]);
 
+  /**
+   * Hand this overlay's history entry over to the caller (e.g. to navigate
+   * with replace). Returns true when the overlay owned an entry.
+   */
+  const release = useCallback(() => {
+    const owned = pushed.current;
+    pushed.current = false;
+    return owned;
+  }, []);
+
+  return { release, onCloseRef };
+}
+
+/**
+ * useOverlayHistoryEntry + React Router: closes the overlay when the route
+ * changes underneath it, and `navigateFrom(to)` replaces the overlay's entry.
+ */
+export function useOverlayHistory(open: boolean, onClose: () => void) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { release, onCloseRef } = useOverlayHistoryEntry(open, onClose);
+
   // Route changed underneath an open overlay: the entry is gone/replaced, so
   // just close (never history.back(), which would undo the navigation).
   const lastPath = useRef(`${location.pathname}${location.search}`);
@@ -111,22 +132,18 @@ export function useOverlayHistory(open: boolean, onClose: () => void) {
     if (current === lastPath.current) return;
     lastPath.current = current;
     if (open) {
-      pushed.current = false;
+      release();
       onCloseRef.current();
     }
-  }, [location.pathname, location.search, open]);
+  }, [location.pathname, location.search, open, release, onCloseRef]);
 
   const navigateFrom = useCallback(
     (to: string) => {
-      if (pushed.current) {
-        pushed.current = false;
-        navigate(to, { replace: true });
-      } else {
-        navigate(to);
-      }
+      if (release()) navigate(to, { replace: true });
+      else navigate(to);
       onCloseRef.current();
     },
-    [navigate],
+    [navigate, release, onCloseRef],
   );
 
   return { navigateFrom };

@@ -3,8 +3,32 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useOverlayHistoryEntry } from "@/hooks/useOverlayHistory";
 
-const Dialog = DialogPrimitive.Root;
+/**
+ * Radix Dialog root. On phones (below sm), where DialogContent renders as a
+ * bottom sheet, an open dialog also owns an overlay history entry (the same
+ * mechanism as the drawer / More sheet): device/browser Back closes the
+ * dialog instead of navigating away from the page, and closing it any other
+ * way (Save, Cancel, Escape, backdrop) removes that entry again. Desktop
+ * dialogs don't touch history. Works for controlled and uncontrolled use.
+ */
+function Dialog({ open: openProp, defaultOpen, onOpenChange, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false);
+  const controlled = openProp !== undefined;
+  const open = controlled ? openProp : uncontrolledOpen;
+  const setOpen = React.useCallback(
+    (next: boolean) => {
+      if (!controlled) setUncontrolledOpen(next);
+      onOpenChange?.(next);
+    },
+    [controlled, onOpenChange],
+  );
+  const phone = useMediaQuery("(max-width: 639px)");
+  useOverlayHistoryEntry(phone && open, () => setOpen(false));
+  return <DialogPrimitive.Root open={open} onOpenChange={setOpen} {...props} />;
+}
 
 const DialogTrigger = DialogPrimitive.Trigger;
 
