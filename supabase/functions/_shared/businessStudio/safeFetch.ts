@@ -171,15 +171,41 @@ export function assertUrlShapeAllowed(url: URL): void {
 
 export type Resolver = (host: string) => Promise<string[]>;
 
+/**
+ * DNS-over-HTTPS lookup (Cloudflare JSON API). Used ONLY when the runtime's
+ * own resolver is unavailable or errors - never when a name simply does not
+ * exist - and its answers go through exactly the same public-address check.
+ */
+export async function dohResolve(host: string, fetchImpl: FetchImpl = (u, i) => fetch(u, i)): Promise<string[]> {
+  const out: string[] = [];
+  for (const type of ["A", "AAAA"] as const) {
+    const res = await fetchImpl(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`, {
+      headers: { Accept: "application/dns-json" },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!res.ok) throw new UnsafeUrlError("We couldn't look up that website right now");
+    const body = (await res.json()) as { Answer?: { type: number; data: string }[] };
+    // type 1 = A, 28 = AAAA (CNAME answers are skipped; their targets follow).
+    for (const a of body.Answer ?? []) if (a.type === (type === "A" ? 1 : 28)) out.push(a.data);
+  }
+  return out;
+}
+
 export const denoResolver: Resolver = async (host) => {
   const results: string[] = [];
-  for (const type of ["A", "AAAA"] as const) {
-    try {
-      results.push(...(await Deno.resolveDns(host, type)));
-    } catch {
-      // NXDOMAIN / no records of this type
+  let resolverUnavailable = typeof (Deno as { resolveDns?: unknown }).resolveDns !== "function";
+  if (!resolverUnavailable) {
+    for (const type of ["A", "AAAA"] as const) {
+      try {
+        results.push(...(await Deno.resolveDns(host, type)));
+      } catch (e) {
+        // NotFound = no records of this type (normal). Anything else means
+        // the runtime resolver itself is not usable here.
+        if (!(e instanceof Deno.errors.NotFound)) resolverUnavailable = true;
+      }
     }
   }
+  if (results.length === 0 && resolverUnavailable) return dohResolve(host);
   return results;
 };
 

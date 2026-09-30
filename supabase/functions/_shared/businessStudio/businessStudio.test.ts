@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { assertHostResolvesPublic, isPublicIp, normalizeWebsiteInput, safeFetch, UnsafeUrlError } from "./safeFetch.ts";
+import { assertHostResolvesPublic, dohResolve, isPublicIp, normalizeWebsiteInput, safeFetch, UnsafeUrlError } from "./safeFetch.ts";
 import { extractPage, isAllowedByRobots, parseRobots, selectPagesToCrawl } from "./htmlExtract.ts";
 import { dedupeProposals, deterministicProposals, verifyAiFacts, type CurrentFacts } from "./factExtraction.ts";
 import { crawlSite } from "./crawl.ts";
@@ -194,4 +194,16 @@ Deno.test("wording suggestions that introduce new figures are rejected", () => {
   assertEquals(introducesNewFigures("We build steel structures.", "We have built over 500 steel structures."), true);
   assertEquals(introducesNewFigures("Affordable prices.", "Prices from R 1,500."), true);
   assertEquals(introducesNewFigures("Trusted by clients.", "98% of clients recommend us."), true);
+});
+
+Deno.test("DNS-over-HTTPS fallback returns A/AAAA answers for the same public-address check", async () => {
+  const fetchImpl = async (u: string) => {
+    const type = new URL(u).searchParams.get("type");
+    const Answer = type === "A" ? [{ type: 5, data: "cdn.example." }, { type: 1, data: "10.0.0.7" }] : [{ type: 28, data: "2001:4860::1" }];
+    return new Response(JSON.stringify({ Answer }), { headers: { "content-type": "application/dns-json" } });
+  };
+  const addrs = await dohResolve("acme.example.com", fetchImpl);
+  assertEquals(addrs, ["10.0.0.7", "2001:4860::1"]);
+  // A private answer via DoH is still refused.
+  await assertRejects(() => assertHostResolvesPublic(new URL("https://acme.example.com/"), async () => addrs), UnsafeUrlError);
 });

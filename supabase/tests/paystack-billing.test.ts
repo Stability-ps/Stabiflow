@@ -38,13 +38,13 @@ async function startPurchase(t: TestTenant) {
   return { reference, purchaseId: pur!.id as string, p };
 }
 
-async function startSubscription(t: TestTenant, plan = "business") {
+async function startSubscription(t: TestTenant, plan = "business", customerCode: string | null = null) {
   const p = await price(plan, "month");
   await admin.from("billing_prices").update({ paystack_plan_code: `PLN_test${plan}` }).eq("id", p.id);
   const reference = ref();
   const { data: sub } = await admin
     .from("workspace_subscriptions")
-    .insert({ workspace_id: t.workspaceId, plan_id: p.plan_id, price_id: p.id, status: "incomplete" })
+    .insert({ workspace_id: t.workspaceId, plan_id: p.plan_id, price_id: p.id, status: "incomplete", provider_customer_code: customerCode })
     .select("id")
     .single();
   await admin.from("billing_transactions").insert({ workspace_id: t.workspaceId, reference, kind: "subscription_initial", subscription_id: sub!.id, price_id: p.id, amount_minor: p.amount_minor, currency: p.currency });
@@ -103,7 +103,7 @@ describe("Paystack billing - atomic grant functions", () => {
   });
 
   it("first subscription payment activates the subscription with a paid period", async () => {
-    const { reference, subscriptionId, p } = await startSubscription(A);
+    const { reference, subscriptionId, p } = await startSubscription(A, "business", `CUS_${A.workspaceId.slice(0, 8)}`);
     expect(await enabled(A, "hosted_profile.publish")).toBe(false);
     expect((await apply(reference, p.amount_minor)).data).toBe("applied");
     const { data: sub } = await admin.from("workspace_subscriptions").select("status, current_period_end").eq("id", subscriptionId).single();
@@ -139,6 +139,30 @@ describe("Paystack billing - atomic grant functions", () => {
     expect((await renew()).data).toBe("duplicate");
     const { data: sub } = await admin.from("workspace_subscriptions").select("current_period_end").eq("provider_subscription_code", code).single();
     expect(new Date(sub!.current_period_end!).toISOString()).toBe(renewalNext);
+  });
+
+  it("one Paystack customer (same owner email) can hold subscriptions for two workspaces", async () => {
+    const shared = `CUS_shared${Date.now()}`;
+    const { error: e1 } = await admin.from("billing_customers").insert({ workspace_id: B.workspaceId, provider_customer_code: shared, email: "owner@example.com" });
+    const { data: other } = await admin.from("workspaces").insert({ name: "Second co", slug: `second-${Date.now()}`, created_by: B.userId }).select("id").single();
+    const { error: e2 } = await admin.from("billing_customers").insert({ workspace_id: other!.id, provider_customer_code: shared, email: "owner@example.com" });
+    expect(e1).toBeNull();
+    expect(e2).toBeNull();
+    // Each workspace's checkout links to its own subscription by the code stored on the subscription.
+    const p = await price("growth", "month");
+    await admin.from("billing_prices").update({ paystack_plan_code: "PLN_testgrowth" }).eq("id", p.id);
+    const { data: subOther } = await admin
+      .from("workspace_subscriptions")
+      .insert({ workspace_id: other!.id, plan_id: p.plan_id, price_id: p.id, status: "incomplete", provider_customer_code: shared })
+      .select("id")
+      .single();
+    const { data: r } = await admin.rpc("billing_link_provider_subscription", {
+      p_customer_code: shared, p_plan_code: "PLN_testgrowth", p_subscription_code: `SUB_shared${Date.now()}`, p_email_token: "tok", p_next_payment_at: null,
+    });
+    expect(r).toBe("linked");
+    const { data: linked } = await admin.from("workspace_subscriptions").select("provider_subscription_code").eq("id", subOther!.id).single();
+    expect(linked?.provider_subscription_code).toMatch(/^SUB_shared/);
+    await admin.from("workspaces").delete().eq("id", other!.id);
   });
 
   it("the transition matrix rejects illegal jumps and stale expectations", async () => {

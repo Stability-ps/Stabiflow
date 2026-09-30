@@ -74,9 +74,12 @@ create table if not exists public.billing_customers (
   email text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (workspace_id, provider),
-  unique (provider, provider_customer_code)
+  -- NOT unique on provider_customer_code: Paystack has one customer per
+  -- email, so an owner buying for two workspaces shares one customer code.
+  -- Subscriptions are matched on the code stored on the subscription row.
+  unique (workspace_id, provider)
 );
+create index if not exists billing_customers_code_idx on public.billing_customers (provider, provider_customer_code);
 
 -- Transactions ------------------------------------------------------------------------
 
@@ -281,7 +284,6 @@ security definer
 set search_path = public
 as $$
 declare
-  v_ws uuid;
   v_sub public.workspace_subscriptions;
 begin
   if exists (select 1 from public.workspace_subscriptions where provider_subscription_code = p_subscription_code) then
@@ -292,19 +294,16 @@ begin
     return 'already_linked';
   end if;
 
-  select workspace_id into v_ws from public.billing_customers where provider = 'paystack' and provider_customer_code = p_customer_code;
-  if v_ws is null then
-    return 'unknown_customer';
-  end if;
-
+  -- Matched on the customer code captured on the subscription at checkout
+  -- (a customer code can span several workspaces of the same owner).
   select s.* into v_sub
   from public.workspace_subscriptions s
   join public.billing_prices p on p.id = s.price_id
-  where s.workspace_id = v_ws
+  where s.provider_customer_code = p_customer_code
     and s.provider_subscription_code is null
     and p.paystack_plan_code = p_plan_code
     and s.status in ('incomplete', 'active')
-  order by s.created_at desc
+  order by (s.status = 'active') desc, s.created_at desc
   limit 1
   for update of s;
 

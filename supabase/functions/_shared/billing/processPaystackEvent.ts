@@ -94,23 +94,25 @@ export async function processPaystackEvent(sb: AnySupabaseClient, cfg: PaystackC
       const customerCode = str(obj(data.customer).customer_code);
       const planCode = str(obj(data.plan).plan_code);
       if (!customerCode || !planCode) return { status: "ignored", result: "unknown_reference" };
-      const { data: cust } = await sb.from("billing_customers").select("workspace_id").eq("provider", "paystack").eq("provider_customer_code", customerCode).maybeSingle();
-      if (!cust) return { status: "ignored", result: "unknown_customer" };
+      // A customer code can span several workspaces (one Paystack customer
+      // per email), so match the linked subscription itself.
       const { data: subs } = await sb
         .from("workspace_subscriptions")
-        .select("provider_subscription_code, billing_prices!inner(paystack_plan_code)")
-        .eq("workspace_id", cust.workspace_id)
+        .select("workspace_id, provider_subscription_code, billing_prices!inner(paystack_plan_code)")
+        .eq("provider_customer_code", customerCode)
         .eq("billing_prices.paystack_plan_code", planCode)
         .not("provider_subscription_code", "is", null)
+        .in("status", ["active", "past_due", "grace", "cancelled"])
         .order("created_at", { ascending: false })
         .limit(1);
-      const code = (subs?.[0] as { provider_subscription_code?: string } | undefined)?.provider_subscription_code;
-      if (!code) return { status: "ignored", result: "renewal_without_linked_subscription", workspaceId: cust.workspace_id };
+      const match = subs?.[0] as { workspace_id?: string; provider_subscription_code?: string } | undefined;
+      const code = match?.provider_subscription_code;
+      if (!code) return { status: "ignored", result: "renewal_without_linked_subscription" };
       const r = await rpc(sb, "billing_apply_renewal", {
         p_subscription_code: code, p_reference: reference, p_amount_minor: amount, p_currency: currency,
         p_paid_at: paidAt, p_next_payment_at: null, p_via: via,
       });
-      return { status: r === "duplicate" ? "ignored" : "processed", result: `renewal:${r}`, workspaceId: cust.workspace_id };
+      return { status: r === "duplicate" ? "ignored" : "processed", result: `renewal:${r}`, workspaceId: match!.workspace_id ?? null };
     }
 
     case "subscription.create": {
