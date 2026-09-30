@@ -123,7 +123,8 @@ describe("AppSidebar mobile drawer", () => {
   it("closes on device Back without leaving the page", async () => {
     await renderMobileDrawer("/app/leads");
     act(() => {
-      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+      // A real Back: the browser leaves the overlay's history entry.
+      window.history.back();
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/leads");

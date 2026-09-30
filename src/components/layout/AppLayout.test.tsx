@@ -38,4 +38,20 @@ describe("safe-area / bottom-nav layout", () => {
     for (const icon of manifest.icons) expect(icon.src).toMatch(/^\/brand\/StabiFlow_/);
     expect(manifest.icons.some((i: { sizes: string }) => i.sizes === "512x512")).toBe(true);
   });
+
+  it("manifest: no orientation lock, 192px + maskable 512px icons, and every icon file exists at its declared size", () => {
+    const root = resolve(__dirname, "../../..");
+    const manifest = JSON.parse(readFileSync(resolve(root, "public/manifest.webmanifest"), "utf8"));
+    expect(manifest).not.toHaveProperty("orientation");
+    const icons = manifest.icons as { src: string; sizes: string; purpose?: string; type: string }[];
+    expect(icons.some((i) => i.sizes === "192x192" && (i.purpose ?? "any").includes("any"))).toBe(true);
+    expect(icons.some((i) => i.sizes === "512x512" && i.purpose === "maskable")).toBe(true);
+    expect(icons.some((i) => i.sizes === "512x512" && i.purpose === "any")).toBe(true);
+    for (const icon of icons) {
+      const png = readFileSync(resolve(root, "public", icon.src.replace(/^\//, "")));
+      expect(png.subarray(1, 4).toString("latin1")).toBe("PNG");
+      // PNG IHDR: width/height are big-endian uint32 at bytes 16-23.
+      expect(`${png.readUInt32BE(16)}x${png.readUInt32BE(20)}`).toBe(icon.sizes);
+    }
+  });
 });

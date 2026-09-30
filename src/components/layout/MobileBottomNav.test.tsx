@@ -138,7 +138,8 @@ describe("MobileBottomNav", () => {
     renderNav("/app/leads");
     openMore();
     act(() => {
-      window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+      // A real Back: the browser leaves the overlay's history entry.
+      window.history.back();
     });
     await waitFor(() => expect(sheet()).not.toBeInTheDocument());
     expect(screen.getByTestId("path")).toHaveTextContent("/app/leads");

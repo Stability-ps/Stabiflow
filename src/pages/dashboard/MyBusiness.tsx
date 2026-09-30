@@ -99,7 +99,10 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const dirty = JSON.stringify(form) !== JSON.stringify(savedForm);
   const [saving, setSaving] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
-  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  // Same breakpoint as the app shell (bottom nav below md, sidebar from md):
+  // tablet rotation (e.g. 820 <-> 1180) never swaps layouts, so in-progress
+  // section drafts stay mounted.
+  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });

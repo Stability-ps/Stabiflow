@@ -107,6 +107,9 @@ describe("My Business on a phone", () => {
     data.bundle = bundle();
     renderAt("/app/business");
     fireEvent.click(await screen.findByRole("button", { name: /What's missing/ }));
+    const chips = within(document.getElementById("missing-list")!).getAllByRole("button");
+    // 44px touch targets with a visible keyboard focus ring (review finding 11).
+    for (const chip of chips) expect(chip.className).toMatch(/\bmin-h-11\b.*\bfocus-visible:ring-2\b/);
     fireEvent.click(within(document.getElementById("missing-list")!).getByRole("button", { name: "Social media links" }));
     expect(screen.getByTestId("loc")).toHaveTextContent("section=social");
   });

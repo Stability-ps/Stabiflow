@@ -188,7 +188,7 @@ export function MobileMyBusiness({ workspaceId, bundle, completeness, blocks, ca
               {missing.map((m) => (
                 <li key={m.key}>
                   <button type="button" onClick={() => open(m.section)}
-                    className={`min-h-9 rounded-full border px-3 text-xs ${m.weight >= 8 ? "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200" : "text-muted-foreground"}`}>
+                    className={`min-h-11 rounded-full border px-3.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${m.weight >= 8 ? "border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-950/30 dark:text-amber-200" : "text-muted-foreground"}`}>
                     {m.label}
                   </button>
                 </li>
