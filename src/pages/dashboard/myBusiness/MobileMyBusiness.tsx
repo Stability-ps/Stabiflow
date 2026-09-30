@@ -73,14 +73,17 @@ function summaryFor(key: SectionKey, b: BusinessIdentityBundle): string | null {
  * business_fact_proposals flow), Changes to review, and one compact card per
  * section. The section editors themselves are the exact desktop blocks.
  */
-export function MobileMyBusiness({ workspaceId, bundle, completeness, blocks, canEdit, saving, onSave }: {
+export function MobileMyBusiness({ workspaceId, bundle, completeness, blocks, canEdit, saving, dirty, onSave }: {
   workspaceId: string;
   bundle: BusinessIdentityBundle;
   completeness: { score: number; items: CompletenessItem[] };
   blocks: Record<MyBusinessBlock, ReactNode>;
   canEdit: boolean;
   saving: boolean;
-  onSave: () => void;
+  /** Company/About form has unsaved edits. */
+  dirty: boolean;
+  /** The canonical My Business save (same handler as desktop); resolves true on success. */
+  onSave: () => Promise<boolean>;
 }) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -133,8 +136,10 @@ export function MobileMyBusiness({ workspaceId, bundle, completeness, blocks, ca
         <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.75rem)] z-10 grid grid-cols-2 gap-2 rounded-2xl border bg-background/95 p-2 shadow-lg backdrop-blur">
           {sec.saves && canEdit ? (
             <>
-              <Button variant="outline" onClick={close}>Done</Button>
-              <Button onClick={onSave} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}Save</Button>
+              {/* Done never discards edits: unsaved changes are saved first,
+                  and the section only closes once that succeeded. */}
+              <Button variant="outline" disabled={saving} onClick={async () => { if (!dirty || (await onSave())) close(); }}>Done</Button>
+              <Button onClick={() => void onSave()} disabled={saving || !dirty}>{saving ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : null}{dirty ? "Save" : "Saved"}</Button>
             </>
           ) : (
             <>

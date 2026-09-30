@@ -93,6 +93,10 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const queryClient = useQueryClient();
   const canEdit = currentMembership?.role === "owner" || currentMembership?.role === "admin";
   const [form, setForm] = useState<IdentityForm>(() => toForm(bundle.identity));
+  // Last saved values - the baseline for "unsaved changes" (the loaded bundle
+  // only catches up after the background refetch).
+  const [savedForm, setSavedForm] = useState<IdentityForm>(() => toForm(bundle.identity));
+  const dirty = JSON.stringify(form) !== JSON.stringify(savedForm);
   const [saving, setSaving] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -104,11 +108,12 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const provenance = (identity.field_provenance ?? {}) as Record<string, { source?: string }>;
   const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  async function saveIdentity() {
+  /** Resolves true when the details were saved (callers may then navigate away). */
+  async function saveIdentity(): Promise<boolean> {
     const year = form.founded_year.trim() ? Number(form.founded_year) : null;
     if (year !== null && (!Number.isInteger(year) || year < 1800 || year > 2100)) {
       toast.error("Founded year must be a year between 1800 and 2100");
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -128,10 +133,13 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         core_values: form.core_values.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 20),
       });
       setForm(toForm(updated));
+      setSavedForm(toForm(updated));
       toast.success("Business details saved");
       refresh();
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
+      return false;
     } finally {
       setSaving(false);
     }
@@ -475,6 +483,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         blocks={blocks}
         canEdit={canEdit}
         saving={saving}
+        dirty={dirty}
         onSave={saveIdentity}
       />
     );

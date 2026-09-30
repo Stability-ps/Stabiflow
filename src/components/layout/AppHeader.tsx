@@ -16,10 +16,19 @@ import { markNotificationRead } from "@/lib/automations";
 
 export function AppHeader() {
   const { currentWorkspaceId, currentMembership, user } = useAuth();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const navigate = useNavigate();
   const meta = mobilePageMeta(pathname);
   const [workspaceSheet, setWorkspaceSheet] = useState(false);
+  // Back behaves like a native back: pop the in-app history when there is
+  // one (no new entry), otherwise - a deep link / first page of the session,
+  // where React Router's key is "default" - go to the parent, replacing the
+  // current entry so no duplicate history is created.
+  const goBack = () => {
+    if (location.key !== "default") navigate(-1);
+    else if (meta.parent) navigate(meta.parent, { replace: true });
+  };
   const { data: notifications, refetch } = useNotifications(currentWorkspaceId, user?.id ?? null);
   const unreadCount = (notifications || []).filter((n) => !n.read_at).length;
 
@@ -40,7 +49,7 @@ export function AppHeader() {
             workspace as a quiet secondary line that opens a bottom sheet. */}
         <div className="flex min-w-0 flex-1 items-center gap-1 md:hidden">
           {meta.parent ? (
-            <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Back" onClick={() => navigate(meta.parent!)}>
+            <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" aria-label="Back" onClick={goBack}>
               <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </Button>
           ) : (

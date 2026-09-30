@@ -23,6 +23,7 @@ const data = vi.hoisted(() => ({
   scanWebsite: vi.fn(),
   acceptProposal: vi.fn(),
   rejectProposal: vi.fn(),
+  update: vi.fn(),
   bundle: null as unknown,
 }));
 vi.mock("@/lib/businessStudio", async (orig) => ({
@@ -35,6 +36,7 @@ vi.mock("@/lib/businessStudio", async (orig) => ({
 vi.mock("@/lib/businessIdentity", async (orig) => ({
   ...(await orig<typeof import("@/lib/businessIdentity")>()),
   fetchBusinessIdentity: () => Promise.resolve(data.bundle),
+  updateBusinessIdentity: (...a: unknown[]) => data.update(...a),
 }));
 
 const identity = (over: Record<string, unknown> = {}) => ({
@@ -125,7 +127,9 @@ describe("My Business on a phone", () => {
     data.bundle = bundle();
     renderAt("/app/business?section=company");
     expect(await screen.findByLabelText("Trading name")).toHaveValue("Acme");
-    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Trading name"), { target: { value: "Acme Plumbing" } });
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Done" })).toBeInTheDocument();
   });
 
@@ -218,5 +222,59 @@ describe("Business hub", () => {
     fireEvent.click(await screen.findByRole("link", { name: /2 changes to review/ }));
     expect(screen.getByTestId("loc")).toHaveTextContent("/app/business?section=review");
     expect(await screen.findAllByText("Fix every leak.")).toHaveLength(2);
+  });
+});
+
+// Finding 3: "Done" in the Company / About sections must never discard edits.
+describe("My Business phone sections: Done saves first", () => {
+  afterEach(() => {
+    cleanup();
+    data.update.mockReset();
+  });
+
+  const savedIdentity = (over: Record<string, unknown>) => ({ ...(data.bundle as { identity: Record<string, unknown> }).identity, ...over });
+
+  it("Company: edit -> Done saves via the canonical save, then closes", async () => {
+    data.bundle = bundle();
+    data.update.mockImplementation(async (_cur: unknown, patch: Record<string, unknown>) => savedIdentity(patch));
+    renderAt("/app/business?section=company");
+    fireEvent.change(await screen.findByLabelText("Trading name"), { target: { value: "Acme Plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(data.update).toHaveBeenCalledTimes(1));
+    expect(data.update.mock.calls[0][1]).toMatchObject({ trading_name: "Acme Plumbing" });
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent(/^\/app\/business$/));
+  });
+
+  it("About: edit -> Done saves, then closes", async () => {
+    data.bundle = bundle();
+    data.update.mockImplementation(async (_cur: unknown, patch: Record<string, unknown>) => savedIdentity(patch));
+    renderAt("/app/business?section=about");
+    fireEvent.change(await screen.findByLabelText("Mission"), { target: { value: "Fix every leak." } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(data.update).toHaveBeenCalledTimes(1));
+    expect(data.update.mock.calls[0][1]).toMatchObject({ mission: "Fix every leak." });
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent(/^\/app\/business$/));
+  });
+
+  it("a failed save keeps the section open and the edits intact", async () => {
+    data.bundle = bundle();
+    data.update.mockRejectedValue(new Error("Network error"));
+    renderAt("/app/business?section=company");
+    fireEvent.change(await screen.findByLabelText("Trading name"), { target: { value: "Acme Plumbing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(data.update).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Done" })).not.toBeDisabled());
+    expect(screen.getByTestId("loc")).toHaveTextContent("section=company");
+    expect(screen.getByLabelText("Trading name")).toHaveValue("Acme Plumbing");
+  });
+
+  it("Done with no changes closes without writing", async () => {
+    data.bundle = bundle();
+    renderAt("/app/business?section=company");
+    await screen.findByLabelText("Trading name");
+    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.getByTestId("loc")).toHaveTextContent(/^\/app\/business$/));
+    expect(data.update).not.toHaveBeenCalled();
   });
 });
