@@ -14,6 +14,7 @@ import ContactPage from "@/pages/Contact";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 import CreateWorkspace from "@/pages/CreateWorkspace";
 import AcceptInvitation from "@/pages/AcceptInvitation";
 import Home from "@/pages/dashboard/Home";
@@ -72,6 +73,7 @@ export function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/create-workspace"
         element={
