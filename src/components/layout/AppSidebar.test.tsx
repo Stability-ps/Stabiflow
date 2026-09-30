@@ -12,7 +12,7 @@ describe("AppSidebar active state", () => {
   afterEach(cleanup);
 
   it.each([
-    ["Dashboard", "/app"], ["Content", "/app/content"], ["Campaigns", "/app/campaigns"],
+    ["Home", "/app"], ["Content", "/app/content"], ["Campaigns", "/app/campaigns"],
     ["Creative Studio", "/app/creative-studio"], ["WhatsApp", "/app/whatsapp/inbox"], ["Leads", "/app/leads"],
     ["Analytics", "/app/analytics"], ["Flow AI", "/app/flow-ai"], ["Automations", "/app/automations"],
     ["Integrations", "/app/integrations"], ["Settings", "/app/settings"],
@@ -28,7 +28,7 @@ describe("AppSidebar active state", () => {
   ])("keeps %s selected on nested route %s", (label, path) => {
     renderSidebar(path);
     expect(screen.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   });
 
   it.each([
@@ -43,7 +43,7 @@ describe("AppSidebar active state", () => {
     // ...and the specific child route is marked current too.
     expect(screen.getByRole("link", { name: childName })).toHaveAttribute("aria-current", "page");
     // No cross-contamination with the top-level items.
-    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   });
 
   it("exposes the WhatsApp child navigation only while inside the section", () => {

@@ -16,7 +16,15 @@ import Signup from "@/pages/Signup";
 import ForgotPassword from "@/pages/ForgotPassword";
 import CreateWorkspace from "@/pages/CreateWorkspace";
 import AcceptInvitation from "@/pages/AcceptInvitation";
-import Overview from "@/pages/dashboard/Overview";
+import Home from "@/pages/dashboard/Home";
+import MyBusiness from "@/pages/dashboard/MyBusiness";
+import Billing from "@/pages/dashboard/Billing";
+import BusinessStudio from "@/pages/dashboard/BusinessStudio";
+import Documents from "@/pages/dashboard/Documents";
+import PublicProfile from "@/pages/PublicProfile";
+import Pricing from "@/pages/Pricing";
+import { LegalDocumentPage, LegalIndexPage } from "@/pages/legal/LegalDocumentPage";
+import { FeatureGate } from "@/components/FeatureGate";
 import Content from "@/pages/dashboard/Content";
 import ContentCalendar from "@/pages/dashboard/content/Calendar";
 import ContentScheduled from "@/pages/dashboard/content/Scheduled";
@@ -73,9 +81,18 @@ export function AppRoutes() {
         }
       />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
-      <Route path="/legal/privacy" element={<Privacy />} />
-      <Route path="/legal/terms" element={<Terms />} />
-      <Route path="/legal/data-deletion" element={<DataDeletion />} />
+      <Route path="/b/:slug" element={<PublicProfile />} />
+      {/* Admin-published versions take over from the in-code pages once
+          the owner publishes one (Admin -> Pages & legal). */}
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/legal" element={<LegalIndexPage />} />
+      <Route path="/legal/privacy" element={<LegalDocumentPage type="privacy_policy" fallback={<Privacy />} />} />
+      <Route path="/legal/terms" element={<LegalDocumentPage type="terms_of_service" fallback={<Terms />} />} />
+      <Route path="/legal/data-deletion" element={<LegalDocumentPage type="data_deletion" fallback={<DataDeletion />} />} />
+      <Route path="/legal/subscription-terms" element={<LegalDocumentPage type="subscription_terms" />} />
+      <Route path="/legal/refunds" element={<LegalDocumentPage type="refund_policy" />} />
+      <Route path="/legal/cookies" element={<LegalDocumentPage type="cookie_policy" />} />
+      <Route path="/legal/ai-and-data" element={<LegalDocumentPage type="ai_data_disclosure" />} />
       <Route
         element={
           <RequireAuth>
@@ -85,8 +102,12 @@ export function AppRoutes() {
           </RequireAuth>
         }
       >
-        <Route path="/app" element={<Overview />} />
-        <Route path="/app/content" element={<Content />}>
+        <Route path="/app" element={<Home />} />
+        <Route path="/app/business" element={<MyBusiness />} />
+        <Route path="/app/billing" element={<Billing />} />
+        <Route path="/app/business-studio" element={<FeatureGate flag="module.business_studio"><BusinessStudio /></FeatureGate>} />
+        <Route path="/app/documents" element={<Documents />} />
+        <Route path="/app/content" element={<FeatureGate flag="module.content"><Content /></FeatureGate>}>
           <Route index element={<Navigate to="media-library" replace />} />
           <Route path="calendar" element={<ContentCalendar />} />
           <Route path="scheduled" element={<ContentScheduled />} />
@@ -94,16 +115,16 @@ export function AppRoutes() {
           <Route path="drafts" element={<ContentDrafts />} />
           <Route path="media-library" element={<ContentMediaLibrary />} />
         </Route>
-        <Route path="/app/campaigns" element={<Campaigns />} />
-        <Route path="/app/campaigns/new" element={<NewCampaign />} />
-        <Route path="/app/campaigns/:id/edit" element={<EditCampaign />} />
-        <Route path="/app/campaigns/:id" element={<CampaignDetailPage />} />
-        <Route path="/app/creative-studio" element={<CreativeStudio />} />
+        <Route path="/app/campaigns" element={<FeatureGate flag="module.campaigns"><Campaigns /></FeatureGate>} />
+        <Route path="/app/campaigns/new" element={<FeatureGate flag="module.campaigns"><NewCampaign /></FeatureGate>} />
+        <Route path="/app/campaigns/:id/edit" element={<FeatureGate flag="module.campaigns"><EditCampaign /></FeatureGate>} />
+        <Route path="/app/campaigns/:id" element={<FeatureGate flag="module.campaigns"><CampaignDetailPage /></FeatureGate>} />
+        <Route path="/app/creative-studio" element={<FeatureGate flag="module.creative_studio"><CreativeStudio /></FeatureGate>} />
         {/* Legacy flat Inbox route - kept as a redirect so old bookmarks and
             in-app links stay valid now that the Inbox lives inside the
             WhatsApp product area. */}
         <Route path="/app/inbox" element={<Navigate to="/app/whatsapp/inbox" replace />} />
-        <Route path="/app/whatsapp" element={<WhatsAppLayout />}>
+        <Route path="/app/whatsapp" element={<FeatureGate flag="module.whatsapp"><WhatsAppLayout /></FeatureGate>}>
           <Route index element={<Navigate to="/app/whatsapp/inbox" replace />} />
           <Route path="inbox" element={<WhatsAppInbox />} />
           <Route path="contacts" element={<WhatsAppContacts />} />
@@ -113,13 +134,13 @@ export function AppRoutes() {
           <Route path="settings" element={<WhatsAppSettings />} />
           <Route path="*" element={<Navigate to="/app/whatsapp/inbox" replace />} />
         </Route>
-        <Route path="/app/leads" element={<Leads />} />
-        <Route path="/app/customers" element={<CustomersList />} />
-        <Route path="/app/customers/:customerId" element={<Customer360Page />} />
-        <Route path="/app/analytics" element={<Analytics />} />
-        <Route path="/app/flow-ai" element={<FlowAI />} />
-        <Route path="/app/automations" element={<Automations />} />
-        <Route path="/app/integrations" element={<Integrations />} />
+        <Route path="/app/leads" element={<FeatureGate flag="module.leads"><Leads /></FeatureGate>} />
+        <Route path="/app/customers" element={<FeatureGate flag="module.customers"><CustomersList /></FeatureGate>} />
+        <Route path="/app/customers/:customerId" element={<FeatureGate flag="module.customers"><Customer360Page /></FeatureGate>} />
+        <Route path="/app/analytics" element={<FeatureGate flag="module.analytics"><Analytics /></FeatureGate>} />
+        <Route path="/app/flow-ai" element={<FeatureGate flag="module.flow_ai"><FlowAI /></FeatureGate>} />
+        <Route path="/app/automations" element={<FeatureGate flag="module.automations"><Automations /></FeatureGate>} />
+        <Route path="/app/integrations" element={<FeatureGate flag="module.integrations"><Integrations /></FeatureGate>} />
         <Route path="/app/settings" element={<Settings />} />
         <Route path="/app/operator" element={<Operator />} />
         {/* A stale/invalid authenticated link (e.g. an old campaign route
