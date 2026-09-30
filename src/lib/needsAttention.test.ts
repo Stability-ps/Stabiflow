@@ -68,9 +68,12 @@ describe("summarize", () => {
 });
 
 describe("severityTone", () => {
-  it("is distinct per severity", () => {
-    expect(severityTone("critical")).toContain("red");
-    expect(severityTone("warning")).toContain("amber");
+  it("is distinct per severity, using the shared semantic color tokens", () => {
+    expect(severityTone("critical")).toContain("destructive");
+    expect(severityTone("warning")).toContain("warning");
     expect(severityTone("info")).toContain("muted");
+    // Never the same class string for two different severities.
+    expect(severityTone("critical")).not.toBe(severityTone("warning"));
+    expect(severityTone("warning")).not.toBe(severityTone("info"));
   });
 });
