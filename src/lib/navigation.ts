@@ -74,3 +74,82 @@ export function isNavItemActive(itemPath: string, pathname: string): boolean {
   }
   return pathname === itemPath || pathname.startsWith(`${itemPath}/`);
 }
+
+// ---------------------------------------------------------------------------
+// Mobile navigation (bottom bar + "More" sheet)
+//
+// Derived from the SAME feature-flag filtered list the desktop sidebar
+// renders (filterNavItems in AppLayout), so module visibility is decided
+// exactly once and can never drift between desktop and mobile.
+// ---------------------------------------------------------------------------
+
+/** Mobile "Business" tab: one hub for Business Studio, My Business and Documents. */
+export const BUSINESS_HUB_PATH = "/app/business-hub";
+
+const BUSINESS_AREA_PATHS = [BUSINESS_HUB_PATH, "/app/business-studio", "/app/business", "/app/documents"];
+
+export function isBusinessAreaPath(pathname: string): boolean {
+  return BUSINESS_AREA_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+export type MobileNavItem = {
+  key: string;
+  label: string;
+  path: string;
+  icon: LucideIcon;
+  /** Custom active matcher; defaults to isNavItemActive(path). */
+  isActive?: (pathname: string) => boolean;
+};
+
+// Order of the "More" sheet. Business Studio itself lives in the Business hub.
+const MORE_ORDER = [
+  "/app/documents", "/app/content", "/app/campaigns", "/app/creative-studio", "/app/customers", "/app/analytics",
+  "/app/flow-ai", "/app/automations", "/app/integrations", "/app/billing", "/app/settings",
+];
+
+export function mobileNavModel(visible: NavItem[]): { primary: MobileNavItem[]; more: MobileNavItem[] } {
+  const byPath = new Map(visible.map((i) => [i.path, i]));
+  const toMobile = (i: NavItem): MobileNavItem => ({ key: i.path, label: i.label, path: i.path, icon: i.icon });
+
+  const primary: MobileNavItem[] = [];
+  const home = byPath.get("/app");
+  if (home) primary.push(toMobile(home));
+  const myBusiness = byPath.get("/app/business");
+  if (myBusiness) {
+    primary.push({ key: "business", label: "Business", path: BUSINESS_HUB_PATH, icon: myBusiness.icon, isActive: isBusinessAreaPath });
+  }
+  for (const p of ["/app/whatsapp", "/app/leads"]) {
+    const item = byPath.get(p);
+    if (item) primary.push(toMobile(item));
+  }
+  // Modules that are off simply drop out (a Business Studio-only workspace
+  // gets Home / Business / More) - nothing is promoted into their slot, so a
+  // tab never changes meaning between workspaces.
+  const more = MORE_ORDER.map((p) => byPath.get(p)).filter((i): i is NavItem => !!i).map(toMobile);
+  return { primary, more };
+}
+
+export function isMobileNavItemActive(item: MobileNavItem, pathname: string): boolean {
+  return item.isActive ? item.isActive(pathname) : isNavItemActive(item.path, pathname);
+}
+
+// Contextual mobile page title + optional parent for the header back button.
+type PageMeta = { title: string; parent?: string };
+
+const DETAIL_ROUTES: { pattern: RegExp; meta: PageMeta }[] = [
+  { pattern: /^\/app\/business-hub\/?$/, meta: { title: "Business" } },
+  { pattern: /^\/app\/business-studio\/?$/, meta: { title: "Business Studio", parent: BUSINESS_HUB_PATH } },
+  { pattern: /^\/app\/business\/?$/, meta: { title: "My Business", parent: BUSINESS_HUB_PATH } },
+  { pattern: /^\/app\/documents\/?$/, meta: { title: "Documents", parent: BUSINESS_HUB_PATH } },
+  { pattern: /^\/app\/campaigns\/new\/?$/, meta: { title: "New campaign", parent: "/app/campaigns" } },
+  { pattern: /^\/app\/campaigns\/[^/]+\/edit\/?$/, meta: { title: "Edit campaign", parent: "/app/campaigns" } },
+  { pattern: /^\/app\/campaigns\/[^/]+\/?$/, meta: { title: "Campaign", parent: "/app/campaigns" } },
+  { pattern: /^\/app\/customers\/[^/]+\/?$/, meta: { title: "Customer", parent: "/app/customers" } },
+  { pattern: /^\/app\/operator\/?$/, meta: { title: "Operator" } },
+];
+
+export function mobilePageMeta(pathname: string): PageMeta {
+  for (const r of DETAIL_ROUTES) if (r.pattern.test(pathname)) return r.meta;
+  const top = NAV_ITEMS.find((i) => isNavItemActive(i.path, pathname));
+  return { title: top?.label ?? "StabiFlow" };
+}

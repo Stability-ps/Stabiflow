@@ -312,7 +312,7 @@ export function WorkspaceTab() {
               ))}
           </div>
         </div>
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" className="h-auto min-h-11 whitespace-normal">
           <Link to="/app/creative-studio">
             Manage brands in Creative Studio <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
