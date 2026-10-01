@@ -15,6 +15,8 @@ type Faq = { question: string; answer: string };
  * come from the database (Admin -> Plans & pricing / Pages & legal) - no
  * prices are written in this file.
  */
+const PENDING_CHECKOUT_KEY = "stabiflow.pendingCheckout";
+
 export default function Pricing() {
   const [interval, setInterval] = useState<"month" | "year">("month");
   const catalog = useQuery({ queryKey: ["billing-catalog"], queryFn: fetchCatalog, staleTime: 5 * 60_000 });
@@ -71,7 +73,20 @@ export default function Pricing() {
                       <li key={f} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> {f}</li>
                     ))}
                   </ul>
-                  <Button asChild><Link to="/signup">{plan.marketing.cta ?? "Get started"}</Link></Button>
+                  <Button asChild>
+                    <Link
+                      to="/signup"
+                      onClick={() => {
+                        if (price) {
+                          sessionStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify({ priceId: price.id, planCode: plan.code }));
+                        } else {
+                          sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+                        }
+                      }}
+                    >
+                      {plan.marketing.cta ?? "Get started"}
+                    </Link>
+                  </Button>
                 </CardContent>
               </Card>
             );
