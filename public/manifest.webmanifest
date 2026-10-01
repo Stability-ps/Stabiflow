@@ -1,14 +1,42 @@
 {
+  "id": "/app",
   "name": "StabiFlow",
   "short_name": "StabiFlow",
-  "description": "Marketing, customer operations, CRM, WhatsApp and automation in one workspace.",
-  "start_url": "/app",
+  "description": "Your business profile, documents, messages and leads in one place.",
+  "start_url": "/app?source=pwa",
   "scope": "/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "background_color": "#ffffff",
-  "theme_color": "#0f172a",
+  "theme_color": "#ffffff",
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "icons": [
+    { "src": "/brand/StabiFlow_Favicon_128x128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/StabiFlow_Favicon_192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/brand/StabiFlow_Favicon_256x256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
-    { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/StabiFlow_Maskable_512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "My Business",
+      "url": "/app/business",
+      "icons": [
+        { "src": "/brand/StabiFlow_Favicon_128x128.png", "sizes": "128x128", "type": "image/png" }
+      ]
+    },
+    {
+      "name": "Documents",
+      "url": "/app/documents",
+      "icons": [
+        { "src": "/brand/StabiFlow_Favicon_128x128.png", "sizes": "128x128", "type": "image/png" }
+      ]
+    }
   ]
 }
