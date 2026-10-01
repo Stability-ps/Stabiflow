@@ -125,10 +125,17 @@ Deno.serve(async (req: Request) => {
   const apiKey = envVar("OPENAI_API_KEY");
 
   // --- Quota checks (workspace, then platform-wide emergency ceiling) -------
-  const { data: billing } = await serviceClient.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
-  const workspaceLimit = Number((billing?.limits as Record<string, unknown> | null)?.flow_ai_monthly_token_limit)
-    || Number(Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT")?.trim())
-    || DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT_FALLBACK;
+  // Prefer the canonical plan-aware cap. The legacy env/fallback path is
+  // retained as a fail-safe for deployments where the migration has not
+  // reached the database yet.
+  const { data: planCap, error: planCapError } = await serviceClient.rpc("workspace_ai_token_cap", {
+    p_workspace_id: workspaceId,
+    p_feature: "flow_ai",
+  });
+  const workspaceLimit = !planCapError && Number(planCap) > 0
+    ? Number(planCap)
+    : Number(Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT")?.trim())
+      || DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT_FALLBACK;
   const workspaceUsed = await getWorkspaceTokenUsageSince(serviceClient, workspaceId, startOfMonthIso());
   const workspaceQuota = checkWorkspaceQuota(workspaceUsed, workspaceLimit);
   if (!workspaceQuota.allowed) {
