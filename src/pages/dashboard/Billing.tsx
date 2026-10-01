@@ -242,6 +242,28 @@ export default function Billing() {
         </Card>
       )}
 
+      {(entitlements.data ?? []).length > 0 && (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-4 py-3">
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {(entitlements.data ?? []).map((e) => (
+              <div key={e.entitlement_key} className="flex items-center gap-1.5 text-xs sm:text-sm">
+                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
+                  {e.enabled ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                </span>
+                <span className={e.enabled ? "text-slate-700" : "text-slate-400"}>
+                  {e.entitlement_key.replace(/[._]/g, " ")}
+                  {e.enabled && e.kind !== "boolean" && !e.unlimited && (
+                    <span className="ml-1 font-medium text-emerald-700">
+                      {e.kind === "allowance" ? `${e.used}/${e.limit_value}` : `· ${e.limit_value}`}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <Card className={sub ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm"}>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -349,30 +371,6 @@ export default function Billing() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{recurring.map((p) => planCard(p, interval))}</div>
         </section>
       )}
-
-      <Card className="border-cyan-100 bg-cyan-50/30">
-        <CardHeader>
-          <CardTitle className="text-base">What your workspace includes</CardTitle>
-          <CardDescription>Your current allowances and included tools at a glance.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="grid gap-2 text-sm sm:grid-cols-2">
-            {(entitlements.data ?? []).map((e) => (
-              <li key={e.entitlement_key} className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${e.enabled ? "border-emerald-100 bg-white" : "border-slate-200 bg-slate-50/70"}`}>
-                <span>{e.entitlement_key.replace(/[._]/g, " ")}</span>
-                <span className={e.enabled ? "font-medium text-emerald-700" : "text-muted-foreground"}>
-                  {e.kind === "boolean"
-                    ? e.enabled ? "Included" : "Not included"
-                    : !e.enabled ? "Not included"
-                    : e.unlimited ? "Unlimited"
-                    : e.kind === "allowance" ? `${e.used} of ${e.limit_value} this month`
-                    : `Up to ${e.limit_value}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
 
       {(state.data?.transactions ?? []).length > 0 && (
         <Card className="overflow-hidden">
