@@ -28,6 +28,10 @@ export function usePwaInstall() {
     if (typeof navigator === "undefined") return false;
     return /iphone|ipad|ipod/i.test(navigator.userAgent);
   }, []);
+  const isAndroid = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return /android/i.test(navigator.userAgent);
+  }, []);
 
   useEffect(() => {
     const onBeforeInstall = (event: BeforeInstallPromptEvent) => {
@@ -72,6 +76,7 @@ export function usePwaInstall() {
     canInstall: !installed,
     installed,
     isiOS,
+    isAndroid,
     showHelp,
     install,
     dismissHelp: () => setShowHelp(false),
