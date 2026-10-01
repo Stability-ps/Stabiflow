@@ -160,18 +160,9 @@ export default function Billing() {
     (best, p) => !best || (p.plan?.tier_rank ?? 0) > (best.plan?.tier_rank ?? 0) ? p : best,
     null,
   );
-  const currentHolding = sub
-    ? { name: sub.plan?.name ?? "Subscription", kind: "subscription" as const, tierRank: recurringTier(sub.plan?.code) }
-    : highestPurchase
-      ? { name: highestPurchase.plan?.name ?? "Purchase", kind: "purchase" as const, tierRank: highestPurchase.plan?.tier_rank ?? 0 }
-      : { name: "Free", kind: "free" as const, tierRank: 0 };
   const plans = (catalog.data ?? []).filter((p) => p.plan_kind !== "free");
   const oneOff = plans.filter((p) => p.plan_kind === "one_off");
   const recurring = plans.filter((p) => p.plan_kind === "subscription");
-
-  function recurringTier(code?: string | null) {
-    return (catalog.data ?? []).find((p) => p.code === code)?.tier_rank ?? 0;
-  }
 
   const planCard = (plan: CatalogPlan, priceInterval: BillingInterval) => {
     const price = plan.prices.find((p) => p.billing_interval === priceInterval);
