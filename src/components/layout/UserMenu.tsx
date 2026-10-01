@@ -22,7 +22,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button variant="ghost" size="icon" className="shrink-0 rounded-full" aria-label="Account menu">
           <Avatar className="h-8 w-8">
             <AvatarFallback className="text-xs">{initials(profile?.full_name, user?.email)}</AvatarFallback>
           </Avatar>

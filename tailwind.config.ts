@@ -5,6 +5,9 @@ import type { Config } from "tailwindcss";
 // same shadcn/ui structural pattern Acapolite uses, ported clean.
 export default {
   darkMode: ["class"],
+  // hover: styles only on devices that can actually hover - no "stuck"
+  // hover/translate states after a tap on phones. Desktop is unaffected.
+  future: { hoverOnlyWhenSupported: true },
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {

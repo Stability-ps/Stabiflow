@@ -93,6 +93,24 @@ export default function Automations() {
     }
   }
 
+  const actionsMenu = (automation: AutomationRow) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" disabled={busyId === automation.id} aria-label={`Actions for ${automation.name}`}><MoreVertical className="h-4 w-4" /></Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {canViewRuns && <DropdownMenuItem onClick={() => setRunsAutomation(automation)}>View run history</DropdownMenuItem>}
+        {canEdit && <DropdownMenuItem onClick={() => { setEditingAutomation(automation); setBuilderOpen(true); }}>Edit</DropdownMenuItem>}
+        {canEnable && (
+          <DropdownMenuItem onClick={() => toggleStatus(automation)}>
+            {automation.status === "enabled" ? "Disable" : "Enable"}
+          </DropdownMenuItem>
+        )}
+        {canDelete && <DropdownMenuItem onClick={() => handleDelete(automation)} className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
   return (
     <div className="flex flex-col">
       {fromWhatsApp && (
@@ -100,7 +118,7 @@ export default function Automations() {
           <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />
         </div>
       )}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Automations</h1>
           <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
@@ -149,7 +167,21 @@ export default function Automations() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border">
+        <>
+        {/* Phones: stacked cards with the same actions menu. */}
+        <ul className="divide-y overflow-hidden rounded-xl border md:hidden" aria-label="Automations">
+          {visibleAutomations.map((automation) => (
+            <li key={automation.id} className="flex items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">{automation.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</p>
+              </div>
+              <Badge variant={automation.status === "enabled" ? "default" : automation.status === "disabled" ? "secondary" : "outline"}>{STATUS_LABEL[automation.status]}</Badge>
+              {actionsMenu(automation)}
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-hidden rounded-lg border md:block">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
               <tr>
@@ -168,27 +200,14 @@ export default function Automations() {
                     <Badge variant={automation.status === "enabled" ? "default" : automation.status === "disabled" ? "secondary" : "outline"}>{STATUS_LABEL[automation.status]}</Badge>
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={busyId === automation.id}><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canViewRuns && <DropdownMenuItem onClick={() => setRunsAutomation(automation)}>View run history</DropdownMenuItem>}
-                        {canEdit && <DropdownMenuItem onClick={() => { setEditingAutomation(automation); setBuilderOpen(true); }}>Edit</DropdownMenuItem>}
-                        {canEnable && (
-                          <DropdownMenuItem onClick={() => toggleStatus(automation)}>
-                            {automation.status === "enabled" ? "Disable" : "Enable"}
-                          </DropdownMenuItem>
-                        )}
-                        {canDelete && <DropdownMenuItem onClick={() => handleDelete(automation)} className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {actionsMenu(automation)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <AutomationBuilderDialog

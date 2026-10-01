@@ -101,7 +101,10 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
           <DialogHeader>
             <DialogTitle>{selectedDay ? format(selectedDay, "EEEE, MMMM d") : ""}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          {/* min-w-0: this is a grid item of DialogContent - without it the
+              implicit column grows to the widest one-line (truncate) caption,
+              pushing cards and the title outside the dialog. */}
+          <div className="min-w-0 space-y-2">
             {selectedDayPosts.map((post) => (
               <div key={post.id} className="flex items-center gap-3 rounded-md border p-2">
                 {post.content_media_assets && (
