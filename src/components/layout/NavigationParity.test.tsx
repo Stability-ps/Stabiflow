@@ -27,7 +27,7 @@ vi.mock("@/hooks/useWorkspaceSwitch", () => ({
 
 // Exactly the production desktop sidebar for a fully entitled workspace.
 const MAIN_MODULES = [
-  "Home", "Business Studio", "My Business", "Documents", "Content", "Campaigns", "Creative Studio", "WhatsApp", "Leads", "Customers",
+  "Home", "Business Studio", "My Business", "Documents", "Content", "Campaigns", "Creative Studio", "Messages", "Leads", "Customers",
   "Analytics", "Flow AI", "Automations", "Integrations", "Billing", "Settings",
 ];
 const ALL_FLAGS = [
@@ -64,7 +64,7 @@ describe("navigation parity with origin/main", () => {
     renderLayout();
     const bar = screen.getByRole("navigation", { name: "Primary" });
     const tabs = within(bar).getAllByRole("link").map((l) => l.textContent);
-    expect(tabs).toEqual(["Home", "Business", "WhatsApp", "Leads"]);
+    expect(tabs).toEqual(["Home", "Business", "Messages", "Leads"]);
     fireEvent.click(within(bar).getByRole("button", { name: "More destinations" }));
     const more = within(screen.getByRole("dialog", { name: "More" })).getByRole("navigation", { name: "More destinations" });
     const moreItems = within(more).getAllByRole("link").map((l) => l.textContent);
