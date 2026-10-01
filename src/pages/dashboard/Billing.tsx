@@ -155,6 +155,11 @@ export default function Billing() {
   if (!currentWorkspaceId) return null;
 
   const sub = state.data?.subscription ?? null;
+  const purchases = state.data?.purchases ?? [];
+  const highestPurchase = purchases.reduce<(typeof purchases)[number] | null>(
+    (best, p) => !best || (p.plan?.tier_rank ?? 0) > (best.plan?.tier_rank ?? 0) ? p : best,
+    null,
+  );
   const plans = (catalog.data ?? []).filter((p) => p.plan_kind !== "free");
   const oneOff = plans.filter((p) => p.plan_kind === "one_off");
   const recurring = plans.filter((p) => p.plan_kind === "subscription");
@@ -164,7 +169,7 @@ export default function Billing() {
     if (!price) return null;
     const isCurrent = !!sub && sub.plan?.code === plan.code && sub.status !== "cancelled";
     const purchase = plan.plan_kind === "one_off"
-      ? (state.data?.purchases ?? []).find((p) => p.plan?.code === plan.code)
+      ? purchases.find((p) => p.plan?.code === plan.code)
       : undefined;
     const isPurchased = !!purchase && (!purchase.access_expires_at || new Date(purchase.access_expires_at).getTime() > Date.now());
     const saving = priceInterval === "year" ? annualSavingPercent(plan.prices) : null;
@@ -210,7 +215,11 @@ export default function Billing() {
               title={!canManage ? "Only the workspace owner can buy plans" : !price.purchasable ? "Not available yet" : undefined}
             >
               {checkout.isPending && checkout.variables === price.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {price.purchasable ? plan.marketing.cta ?? "Choose" : "Coming soon"}
+              {price.purchasable
+                ? plan.plan_kind === "subscription"
+                  ? `Upgrade to ${plan.name}`
+                  : plan.marketing.cta ?? "Choose"
+                : "Coming soon"}
             </Button>
           )}
         </CardContent>
@@ -289,20 +298,28 @@ export default function Billing() {
                 </AlertDialog>
               )}
             </>
+          ) : highestPurchase ? (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xl font-semibold">{highestPurchase.plan?.name ?? "Purchased plan"}</p>
+                <p className="mt-0.5 text-muted-foreground">
+                  Purchased {formatDate(highestPurchase.paid_at)}
+                  {highestPurchase.access_expires_at ? ` · access until ${formatDate(highestPurchase.access_expires_at)}` : " · yours permanently"}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Current plan</Badge>
+                {purchases.filter((p) => p.id !== highestPurchase.id).map((p) => (
+                  <span key={p.id} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                    {p.plan?.name ?? "Purchase"} · bought {formatDate(p.paid_at)}
+                  </span>
+                ))}
+              </div>
+            </div>
           ) : (
             <div>
               <p className="text-xl font-semibold">Free</p>
               <p className="mt-0.5 text-muted-foreground">Start with the essentials, then upgrade when you are ready.</p>
-            </div>
-          )}
-          {(state.data?.purchases ?? []).length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-1">
-              {(state.data?.purchases ?? []).map((p) => (
-                <span key={p.id} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
-                  {p.plan?.name ?? "Purchase"} · bought {formatDate(p.paid_at)}
-                  {p.access_expires_at ? ` · until ${formatDate(p.access_expires_at)}` : ""}
-                </span>
-              ))}
             </div>
           )}
         </CardContent>
