@@ -1,14 +1,13 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { AlertTriangle, MessageCircle, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { useAllWhatsAppNumbers, useWorkspaceIntegrations } from "@/hooks/useIntegrations";
 import { useLastWhatsAppWebhookEvent } from "@/hooks/useWhatsAppStatus";
-import { presentIntegrationStatus, presentWebhookSubscription, toneClassName } from "@/lib/integrationStatus";
+import { presentWebhookSubscription } from "@/lib/integrationStatus";
 import type { WhatsAppNumber, WhatsAppOutletContext } from "@/pages/dashboard/whatsapp/whatsappOutlet";
 
 const TABS: Array<{ label: string; to: string; external?: boolean }> = [
@@ -58,7 +57,6 @@ export default function WhatsAppLayout() {
 
   const allNumbers = (numbers || []) as WhatsAppNumber[];
   const activeNumbers = allNumbers.filter((n) => n.is_active);
-  const status = presentIntegrationStatus(integration.last_health_check_status, integration.status === "connected");
   const webhook = presentWebhookSubscription(integration.webhook_subscription_status, !!lastEvent);
   const primary = activeNumbers[0] || null;
 
