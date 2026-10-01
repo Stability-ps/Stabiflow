@@ -160,7 +160,7 @@ export default function CreativeStudio() {
   const totalAds = conceptCount * Math.max(formats.length, 1);
 
   return (
-    <div className="space-y-6">
+    <div className="mobile-touch space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Creative Studio</h1>
         <p className="text-sm text-muted-foreground">Fill everything in once, click Generate Ads, and get complete finished adverts.</p>
