@@ -30,6 +30,27 @@ function formatDate(value: string | null): string {
   return value ? new Date(value).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" }) : "-";
 }
 
+function planTheme(code: string) {
+  if (code === "business") return {
+    card: "border-sky-200 bg-gradient-to-b from-sky-50/90 to-background shadow-sm",
+    badge: "bg-sky-100 text-sky-800 hover:bg-sky-100",
+    button: "bg-sky-600 text-white hover:bg-sky-700",
+    check: "text-sky-600",
+  };
+  if (code === "growth") return {
+    card: "border-violet-200 bg-gradient-to-b from-violet-50/90 to-background shadow-sm",
+    badge: "bg-violet-100 text-violet-800 hover:bg-violet-100",
+    button: "bg-violet-600 text-white hover:bg-violet-700",
+    check: "text-violet-600",
+  };
+  return {
+    card: "border-amber-200 bg-gradient-to-b from-amber-50/90 to-background shadow-sm",
+    badge: "bg-amber-100 text-amber-800 hover:bg-amber-100",
+    button: "bg-amber-500 text-slate-950 hover:bg-amber-600",
+    check: "text-amber-600",
+  };
+}
+
 export default function Billing() {
   const { currentWorkspaceId, hasPermission } = useAuth();
   const canManage = hasPermission("manage_billing");
@@ -143,12 +164,13 @@ export default function Billing() {
     if (!price) return null;
     const isCurrent = !!sub && sub.plan?.code === plan.code && sub.status !== "cancelled";
     const saving = priceInterval === "year" ? annualSavingPercent(plan.prices) : null;
+    const theme = planTheme(plan.code);
     return (
-      <Card key={`${plan.id}-${priceInterval}`} className="flex flex-col">
+      <Card key={`${plan.id}-${priceInterval}`} className={`flex flex-col overflow-hidden transition-shadow hover:shadow-md ${theme.card}`}>
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <CardTitle className="text-base">{plan.name}</CardTitle>
-            {plan.marketing.badge && <Badge variant="secondary">{plan.marketing.badge}</Badge>}
+            {plan.marketing.badge && <Badge className={theme.badge}>{plan.marketing.badge}</Badge>}
           </div>
           <CardDescription>{plan.description}</CardDescription>
         </CardHeader>
@@ -161,7 +183,7 @@ export default function Billing() {
           <ul className="flex-1 space-y-1 text-sm">
             {(plan.marketing.features ?? []).map((f) => (
               <li key={f} className="flex gap-2">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" /> {f}
+                <Check className={`mt-0.5 h-4 w-4 shrink-0 ${theme.check}`} aria-hidden="true" /> {f}
               </li>
             ))}
           </ul>
@@ -171,6 +193,7 @@ export default function Billing() {
             </Button>
           ) : (
             <Button
+              className={theme.button}
               onClick={() => checkout.mutate(price.id)}
               disabled={!canManage || !price.purchasable || checkout.isPending || verifying}
               title={!canManage ? "Only the workspace owner can buy plans" : !price.purchasable ? "Not available yet" : undefined}
@@ -186,9 +209,9 @@ export default function Billing() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Billing</h1>
-        <p className="text-sm text-muted-foreground">Payments are processed securely by Paystack.</p>
+      <div className="rounded-2xl bg-gradient-to-r from-sky-50 via-cyan-50 to-violet-50 p-5 sm:p-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Billing & plans</h1>
+        <p className="mt-1 text-sm text-slate-600">Choose the plan that fits your business. Payments are processed securely by Paystack.</p>
       </div>
 
       {verifying && (
@@ -199,24 +222,33 @@ export default function Billing() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <CreditCard className="h-4 w-4" /> Your plan
-          </CardTitle>
+      <Card className={sub ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm"}>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${sub ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
+                <CreditCard className="h-4 w-4" />
+              </span>
+              Current plan
+            </CardTitle>
+            {sub ? (
+              <Badge className={sub.status === "active" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
+                {STATUS_LABELS[sub.status] ?? sub.status}
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Free</Badge>
+            )}
+          </div>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="space-y-3 text-sm">
           {state.isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : sub ? (
             <>
-              <p>
-                <span className="font-medium">{sub.plan?.name ?? "Subscription"}</span>
-                {sub.price && ` · ${formatMoney(sub.price.amount_minor, sub.price.currency)} ${intervalLabel(sub.price.billing_interval)}`}
-              </p>
-              <p>
-                Status: <Badge variant={sub.status === "active" ? "default" : "secondary"}>{STATUS_LABELS[sub.status] ?? sub.status}</Badge>
-              </p>
+              <div>
+                <p className="text-xl font-semibold">{sub.plan?.name ?? "Subscription"}</p>
+                {sub.price && <p className="mt-0.5 text-muted-foreground">{formatMoney(sub.price.amount_minor, sub.price.currency)} {intervalLabel(sub.price.billing_interval)}</p>}
+              </div>
               {sub.status === "grace" && sub.grace_until && (
                 <p className="text-amber-700">Your last payment did not go through. Access continues until {formatDate(sub.grace_until)} - please update your card with Paystack.</p>
               )}
@@ -247,14 +279,21 @@ export default function Billing() {
               )}
             </>
           ) : (
-            <p className="text-muted-foreground">You are on the free plan.</p>
+            <div>
+              <p className="text-xl font-semibold">Free</p>
+              <p className="mt-0.5 text-muted-foreground">Start with the essentials, then upgrade when you are ready.</p>
+            </div>
           )}
-          {(state.data?.purchases ?? []).map((p) => (
-            <p key={p.id}>
-              <span className="font-medium">{p.plan?.name ?? "Purchase"}</span> · bought {formatDate(p.paid_at)}
-              {p.access_expires_at ? ` · access until ${formatDate(p.access_expires_at)}` : ""}
-            </p>
-          ))}
+          {(state.data?.purchases ?? []).length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-1">
+              {(state.data?.purchases ?? []).map((p) => (
+                <span key={p.id} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                  {p.plan?.name ?? "Purchase"} · bought {formatDate(p.paid_at)}
+                  {p.access_expires_at ? ` · until ${formatDate(p.access_expires_at)}` : ""}
+                </span>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -271,9 +310,9 @@ export default function Billing() {
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Subscriptions</h2>
-            <div className="inline-flex rounded-md border p-0.5" role="group" aria-label="Billing interval">
+            <div className="inline-flex rounded-full border bg-muted/40 p-1" role="group" aria-label="Billing interval">
               {(["month", "year"] as const).map((i) => (
-                <Button key={i} size="sm" variant={interval === i ? "default" : "ghost"} onClick={() => setInterval(i)} aria-pressed={interval === i}>
+                <Button key={i} size="sm" className="rounded-full" variant={interval === i ? "default" : "ghost"} onClick={() => setInterval(i)} aria-pressed={interval === i}>
                   {i === "month" ? "Monthly" : "Annual"}
                 </Button>
               ))}
@@ -283,16 +322,17 @@ export default function Billing() {
         </section>
       )}
 
-      <Card>
+      <Card className="border-cyan-100 bg-cyan-50/30">
         <CardHeader>
           <CardTitle className="text-base">What your workspace includes</CardTitle>
+          <CardDescription>Your current allowances and included tools at a glance.</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="grid gap-2 text-sm sm:grid-cols-2">
             {(entitlements.data ?? []).map((e) => (
-              <li key={e.entitlement_key} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+              <li key={e.entitlement_key} className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2.5 ${e.enabled ? "border-emerald-100 bg-white" : "border-slate-200 bg-slate-50/70"}`}>
                 <span>{e.entitlement_key.replace(/[._]/g, " ")}</span>
-                <span className={e.enabled ? "font-medium" : "text-muted-foreground"}>
+                <span className={e.enabled ? "font-medium text-emerald-700" : "text-muted-foreground"}>
                   {e.kind === "boolean"
                     ? e.enabled ? "Included" : "Not included"
                     : !e.enabled ? "Not included"
@@ -307,9 +347,10 @@ export default function Billing() {
       </Card>
 
       {(state.data?.transactions ?? []).length > 0 && (
-        <Card>
-          <CardHeader>
+        <Card className="overflow-hidden">
+          <CardHeader className="bg-muted/30">
             <CardTitle className="text-base">Payment history</CardTitle>
+            <CardDescription>Your most recent StabiFlow payments.</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full text-sm">
