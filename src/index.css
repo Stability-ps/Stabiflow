@@ -145,6 +145,22 @@
     font-size: 16px;
   }
 
+  /* Dense creation/document tools opt in with .mobile-touch. Keep their
+     desktop density, but give phone controls a reliable 44px touch target. */
+  .mobile-touch :is(button:not([role="checkbox"]):not([role="radio"]), [role="combobox"], select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])) {
+    min-height: 44px;
+  }
+
+  .mobile-touch :is([role="checkbox"], [role="radio"]) {
+    position: relative;
+  }
+
+  .mobile-touch :is([role="checkbox"], [role="radio"])::after {
+    content: "";
+    position: absolute;
+    inset: -14px;
+  }
+
   /* Toasts sit above the bottom navigation instead of covering it. */
   [data-sonner-toaster][data-y-position="bottom"] {
     bottom: calc(var(--bottom-nav-height) + 0.75rem) !important;
