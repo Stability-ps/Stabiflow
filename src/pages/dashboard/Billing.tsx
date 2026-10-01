@@ -163,6 +163,10 @@ export default function Billing() {
     const price = plan.prices.find((p) => p.billing_interval === priceInterval);
     if (!price) return null;
     const isCurrent = !!sub && sub.plan?.code === plan.code && sub.status !== "cancelled";
+    const purchase = plan.plan_kind === "one_off"
+      ? (state.data?.purchases ?? []).find((p) => p.plan?.code === plan.code)
+      : undefined;
+    const isPurchased = !!purchase && (!purchase.access_expires_at || new Date(purchase.access_expires_at).getTime() > Date.now());
     const saving = priceInterval === "year" ? annualSavingPercent(plan.prices) : null;
     const theme = planTheme(plan.code);
     return (
@@ -187,7 +191,14 @@ export default function Billing() {
               </li>
             ))}
           </ul>
-          {isCurrent ? (
+          {isPurchased ? (
+            <div className="space-y-2">
+              <Button disabled variant="outline" className="w-full border-emerald-200 bg-emerald-50 text-emerald-800 opacity-100">
+                <Check className="mr-2 h-4 w-4" /> Purchased
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">Bought {formatDate(purchase.paid_at)}</p>
+            </div>
+          ) : isCurrent ? (
             <Button disabled variant="outline">
               Current plan
             </Button>
