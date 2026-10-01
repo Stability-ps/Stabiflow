@@ -18,6 +18,13 @@ insert into public.plan_entitlements (plan_id, entitlement_key, bool_value, limi
 select p.id, v.entitlement_key, null::boolean, v.limit_value
 from public.billing_plans p
 join (values
+  -- Free allowances only matter for explicitly grandfathered/pilot
+  -- workspaces because these advanced modules remain hidden for new Free
+  -- workspaces. This prevents an existing workspace losing working
+  -- functionality merely because commercial plans were introduced.
+  ('free', 'creative_generations', 10::bigint),
+  ('free', 'automation_runs', 100::bigint),
+  ('free', 'whatsapp_ai_turns', 50::bigint),
   ('business', 'creative_generations', 0::bigint),
   ('business', 'automation_runs', 0::bigint),
   ('business', 'whatsapp_ai_turns', 0::bigint),
@@ -69,7 +76,10 @@ begin
   elsif 'business' = any(v_codes) then
     return case when p_feature = 'flow_ai' then 100000 else 50000 end;
   else
-    return case when p_feature = 'flow_ai' then 25000 else 10000 end;
+    -- Preserve the pre-commercial 500k default for grandfathered/pilot
+    -- workspaces. New Free workspaces cannot reach these advanced modules
+    -- through feature flags, so this does not create a new free AI offer.
+    return 500000;
   end if;
 end;
 $$;
@@ -79,3 +89,16 @@ grant execute on function public.workspace_ai_token_cap(uuid, text) to authentic
 
 comment on function public.workspace_ai_token_cap(uuid, text) is
   'Returns the operator override when set, otherwise a conservative plan-aware monthly AI token ceiling.';
+
+
+-- A run can be claimed but deliberately not executed because its workspace
+-- has used its monthly commercial allowance. Keep that state distinct from
+-- permission failures and condition skips so Billing/operations can explain
+-- exactly why it did not run.
+alter table public.automation_runs drop constraint if exists automation_runs_status_check;
+alter table public.automation_runs
+  add constraint automation_runs_status_check
+  check (status in (
+    'pending', 'in_progress', 'succeeded', 'partial', 'failed',
+    'skipped_conditions_not_met', 'blocked_permission', 'blocked_usage_limit'
+  ));
