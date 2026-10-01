@@ -16,8 +16,8 @@ export type NavChild = {
 
 export type NavItem = { label: string; path: string; icon: LucideIcon; children?: NavChild[]; flag?: FeatureFlagKey };
 
-// The primary sections from the StabiFlow product brief. "WhatsApp" is the
-// one section with its own child navigation - the Inbox, Contacts and
+// The primary sections from the StabiFlow product brief. "Messages" is the
+// WhatsApp channel area with its own child navigation - the Inbox, Contacts and
 // Templates pages plus filtered links into the shared Automations and
 // Analytics modules and its own Settings view. Every other item is a
 // single page.
@@ -38,7 +38,7 @@ export const NAV_ITEMS: NavItem[] = [
     // path is the section root (the index route redirects to /inbox). Using
     // the root - not a child path - is what lets the single sidebar item
     // stay selected across every /app/whatsapp/* page.
-    label: "WhatsApp",
+    label: "Messages",
     path: "/app/whatsapp",
     icon: MessageCircle,
     flag: "module.whatsapp",
@@ -64,7 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
 export function isNavItemActive(itemPath: string, pathname: string): boolean {
   if (itemPath === "/app") return pathname === "/app" || pathname === "/app/";
   // The WhatsApp product area is the one multi-page section: every
-  // /app/whatsapp/* route keeps the single "WhatsApp" parent selected,
+  // /app/whatsapp/* route keeps the single "Messages" parent selected,
   // regardless of which child page (inbox/contacts/templates/settings) is
   // open. Filtered links into Automations/Analytics deliberately do NOT
   // keep it selected - the user has left the section; those pages show
@@ -118,10 +118,10 @@ export function mobileNavModel(visible: NavItem[]): { primary: MobileNavItem[]; 
   if (myBusiness) {
     primary.push({ key: "business", label: "Business", path: BUSINESS_HUB_PATH, icon: myBusiness.icon, isActive: isBusinessAreaPath });
   }
-  for (const p of ["/app/whatsapp", "/app/leads"]) {
-    const item = byPath.get(p);
-    if (item) primary.push(toMobile(item));
-  }
+  const messages = byPath.get("/app/whatsapp");
+  if (messages) primary.push({ ...toMobile(messages), path: "/app/whatsapp/inbox" });
+  const leads = byPath.get("/app/leads");
+  if (leads) primary.push(toMobile(leads));
   // Modules that are off simply drop out (a Business Studio-only workspace
   // gets Home / Business / More) - nothing is promoted into their slot, so a
   // tab never changes meaning between workspaces.
@@ -141,6 +141,7 @@ const DETAIL_ROUTES: { pattern: RegExp; meta: PageMeta }[] = [
   { pattern: /^\/app\/business-studio\/?$/, meta: { title: "Business Studio", parent: BUSINESS_HUB_PATH } },
   { pattern: /^\/app\/business\/?$/, meta: { title: "My Business", parent: BUSINESS_HUB_PATH } },
   { pattern: /^\/app\/documents\/?$/, meta: { title: "Documents", parent: BUSINESS_HUB_PATH } },
+  { pattern: /^\/app\/whatsapp\/inbox\/?$/, meta: { title: "Messages" } },
   { pattern: /^\/app\/campaigns\/new\/?$/, meta: { title: "New campaign", parent: "/app/campaigns" } },
   { pattern: /^\/app\/campaigns\/[^/]+\/edit\/?$/, meta: { title: "Edit campaign", parent: "/app/campaigns" } },
   { pattern: /^\/app\/campaigns\/[^/]+\/?$/, meta: { title: "Campaign", parent: "/app/campaigns" } },
