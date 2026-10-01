@@ -242,28 +242,6 @@ export default function Billing() {
         </Card>
       )}
 
-      {(entitlements.data ?? []).length > 0 && (
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-4 py-3">
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {(entitlements.data ?? []).map((e) => (
-              <div key={e.entitlement_key} className="flex items-center gap-1.5 text-xs sm:text-sm">
-                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
-                  {e.enabled ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
-                </span>
-                <span className={e.enabled ? "text-slate-700" : "text-slate-400"}>
-                  {e.entitlement_key.replace(/[._]/g, " ")}
-                  {e.enabled && e.kind !== "boolean" && !e.unlimited && (
-                    <span className="ml-1 font-medium text-emerald-700">
-                      {e.kind === "allowance" ? `${e.used}/${e.limit_value}` : `· ${e.limit_value}`}
-                    </span>
-                  )}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       <Card className={sub ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm"}>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -283,6 +261,28 @@ export default function Billing() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          {(entitlements.data ?? []).length > 0 && (
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 border-b border-slate-200 pb-3 sm:grid-cols-2">
+              {(entitlements.data ?? []).map((e) => (
+                <div key={e.entitlement_key} className="flex min-w-0 items-center gap-2 py-1">
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
+                    {e.enabled ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+                  </span>
+                  <span className={`min-w-0 flex-1 truncate ${e.enabled ? "text-slate-700" : "text-slate-400"}`}>
+                    {e.entitlement_key.replace(/[._]/g, " ")}
+                  </span>
+                  <span className={`shrink-0 text-xs font-medium ${e.enabled ? "text-emerald-700" : "text-slate-400"}`}>
+                    {e.kind === "boolean"
+                      ? e.enabled ? "Included" : "Not included"
+                      : !e.enabled ? "Not included"
+                      : e.unlimited ? "Unlimited"
+                      : e.kind === "allowance" ? `${e.used}/${e.limit_value}`
+                      : `Up to ${e.limit_value}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           {state.isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : sub ? (
