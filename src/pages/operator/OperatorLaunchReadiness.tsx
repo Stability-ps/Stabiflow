@@ -25,9 +25,17 @@ export function OperatorLaunchReadiness() {
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Checking launch readiness...</p>;
   if (q.error || !q.data) return <p className="text-sm text-destructive">Could not run launch-readiness checks.</p>;
   const data = q.data;
+  const certified = data.summary.fail === 0;
 
   return (
     <div className="space-y-4">
+      <Card className={certified ? "border-emerald-200 bg-emerald-50/40" : "border-destructive/30 bg-destructive/5"}>
+        <CardContent className="flex items-center gap-3 pt-6">
+          {certified ? <CheckCircle2 className="h-5 w-5 text-emerald-700" /> : <XCircle className="h-5 w-5 text-destructive" />}
+          <div><p className="font-medium">{certified ? "Pre-payment launch certification passed" : "Launch blockers still need attention"}</p><p className="text-xs text-muted-foreground">{certified ? "All non-deferred production checks are passing. Live Paystack certification can be completed later." : "Clear the failed checks below before launch."}</p></div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-3 sm:grid-cols-3">
         <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Passed</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold text-emerald-700">{data.summary.pass}</p></CardContent></Card>
         <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Warnings</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold text-amber-700">{data.summary.warn}</p></CardContent></Card>
