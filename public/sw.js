@@ -1,5 +1,5 @@
 const CACHE = "stabiflow-shell-v1";
-const SHELL = ["/", "/app", "/pricing", "/brand/StabiFlow_Favicon_192x192.png", "/brand/StabiFlow_Favicon_512x512.png"];
+const SHELL = ["/", "/app", "/pricing", "/brand/StabiFlow_Favicon_256x256.png", "/brand/StabiFlow_Favicon_512x512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).catch(() => undefined));
