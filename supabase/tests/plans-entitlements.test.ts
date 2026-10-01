@@ -141,6 +141,30 @@ describe("Plans, pricing and entitlements - canonical evaluator", () => {
     expect(e.website_scans.used).toBe(2);
   });
 
+  it("growth paid usage allowances are finite and atomically enforced", async () => {
+    const growth = await planId("growth");
+    const { data: sub } = await admin.from("workspace_subscriptions")
+      .insert({ workspace_id: A.workspaceId, plan_id: growth, status: "active", current_period_end: new Date(Date.now() + 30 * DAY).toISOString() })
+      .select("id").single();
+
+    const e = await ents(A);
+    expect(e.creative_generations.limit_value).toBe(100);
+    expect(e.automation_runs.limit_value).toBe(1000);
+    expect(e.whatsapp_ai_turns.limit_value).toBe(500);
+
+    const { data: consumed } = await admin.rpc("consume_entitlement", {
+      p_workspace_id: A.workspaceId, p_key: "creative_generations", p_amount: 100,
+    });
+    expect(consumed).toBe(true);
+    const { data: over } = await admin.rpc("consume_entitlement", {
+      p_workspace_id: A.workspaceId, p_key: "creative_generations", p_amount: 1,
+    });
+    expect(over).toBe(false);
+
+    await admin.from("workspace_subscriptions").delete().eq("id", sub!.id);
+    await admin.from("entitlement_usage").delete().eq("workspace_id", A.workspaceId).eq("entitlement_key", "creative_generations");
+  });
+
   it("clients cannot consume allowances directly", async () => {
     const { error } = await B.client.rpc("consume_entitlement", { p_workspace_id: B.workspaceId, p_key: "website_scans", p_amount: 1 });
     expect(error).not.toBeNull();
