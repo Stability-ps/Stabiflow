@@ -31,6 +31,6 @@ alter table public.platform_admin_audit enable row level security;
 -- rendered as TEXT by the frontend (never as HTML).
 insert into public.platform_settings (key, value, description, is_public) values
   ('content.home_hero', '{"title": "Turn your website into a professional company profile", "subtitle": "Give StabiFlow your website. Verify what we find. Get a professional company profile."}'::jsonb, 'Public home page headline and subtitle.', true),
-  ('content.pricing_intro', '{"text": "Start free. Pay once for a professional profile, or subscribe to keep it current and hosted."}'::jsonb, 'Intro copy above the pricing plans.', true),
+  ('content.pricing_intro', '{"text": "Start free. Build your business presence, then add the tools you need to market, sell and manage customers."}'::jsonb, 'Intro copy above the pricing plans.', true),
   ('content.faq', '[]'::jsonb, 'Public FAQ entries: [{"question": "...", "answer": "..."}].', true)
 on conflict (key) do nothing;
