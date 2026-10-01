@@ -286,6 +286,25 @@ async function claimDueRuns(sb: ReturnType<typeof createServiceClient>): Promise
 }
 
 async function executeRun(sb: ReturnType<typeof createServiceClient>, run: RunCandidate) {
+  // Reserve one monthly run before doing any action work. Retries of the
+  // same already-started run are not charged again; only first attempts
+  // consume allowance.
+  if (run.attempt_count === 0) {
+    const { data: runAllowed, error: quotaError } = await sb.rpc("consume_entitlement", {
+      p_workspace_id: run.workspace_id,
+      p_key: "automation_runs",
+      p_amount: 1,
+    });
+    if (quotaError || runAllowed !== true) {
+      await sb.from("automation_runs").update({
+        status: "blocked_usage_limit",
+        finished_at: new Date().toISOString(),
+        error: { message: quotaError ? "Unable to verify automation allowance" : "Monthly automation run limit reached" },
+      }).eq("id", run.id);
+      return;
+    }
+  }
+
   const { data: automation } = await sb.from("automations").select("*").eq("id", run.automation_id).maybeSingle();
   const { data: event } = await sb.from("domain_events").select("*").eq("id", run.domain_event_id).maybeSingle();
   const { data: conditions } = await sb.from("automation_conditions").select("field, operator, value").eq("automation_id", run.automation_id).order("sort_order");
