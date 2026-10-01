@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Bot, BriefcaseBusiness, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Loader2, MessageSquareReply, RefreshCw, Wifi } from "lucide-react";
+import { AlertTriangle, Bot, BriefcaseBusiness, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Loader2, RefreshCw, Wifi } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
