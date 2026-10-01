@@ -1,6 +1,7 @@
+import type { ComponentType, ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Building2, ChevronLeft, ChevronRight, CreditCard, Palette, Plug, UserRound, Users } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceProfile } from "@/hooks/useWorkspaceProfile";
@@ -11,7 +12,7 @@ import { AccountTab } from "@/pages/dashboard/settings/AccountTab";
 type MobileSettingsSection = "workspace" | "members" | "account";
 
 function SettingsRow(props: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   title: string;
   subtitle?: string;
   onClick?: () => void;
@@ -41,7 +42,7 @@ function SettingsRow(props: {
   return <button type="button" onClick={props.onClick} className={className}>{body}</button>;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{children}</h2>;
 }
 
@@ -75,7 +76,6 @@ export function MobileSettings() {
 
   const workspaceName = data?.workspace.name || currentMembership?.workspace.name || "Workspace";
   const workspaceSlug = data?.workspace.slug;
-  const logoPath = data?.settings.logo_path;
   const workspaceSubtitle = workspaceSlug ? `stabiflow.com/${workspaceSlug}` : "Business profile and workspace settings";
   const memberSubtitle = currentMembership?.role ? `Your role: ${currentMembership.role}` : "Members, invitations and roles";
   const accountSubtitle = profile?.full_name || user?.email || "Profile and legal";
@@ -85,7 +85,6 @@ export function MobileSettings() {
       <section className="rounded-2xl border bg-card p-3">
         <div className="flex items-center gap-3">
           <Avatar className="h-12 w-12 rounded-xl">
-            <AvatarImage src={logoPath || undefined} alt={workspaceName} className="object-contain" />
             <AvatarFallback className="rounded-xl">{workspaceName.slice(0, 2).toUpperCase()}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
