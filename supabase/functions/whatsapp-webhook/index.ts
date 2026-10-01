@@ -328,11 +328,22 @@ async function resolveInboxAiBudget(
   workspaceId: string,
   features: string[],
 ): Promise<InboxAiBudgetDecision> {
-  const { data: billingRow } = await sb.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
-  const inboxCap = resolveInboxAiCap(
-    (billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY],
-    Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"),
-  );
+  // Canonical plan-aware cap; keep the legacy resolver only as a
+  // deployment fallback if the database migration is not available yet.
+  const { data: planCap, error: planCapError } = await sb.rpc("workspace_ai_token_cap", {
+    p_workspace_id: workspaceId,
+    p_feature: "whatsapp_inbox_ai",
+  });
+  let inboxCap: number;
+  if (!planCapError && Number(planCap) > 0) {
+    inboxCap = Number(planCap);
+  } else {
+    const { data: billingRow } = await sb.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
+    inboxCap = resolveInboxAiCap(
+      (billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY],
+      Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"),
+    );
+  }
   const inboxUsed = await getWorkspaceFeaturesTokenUsageSince(sb, workspaceId, features, utcMonthStartIso(new Date()));
   const platformCeilingRaw = Number(Deno.env.get("FLOW_AI_PLATFORM_DAILY_TOKEN_CEILING")?.trim());
   const platformCeiling = Number.isFinite(platformCeilingRaw) && platformCeilingRaw > 0 ? platformCeilingRaw : null;
@@ -696,6 +707,18 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   const budget = await resolveInboxAiBudget(sb, numberRow.workspace_id, INBOX_AI_BUDGET_FEATURES);
   if (!budget.allowed) {
     await pauseConversationForAiLimit(sb, numberRow.workspace_id, conversation.id, Deno.env.get("OPENAI_WHATSAPP_MODEL")?.trim() || "unknown", budget.scope);
+    return;
+  }
+
+  // Reserve one monthly AI reply turn before provider work. Greeting/system
+  // fast paths above do not consume this allowance.
+  const { data: replyTurnAllowed, error: replyTurnQuotaError } = await sb.rpc("consume_entitlement", {
+    p_workspace_id: numberRow.workspace_id,
+    p_key: "whatsapp_ai_turns",
+    p_amount: 1,
+  });
+  if (replyTurnQuotaError || replyTurnAllowed !== true) {
+    await pauseConversationForAiLimit(sb, numberRow.workspace_id, conversation.id, Deno.env.get("OPENAI_WHATSAPP_MODEL")?.trim() || "unknown", "workspace_cap");
     return;
   }
 
