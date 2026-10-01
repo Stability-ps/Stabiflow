@@ -17,6 +17,7 @@ import {
 
 const VERIFY_ATTEMPTS = 6;
 const VERIFY_DELAY_MS = 3000;
+const PENDING_CHECKOUT_KEY = "stabiflow.pendingCheckout";
 
 const STATUS_LABELS: Record<string, string> = {
   active: "Active",
@@ -99,6 +100,27 @@ export default function Billing() {
     onSuccess: (res) => window.location.assign(res.authorization_url),
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // A visitor may choose a paid plan before signing in. Pricing stores only
+  // the public price id; checkout still runs here, after auth/workspace checks.
+  useEffect(() => {
+    if (!currentWorkspaceId || !canManage || checkout.isPending || verifying) return;
+    const raw = sessionStorage.getItem(PENDING_CHECKOUT_KEY);
+    if (!raw) return;
+    try {
+      const pending = JSON.parse(raw) as { priceId?: unknown };
+      if (typeof pending.priceId !== "string" || !pending.priceId) {
+        sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+        return;
+      }
+      sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+      checkout.mutate(pending.priceId);
+    } catch {
+      sessionStorage.removeItem(PENDING_CHECKOUT_KEY);
+    }
+    // Run when the authenticated workspace becomes available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWorkspaceId, canManage]);
 
   const cancel = useMutation({
     mutationFn: () => cancelSubscription(currentWorkspaceId as string),
