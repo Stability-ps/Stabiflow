@@ -28,10 +28,21 @@ export default function Pricing() {
   const plans = catalog.data ?? [];
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-          <Link to="/"><BrandLogo variant="full" className="h-7" /></Link>
-          <nav className="flex gap-4 text-sm"><Link to="/login">Sign in</Link><Link to="/signup" className="font-medium">Get started</Link></nav>
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <Link to="/" className="flex items-center gap-3" aria-label="StabiFlow home"><BrandLogo variant="full" className="h-8 w-auto" /></Link>
+          <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
+            <Link to="/#features" className="transition hover:text-foreground">Features</Link>
+            <Link to="/#how-it-works" className="transition hover:text-foreground">How it works</Link>
+            <Link to="/#security" className="transition hover:text-foreground">Security</Link>
+            <Link to="/pricing" className="font-medium text-foreground">Pricing</Link>
+            <Link to="/#faq" className="transition hover:text-foreground">FAQ</Link>
+            <Link to="/#contact" className="transition hover:text-foreground">Contact</Link>
+          </nav>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex"><Link to="/login">Sign In</Link></Button>
+            <Button asChild size="sm"><Link to="/signup">Get Started</Link></Button>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-5xl space-y-10 px-4 py-10">
