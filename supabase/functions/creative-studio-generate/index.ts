@@ -14,7 +14,7 @@
 // mechanism MediaLibraryGrid's "Promote as Campaign" button already
 // uses) - no new mutation surface was added for this feature.
 import { generateCreativeCopy, type CreativeStudioInput } from "../_shared/creativeStudio/generateCopy.ts";
-import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 
 Deno.serve(async (req: Request) => {
@@ -51,6 +51,23 @@ Deno.serve(async (req: Request) => {
 
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
+
+  // Reserve one monthly Creative Studio generation before any provider call.
+  // consume_entitlement is atomic, so concurrent requests cannot race past
+  // the plan allowance.
+  const serviceSb = createServiceClient();
+  const { data: creativeAllowed, error: creativeQuotaError } = await serviceSb.rpc("consume_entitlement", {
+    p_workspace_id: workspaceId,
+    p_key: "creative_generations",
+    p_amount: 1,
+  });
+  if (creativeQuotaError) {
+    console.error("creative-studio-generate: quota check failed", creativeQuotaError.message);
+    return json(req, { error: "Unable to verify your Creative Studio allowance. Try again shortly." }, 503);
+  }
+  if (creativeAllowed !== true) {
+    return json(req, { error: "Monthly Creative Studio generation limit reached. Upgrade your plan or wait for the next monthly reset.", code: "USAGE_LIMIT_REACHED" }, 429);
+  }
 
   const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
   const model = Deno.env.get("OPENAI_FLOW_AI_MODEL")?.trim();
