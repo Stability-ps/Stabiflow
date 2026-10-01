@@ -22,7 +22,7 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  if (!loading && user) return <Navigate to="/app" replace />;
+  if (!loading && user) return <Navigate to={sessionStorage.getItem("stabiflow.pendingCheckout") ? "/app/billing" : "/app"} replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
