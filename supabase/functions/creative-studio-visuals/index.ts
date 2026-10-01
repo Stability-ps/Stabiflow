@@ -125,6 +125,23 @@ Deno.serve(async (req: Request) => {
       continue;
     }
 
+    // One image provider call = one Creative Studio generation.
+    // Reserve only after the concept CAS claim succeeds, so duplicate POSTs
+    // do not consume allowance.
+    const { data: creativeAllowed, error: creativeQuotaError } = await serviceSb.rpc("consume_entitlement", {
+      p_workspace_id: workspaceId,
+      p_key: "creative_generations",
+      p_amount: 1,
+    });
+    if (creativeQuotaError || creativeAllowed !== true) {
+      const quotaMessage = creativeQuotaError
+        ? "Unable to verify Creative Studio allowance"
+        : "Monthly Creative Studio generation limit reached";
+      await callerSb.from("creative_studio_concepts").update({ visual_status: "failed", visual_error: quotaMessage }).eq("id", concept.id);
+      results.push({ id: concept.id, visual_status: "failed", visual_error: quotaMessage });
+      continue;
+    }
+
     const startedAt = Date.now();
     try {
       const visual = await generateVisual({ apiKey, model: imageModel }, concept.visual_prompt);

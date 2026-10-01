@@ -92,6 +92,35 @@ describe("Feature flags - evaluation rules and launch posture", () => {
     await admin.from("feature_flags").update({ plan_codes: [] }).eq("key", TEST_FLAG);
   });
 
+  it("paid plans unlock the modules advertised for their tier", async () => {
+    const { data: business } = await admin.from("billing_plans").select("id").eq("code", "business").single();
+    const { data: growth } = await admin.from("billing_plans").select("id").eq("code", "growth").single();
+
+    const { data: businessSub } = await admin
+      .from("workspace_subscriptions")
+      .insert({ workspace_id: A.workspaceId, plan_id: business!.id, status: "active", current_period_end: new Date(Date.now() + 86400000 * 10).toISOString() })
+      .select("id")
+      .single();
+    let f = await flags(A, A.workspaceId);
+    expect(f["module.content"]).toMatchObject({ enabled: true, reason: "plan" });
+    expect(f["module.leads"]).toMatchObject({ enabled: true, reason: "plan" });
+    expect(f["module.customers"]).toMatchObject({ enabled: true, reason: "plan" });
+    expect(f["module.whatsapp"].enabled).toBe(false);
+    expect(f["module.campaigns"].enabled).toBe(false);
+    await admin.from("workspace_subscriptions").delete().eq("id", businessSub!.id);
+
+    const { data: growthSub } = await admin
+      .from("workspace_subscriptions")
+      .insert({ workspace_id: A.workspaceId, plan_id: growth!.id, status: "active", current_period_end: new Date(Date.now() + 86400000 * 10).toISOString() })
+      .select("id")
+      .single();
+    f = await flags(A, A.workspaceId);
+    for (const key of ["module.content", "module.leads", "module.customers", "module.whatsapp", "module.campaigns", "module.creative_studio", "module.analytics", "module.flow_ai", "module.automations", "module.integrations"]) {
+      expect(f[key]).toMatchObject({ enabled: true, reason: "plan" });
+    }
+    await admin.from("workspace_subscriptions").delete().eq("id", growthSub!.id);
+  });
+
   it("staged rollout: 0% off, 100% on, and a workspace's bucket is stable", async () => {
     await admin.from("feature_flags").update({ rollout_percentage: 0 }).eq("key", TEST_FLAG);
     expect((await flags(A, A.workspaceId))[TEST_FLAG].enabled).toBe(false);
