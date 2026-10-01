@@ -74,8 +74,10 @@ export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
                 </button>
                 {pwa.isiOS ? (
                   <p><Share2 className="mr-1 inline h-4 w-4" aria-hidden="true" />In Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>
+                ) : pwa.isAndroid ? (
+                  <p>For the full app experience, open this page directly in <strong>Chrome</strong>, then use <strong>Install app</strong>. If Chrome only offers <strong>Add to Home screen</strong>, it is creating a shortcut rather than installing the PWA.</p>
                 ) : (
-                  <p>Open your browser menu and choose <strong>Install app</strong> or <strong>Add to Home screen</strong>. If that option is missing, the browser may still be checking install requirements.</p>
+                  <p>Open your browser menu and choose <strong>Install app</strong>. If that option is missing, the browser may still be checking install requirements.</p>
                 )}
               </div>
             ) : null}
