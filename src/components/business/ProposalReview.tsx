@@ -17,6 +17,9 @@ const ORIGIN_LABELS: Record<string, string> = {
   document_upload: "From your existing profile",
 };
 
+// 44px touch targets on phones; the original compact size from sm up.
+const TAP = "h-11 px-4 sm:h-9 sm:px-3";
+
 // Keys the customer can correct per target when accepting.
 const EDITABLE: Record<string, string[]> = {
   identity_field: ["value"],
@@ -92,15 +95,15 @@ function ProposalRow({ p, canEdit, onDone }: { p: FactProposal; canEdit: boolean
       )}
       {canEdit && (
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => accept.mutate()} disabled={accept.isPending || reject.isPending}>
+          <Button size="sm" className={TAP} onClick={() => accept.mutate()} disabled={accept.isPending || reject.isPending}>
             <Check className="mr-1 h-4 w-4" /> {editing ? "Save and accept" : "Accept"}
           </Button>
           {!editing && (EDITABLE[p.target] ?? []).length > 0 && (
-            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+            <Button size="sm" variant="outline" className={TAP} onClick={() => setEditing(true)}>
               <Pencil className="mr-1 h-4 w-4" /> Correct
             </Button>
           )}
-          <Button size="sm" variant="ghost" onClick={() => reject.mutate()} disabled={accept.isPending || reject.isPending}>
+          <Button size="sm" variant="ghost" className={TAP} onClick={() => reject.mutate()} disabled={accept.isPending || reject.isPending}>
             <X className="mr-1 h-4 w-4" /> Not correct
           </Button>
         </div>
@@ -145,7 +148,7 @@ export function ProposalReview({ workspaceId, canEdit, origins, emptyText }: { w
   return (
     <div className="space-y-3">
       {canEdit && structured.length > 1 && (
-        <Button size="sm" variant="outline" onClick={acceptAllStructured} disabled={bulkBusy}>
+        <Button size="sm" variant="outline" className={`${TAP} h-auto min-h-11 whitespace-normal sm:min-h-9`} onClick={acceptAllStructured} disabled={bulkBusy}>
           Accept all {structured.length} contact and listing details
         </Button>
       )}

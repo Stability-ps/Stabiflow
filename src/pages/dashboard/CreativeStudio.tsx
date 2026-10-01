@@ -160,7 +160,7 @@ export default function CreativeStudio() {
   const totalAds = conceptCount * Math.max(formats.length, 1);
 
   return (
-    <div className="space-y-6">
+    <div className="mobile-touch space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Creative Studio</h1>
         <p className="text-sm text-muted-foreground">Fill everything in once, click Generate Ads, and get complete finished adverts.</p>
@@ -401,7 +401,7 @@ export default function CreativeStudio() {
               </p>
 
               <div>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setAdvancedCopyOpen((v) => !v)}>
+                <Button type="button" variant="ghost" size="sm" className="h-auto min-h-9 whitespace-normal text-left" onClick={() => setAdvancedCopyOpen((v) => !v)}>
                   {advancedCopyOpen ? <ChevronUp className="mr-1.5 h-3.5 w-3.5" /> : <ChevronDown className="mr-1.5 h-3.5 w-3.5" />}
                   {advancedCopyOpen ? "Hide" : "Show"} standalone copy ideas (advanced)
                 </Button>

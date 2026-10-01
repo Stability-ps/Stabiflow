@@ -47,22 +47,22 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-        <div>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 max-sm:flex-col max-sm:items-stretch max-sm:gap-3 max-sm:p-4 max-sm:pb-3">
+        <div className="min-w-0">
           <CardTitle className="text-base">Get set up ({completed}/{total})</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">Complete the essentials, then come back whenever you need.</p>
         </div>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+        <div className="flex items-center gap-1 max-sm:w-full">
+          <Button variant="outline" size="sm" className="max-sm:min-h-11 max-sm:flex-1 max-sm:justify-between" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
             {expanded ? "Hide steps" : "Continue setup"}
             <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", expanded && "rotate-180")} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleDismiss} aria-label="Dismiss">
+          <Button variant="ghost" size="icon" className="max-sm:h-11 max-sm:w-11" onClick={handleDismiss} aria-label="Dismiss">
             <X className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 pt-0">
+      <CardContent className="space-y-3 pt-0 max-sm:p-4 max-sm:pt-0">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
         </div>

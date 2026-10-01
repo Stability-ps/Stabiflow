@@ -89,7 +89,7 @@ export default function Overview() {
   const showOnboardingFirst = !onboardingComplete && !hasRealActivity;
 
   const kpiGrid = (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
       {kpis ? (
         <>
           <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage={metaConnected ? "No data yet" : "Meta not connected"} value={dashboardMoneyValue(kpis.spend, workspaceCurrency)} />
@@ -115,8 +115,8 @@ export default function Overview() {
   const onboardingBlock = <OnboardingChecklist workspaceId={currentWorkspaceId} />;
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-5 sm:space-y-6">
+      <div className="max-md:sr-only">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
           {currentMembership ? `${currentMembership.workspace.name} - business overview` : "Business overview"}
@@ -125,13 +125,13 @@ export default function Overview() {
 
       {showOnboardingFirst && onboardingBlock}
 
-      {kpiGrid}
-
       <NeedsAttentionPanel workspaceId={currentWorkspaceId} />
+
+      {kpiGrid}
 
       {!showOnboardingFirst && onboardingBlock}
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2 max-md:hidden">
         <Card>
           <CardHeader className="pb-3"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
@@ -200,7 +200,7 @@ export default function Overview() {
         </Card>
       </div>
 
-      <Card>
+      <Card className="max-md:hidden">
         <CardHeader className="pb-3"><CardTitle className="text-base">Flow AI recommendations</CardTitle></CardHeader>
         <CardContent>
           <EmptyState
@@ -214,8 +214,8 @@ export default function Overview() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Recent activity</CardTitle></CardHeader>
-        <CardContent>
+        <CardHeader className="max-sm:p-4 max-sm:pb-2"><CardTitle className="text-base">Recent activity</CardTitle></CardHeader>
+        <CardContent className="max-sm:p-4 max-sm:pt-2">
           {activityQuery.isLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
           ) : activityQuery.isError ? (

@@ -71,13 +71,13 @@ export default function Leads() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] flex-col">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex h-[calc(100dvh-8rem-var(--bottom-nav-height))] min-h-[28rem] flex-col md:h-[calc(100vh-8rem)]">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Leads</h1>
           <p className="text-sm text-muted-foreground">Leads, qualification, and your configurable pipeline stages.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Tabs value={view} onValueChange={(v) => setView(v as "board" | "list")}>
             <TabsList>
               <TabsTrigger value="board">Board</TabsTrigger>
