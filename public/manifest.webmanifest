@@ -2,7 +2,7 @@
   "id": "/app",
   "name": "StabiFlow",
   "short_name": "StabiFlow",
-  "description": "Your business profile, documents, WhatsApp and leads in one place.",
+  "description": "Your business profile, documents, messages and leads in one place.",
   "start_url": "/app?source=pwa",
   "scope": "/",
   "display": "standalone",
