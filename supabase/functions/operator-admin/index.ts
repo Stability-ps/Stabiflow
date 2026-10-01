@@ -165,7 +165,7 @@ Deno.serve(async (req: Request) => {
         const commercial = plans.filter((p) => p.code === "profile_once" || p.code === "business" || p.code === "growth");
         const badPlan = commercial.find((p) => !p.is_active || !p.is_public || p.prices === 0 || p.purchasable_prices === 0);
         checks.push({ key: "catalog", label: "Public commercial catalogue", status: badPlan ? "fail" : "pass", detail: badPlan ? "One or more paid plans is hidden, inactive or has no purchasable price." : "Profile, Business and Growth are active, public and have purchasable prices." });
-        checks.push({ key: "paystack", label: "Paystack production credentials", status: paystackMode === "live" ? "pass" : "fail", detail: paystackMode === "live" ? "Live Paystack secret is configured." : paystackMode === "test" ? "Paystack is still using a test secret." : "PAYSTACK_SECRET_KEY is not configured." });
+        checks.push({ key: "paystack", label: "Paystack production credentials", status: paystackMode === "live" ? "pass" : "warn", detail: paystackMode === "live" ? "Live Paystack secret is configured." : paystackMode === "test" ? "Deferred: Paystack is still using a test secret." : "Deferred: PAYSTACK_SECRET_KEY is not configured yet." });
         checks.push({ key: "webhooks", label: "Payment webhook health", status: failedWebhooks === 0 ? "pass" : "warn", detail: failedWebhooks === 0 ? "No failed payment webhooks in the last 7 days." : String(failedWebhooks) + " failed payment webhook(s) in the last 7 days." });
         checks.push({ key: "mismatch", label: "Payment amount integrity", status: mismatches === 0 ? "pass" : "warn", detail: mismatches === 0 ? "No amount mismatches require review." : String(mismatches) + " amount mismatch transaction(s) require review." });
         checks.push({ key: "pwa", label: "Installable mobile web app", status: "pass", detail: "Manifest and service worker are version-controlled and installed by the production app shell." });
@@ -173,6 +173,7 @@ Deno.serve(async (req: Request) => {
         return json(req, {
           ok: true, checks, summary, plans,
           billing: { paystack_mode: paystackMode, failed_webhooks_7d: failedWebhooks, amount_mismatches: mismatches, pending_checkouts: pendingCheckouts },
+          deferred: paystackMode === "live" ? [] : ["Run one controlled live checkout after PAYSTACK_SECRET_KEY is configured.", "Confirm the signed Paystack webhook is processed and the paid plan unlocks immediately.", "Confirm renewal/cancellation behavior against the live Paystack subscription."],
           mobile: { manifest: true, service_worker: true, installable_shell: true },
         });
       }

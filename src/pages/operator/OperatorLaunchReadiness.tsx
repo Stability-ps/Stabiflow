@@ -11,6 +11,7 @@ type LaunchReadiness = {
   plans: Array<{ code: string; name: string; is_public: boolean; is_active: boolean; prices: number; purchasable_prices: number }>;
   billing: { paystack_mode: "live" | "test" | "not_configured"; failed_webhooks_7d: number; amount_mismatches: number; pending_checkouts: number };
   mobile: { manifest: boolean; service_worker: boolean; installable_shell: boolean };
+  deferred?: string[];
 };
 
 function Icon({ status }: { status: Check["status"] }) {
@@ -48,6 +49,13 @@ export function OperatorLaunchReadiness() {
           ))}
         </CardContent>
       </Card>
+
+      {data.deferred && data.deferred.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardHeader><CardTitle className="text-base">Deferred until payment credentials are ready</CardTitle></CardHeader>
+          <CardContent className="space-y-1 text-sm text-muted-foreground">{data.deferred.map((x) => <p key={x}>• {x}</p>)}</CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle className="text-base">Commercial plans</CardTitle></CardHeader>
