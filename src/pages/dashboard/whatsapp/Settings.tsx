@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, Bot, BriefcaseBusiness, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Loader2, MessageSquareReply, RefreshCw, Wifi } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +46,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 // verbatim (chrome="page") for number activation / refresh / health /
 // disconnect - no integration logic is duplicated here.
 export default function WhatsAppSettings() {
+  const [section, setSection] = useState<"connection" | "sla" | "hours" | "ai" | null>(null);
   const { workspaceId, integration, numbers, activeNumbers } = useWhatsAppOutlet();
   const { currentMembership } = useAuth();
   const role = currentMembership?.role;
@@ -172,9 +173,44 @@ export default function WhatsAppSettings() {
     }
   };
 
+  if (!section) {
+    const sections = [
+      { id: "connection" as const, label: "WhatsApp connection", description: "Phone numbers, health, webhook and connection tools", icon: Wifi },
+      { id: "sla" as const, label: "Inbox & SLA", description: "Human response timing and overdue conversations", icon: Clock3 },
+      { id: "hours" as const, label: "Business hours & replies", description: "Opening hours and out-of-hours automatic replies", icon: BriefcaseBusiness },
+      { id: "ai" as const, label: "Inbox AI", description: "Attachments, voice notes, language and monthly usage", icon: Bot },
+    ];
+    return (
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">Message settings</h2>
+          <p className="text-sm text-muted-foreground">Choose what you want to manage.</p>
+        </div>
+        <div className="overflow-hidden rounded-xl border bg-card">
+          {sections.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button key={item.id} type="button" onClick={() => setSection(item.id)} className="flex min-h-20 w-full items-center gap-3 border-b px-4 py-3 text-left last:border-b-0 hover:bg-muted/40">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted"><Icon className="h-5 w-5" /></span>
+                <span className="min-w-0 flex-1"><span className="block font-medium">{item.label}</span><span className="block text-sm text-muted-foreground">{item.description}</span></span>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  const sectionTitle = section === "connection" ? "WhatsApp connection" : section === "sla" ? "Inbox & SLA" : section === "hours" ? "Business hours & replies" : "Inbox AI";
+
   return (
     <div className="space-y-6">
-      <Card>
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" className="h-11 w-11" onClick={() => setSection(null)} aria-label="Back to message settings"><ChevronLeft className="h-5 w-5" /></Button>
+        <h2 className="text-lg font-semibold">{sectionTitle}</h2>
+      </div>
+      <Card className={section === "connection" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">Connection &amp; production wiring</CardTitle></CardHeader>
         <CardContent className="pt-0">
           <Row label="WhatsApp Business Account">{wabaId ? <code className="text-xs">{wabaId}</code> : <span className="text-muted-foreground">Not discovered</span>}</Row>
@@ -261,14 +297,14 @@ export default function WhatsAppSettings() {
           </div>
         </CardContent>
       </Card>
-      {webhook.actionable && webhook.hint && (
+      {section === "connection" && webhook.actionable && webhook.hint && (
         <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           {webhook.hint}
           {" "}If it stays unsubscribed after repairing, verify in Meta that the WhatsApp Business Account&apos;s callback URL and verify token are set for this app.
         </p>
       )}
 
-      <Card>
+      <Card className={section === "sla" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">Human response SLA</CardTitle></CardHeader>
         <CardContent className="space-y-3 pt-0">
           <p className="text-sm text-muted-foreground">
@@ -311,9 +347,9 @@ export default function WhatsAppSettings() {
         </CardContent>
       </Card>
 
-      <BusinessHoursCard workspaceId={workspaceId} canManage={canManageWorkspace} />
+      {section === "hours" && <BusinessHoursCard workspaceId={workspaceId} canManage={canManageWorkspace} />}
 
-      <Card>
+      <Card className={section === "ai" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">AI document understanding</CardTitle></CardHeader>
         <CardContent className="space-y-3 pt-0">
           <label className="flex items-start gap-2 text-sm">
@@ -336,7 +372,7 @@ export default function WhatsAppSettings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={section === "ai" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">Voice notes</CardTitle></CardHeader>
         <CardContent className="space-y-3 pt-0">
           <label className="flex items-start gap-2 text-sm">
@@ -359,7 +395,7 @@ export default function WhatsAppSettings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={section === "ai" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">Customer language</CardTitle></CardHeader>
         <CardContent className="space-y-3 pt-0">
           <label className="flex items-start gap-2 text-sm">
@@ -382,7 +418,7 @@ export default function WhatsAppSettings() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={section === "ai" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">Inbox AI monthly usage limit</CardTitle></CardHeader>
         <CardContent className="space-y-3 pt-0">
           <p className="text-sm text-muted-foreground">
@@ -424,7 +460,7 @@ export default function WhatsAppSettings() {
         </CardContent>
       </Card>
 
-      <div className="rounded-lg border p-4">
+      <div className={section === "connection" ? "rounded-lg border p-4" : "hidden"}>
         <WhatsAppManagePanel
           workspaceId={workspaceId}
           integration={integration}
