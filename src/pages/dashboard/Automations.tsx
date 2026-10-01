@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { MoreVertical, Plus, Workflow } from "lucide-react";
+import { Bell, MessageCircle, MoreVertical, Plus, UserPlus, Workflow } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { WhatsAppContextBanner } from "@/components/whatsapp/WhatsAppContextBanner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/EmptyState";
 import { Sheet } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -17,15 +19,37 @@ import { AutomationRunsSheet } from "@/pages/dashboard/automations/AutomationRun
 
 const STATUS_LABEL: Record<AutomationRow["status"], string> = { draft: "Draft", enabled: "Enabled", disabled: "Disabled" };
 
-// Starter examples for the empty state - every trigger/action pair here is
-// a real type in supabase/functions/_shared/automations/taxonomy.ts, never
-// invented. "Opportunity won -> Create customer" was deliberately left out:
-// there is no create_customer action type (customer creation happens
-// automatically elsewhere, not via an automation).
-const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
-  { name: "New conversation creates a lead", triggerEventType: "conversation.started", actionType: "create_lead" },
-  { name: "Qualified leads notify the team", triggerEventType: "lead.qualified", actionType: "create_notification" },
-  { name: "Published content notifies the team", triggerEventType: "content.published", actionType: "create_notification" },
+// Outcome-first templates for the landing page - every trigger/action pair
+// is a real type in supabase/functions/_shared/automations/taxonomy.ts
+// (mirrored in src/lib/automations.ts EVENT_TYPES/ACTION_TYPES), never
+// invented. No unpaid-invoice template: invoicing doesn't exist yet (see
+// src/lib/navigation.ts) and this page must never advertise a workflow
+// that isn't real.
+const OUTCOME_TEMPLATES: { title: string; description: string; icon: LucideIcon; template: AutomationTemplate }[] = [
+  {
+    title: "Follow up with new leads",
+    description: "Automatically send a WhatsApp message when a new lead arrives.",
+    icon: UserPlus,
+    template: { name: "Follow up with new leads", triggerEventType: "lead.created", actionType: "send_whatsapp_template" },
+  },
+  {
+    title: "Welcome new customers",
+    description: "Send a personalised WhatsApp welcome message.",
+    icon: MessageCircle,
+    template: { name: "Welcome new customers", triggerEventType: "customer.created", actionType: "send_whatsapp_template" },
+  },
+  {
+    title: "Notify my team",
+    description: "Notify the team as soon as a lead is marked qualified.",
+    icon: Bell,
+    template: { name: "Notify my team when a lead qualifies", triggerEventType: "lead.qualified", actionType: "create_notification" },
+  },
+  {
+    title: "Turn conversations into leads",
+    description: "Automatically create a lead when a new WhatsApp conversation starts.",
+    icon: MessageCircle,
+    template: { name: "New conversation creates a lead", triggerEventType: "conversation.started", actionType: "create_lead" },
+  },
 ];
 
 export default function Automations() {
@@ -65,6 +89,12 @@ export default function Automations() {
     return <EmptyState icon={Workflow} title="Automations" description="You don't have permission to view this workspace's automations. Ask a workspace owner or admin." />;
   }
 
+  function openBuilder(template: AutomationTemplate | null) {
+    setEditingAutomation(null);
+    setPendingTemplate(template);
+    setBuilderOpen(true);
+  }
+
   async function toggleStatus(automation: AutomationRow) {
     const nextStatus = automation.status === "enabled" ? "disabled" : "enabled";
     setBusyId(automation.id);
@@ -94,102 +124,102 @@ export default function Automations() {
   }
 
   return (
-    <div className="flex flex-col">
-      {fromWhatsApp && (
-        <div className="mb-4">
-          <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />
-        </div>
-      )}
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex flex-col gap-6">
+      {fromWhatsApp && <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />}
+
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Automations</h1>
-          <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
+          <p className="text-sm text-muted-foreground">Let StabiFlow handle repetitive work for you.</p>
         </div>
         {canCreate && (
-          <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New automation
+          <Button size="sm" onClick={() => openBuilder(null)}>
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Create automation
           </Button>
         )}
       </div>
 
-      {fromWhatsApp && (automations || []).length > 0 && visibleAutomations.length === 0 ? (
-        <EmptyState
-          icon={Workflow}
-          title="No WhatsApp automations yet"
-          description="None of this workspace's automations are triggered by a WhatsApp conversation or message. Create one, or clear the filter to see all automations."
-        />
-      ) : (automations || []).length === 0 ? (
-        <EmptyState
-          icon={Workflow}
-          title="No automations yet"
-          description="Automations save your team time by reacting to things that happen in StabiFlow - a new conversation, a lead getting qualified, a post going live - and automatically taking the next step, using the exact same rules and permissions a staff member would."
-          action={
-            canCreate ? (
-              <div className="flex flex-col items-center gap-3">
-                <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> New automation
-                </Button>
-                <div>
-                  <p className="mb-1.5 text-xs text-muted-foreground">Or start from an example:</p>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {AUTOMATION_TEMPLATES.map((tpl) => (
-                      <Button
-                        key={tpl.name}
-                        size="sm"
-                        variant="outline"
-                        onClick={() => { setEditingAutomation(null); setPendingTemplate(tpl); setBuilderOpen(true); }}
-                      >
-                        {tpl.name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Trigger</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {visibleAutomations.map((automation) => (
-                <tr key={automation.id} className="border-b last:border-b-0 hover:bg-muted/30">
-                  <td className="px-4 py-2.5 font-medium">{automation.name}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge variant={automation.status === "enabled" ? "default" : automation.status === "disabled" ? "secondary" : "outline"}>{STATUS_LABEL[automation.status]}</Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={busyId === automation.id}><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {canViewRuns && <DropdownMenuItem onClick={() => setRunsAutomation(automation)}>View run history</DropdownMenuItem>}
-                        {canEdit && <DropdownMenuItem onClick={() => { setEditingAutomation(automation); setBuilderOpen(true); }}>Edit</DropdownMenuItem>}
-                        {canEnable && (
-                          <DropdownMenuItem onClick={() => toggleStatus(automation)}>
-                            {automation.status === "enabled" ? "Disable" : "Enable"}
-                          </DropdownMenuItem>
-                        )}
-                        {canDelete && <DropdownMenuItem onClick={() => handleDelete(automation)} className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {canCreate && !fromWhatsApp && (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {OUTCOME_TEMPLATES.map(({ title, description, icon: Icon, template }) => (
+            <Card key={title} className="flex flex-col">
+              <CardHeader className="pb-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-ai/10 text-ai">
+                  <Icon className="h-4.5 w-4.5" />
+                </span>
+                <CardTitle className="pt-2 text-base">{title}</CardTitle>
+                <CardDescription>{description}</CardDescription>
+              </CardHeader>
+              <CardFooter className="mt-auto pt-2">
+                <Button size="sm" variant="outline" className="w-full" onClick={() => openBuilder(template)}>Set up</Button>
+              </CardFooter>
+            </Card>
+          ))}
         </div>
       )}
+
+      <div>
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-semibold">Your automations</h2>
+          <p className="hidden text-xs text-muted-foreground sm:block">Runs WHEN a trigger happens, IF conditions match, THEN actions run.</p>
+        </div>
+
+        {fromWhatsApp && (automations || []).length > 0 && visibleAutomations.length === 0 ? (
+          <EmptyState
+            icon={Workflow}
+            title="No WhatsApp automations yet"
+            description="None of this workspace's automations are triggered by a WhatsApp conversation or message. Create one, or clear the filter to see all automations."
+          />
+        ) : (automations || []).length === 0 ? (
+          <EmptyState
+            icon={Workflow}
+            title="No automations yet"
+            description="Set up one of the templates above, or build your own from scratch - using the exact same rules and permissions a staff member would."
+            action={canCreate ? <Button size="sm" onClick={() => openBuilder(null)}><Plus className="mr-1.5 h-3.5 w-3.5" /> Create automation</Button> : undefined}
+          />
+        ) : (
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2 font-medium">Name</th>
+                  <th className="px-4 py-2 font-medium">Trigger</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {visibleAutomations.map((automation) => (
+                  <tr key={automation.id} className="border-b last:border-b-0 hover:bg-muted/30">
+                    <td className="px-4 py-2.5 font-medium">{automation.name}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant={automation.status === "enabled" ? "default" : automation.status === "disabled" ? "secondary" : "outline"}>{STATUS_LABEL[automation.status]}</Badge>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" disabled={busyId === automation.id}><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {canViewRuns && <DropdownMenuItem onClick={() => setRunsAutomation(automation)}>View run history</DropdownMenuItem>}
+                          {canEdit && <DropdownMenuItem onClick={() => { setEditingAutomation(automation); setPendingTemplate(null); setBuilderOpen(true); }}>Edit</DropdownMenuItem>}
+                          {canEnable && (
+                            <DropdownMenuItem onClick={() => toggleStatus(automation)}>
+                              {automation.status === "enabled" ? "Disable" : "Enable"}
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && <DropdownMenuItem onClick={() => handleDelete(automation)} className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <AutomationBuilderDialog
         workspaceId={currentWorkspaceId}

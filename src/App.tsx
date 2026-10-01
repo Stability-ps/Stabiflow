@@ -19,6 +19,8 @@ import CreateWorkspace from "@/pages/CreateWorkspace";
 import AcceptInvitation from "@/pages/AcceptInvitation";
 import Home from "@/pages/dashboard/Home";
 import MyBusiness from "@/pages/dashboard/MyBusiness";
+import BusinessOverview from "@/pages/dashboard/BusinessOverview";
+import MarketingOverview from "@/pages/dashboard/MarketingOverview";
 import Billing from "@/pages/dashboard/Billing";
 import BusinessStudio from "@/pages/dashboard/BusinessStudio";
 import Documents from "@/pages/dashboard/Documents";
@@ -105,6 +107,8 @@ export function AppRoutes() {
         }
       >
         <Route path="/app" element={<Home />} />
+        <Route path="/app/business-overview" element={<BusinessOverview />} />
+        <Route path="/app/marketing-overview" element={<MarketingOverview />} />
         <Route path="/app/business" element={<MyBusiness />} />
         <Route path="/app/billing" element={<Billing />} />
         <Route path="/app/business-studio" element={<FeatureGate flag="module.business_studio"><BusinessStudio /></FeatureGate>} />

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
+import { CreateMenu } from "@/components/layout/CreateMenu";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useAutomations";
@@ -26,6 +27,7 @@ export function AppHeader() {
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <SidebarTrigger />
       <div className="flex-1" />
+      <CreateMenu />
       <WorkspaceSwitcher />
       <DropdownMenu onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>

@@ -70,9 +70,9 @@ export function dedupeNeedsAttention(items: NeedsAttentionItem[]): NeedsAttentio
 export function severityTone(severity: NeedsAttentionSeverity): string {
   switch (severity) {
     case "critical":
-      return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+      return "bg-destructive/10 text-destructive";
     case "warning":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+      return "bg-warning/10 text-warning";
     default:
       return "bg-muted text-muted-foreground";
   }

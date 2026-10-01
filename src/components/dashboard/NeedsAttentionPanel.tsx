@@ -38,7 +38,7 @@ export function NeedsAttentionPanel({ workspaceId, limit = 6 }: { workspaceId: s
           <div className="h-20 animate-pulse rounded-lg bg-muted" />
         ) : items.length === 0 ? (
           <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
             {partialFailure ? "Some sources couldn't be checked right now — nothing else needs your attention." : "Nothing needs your attention right now."}
           </div>
         ) : (
@@ -50,7 +50,7 @@ export function NeedsAttentionPanel({ workspaceId, limit = 6 }: { workspaceId: s
                   <li key={item.id} className="flex items-start justify-between gap-3 py-2.5">
                     <div className="flex min-w-0 items-start gap-2">
                       <AlertTriangle
-                        className={`mt-0.5 h-4 w-4 shrink-0 ${item.severity === "critical" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
+                        className={`mt-0.5 h-4 w-4 shrink-0 ${item.severity === "critical" ? "text-destructive" : "text-warning"}`}
                         aria-hidden="true"
                       />
                       <div className="min-w-0">

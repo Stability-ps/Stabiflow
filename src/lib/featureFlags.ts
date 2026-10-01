@@ -16,7 +16,8 @@ export type FeatureFlagKey =
   | "module.analytics"
   | "module.flow_ai"
   | "module.automations"
-  | "module.integrations";
+  | "module.integrations"
+  | "module.invoicing";
 
 export type EvaluatedFlag = { flag_key: string; enabled: boolean; reason: string };
 
