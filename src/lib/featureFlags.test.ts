@@ -10,19 +10,19 @@ describe("feature-flag navigation filtering", () => {
 
   it("unloaded flags read as off, so gated modules never flash into view", () => {
     const items = filterNavItems(NAV_ITEMS, toFlagLookup(undefined));
-    expect(items.some((i) => i.label === "WhatsApp")).toBe(false);
+    expect(items.some((i) => i.label === "Messages")).toBe(false);
   });
 
   it("a grandfathered / operator workspace with every module on keeps the full navigation", () => {
     const all = NAV_ITEMS.flatMap((i) => [i.flag, ...(i.children ?? []).map((c) => c.flag)]).filter(Boolean) as string[];
     const items = filterNavItems(NAV_ITEMS, toFlagLookup(all.map((k) => ({ flag_key: k, enabled: true, reason: "workspace_target" }))));
     expect(items).toHaveLength(NAV_ITEMS.length);
-    expect(items.find((i) => i.label === "WhatsApp")?.children).toHaveLength(6);
+    expect(items.find((i) => i.label === "Messages")?.children).toHaveLength(6);
   });
 
   it("gates child links independently (WhatsApp on, Automations off)", () => {
     const items = filterNavItems(NAV_ITEMS, toFlagLookup([{ flag_key: "module.whatsapp", enabled: true, reason: "plan" }]));
-    const whatsapp = items.find((i) => i.label === "WhatsApp");
+    const whatsapp = items.find((i) => i.label === "Messages");
     expect(whatsapp?.children?.some((c) => c.label === "Automations")).toBe(false);
     expect(whatsapp?.children?.some((c) => c.label === "Inbox")).toBe(true);
   });
