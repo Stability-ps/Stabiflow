@@ -13,7 +13,7 @@ describe("AppSidebar active state", () => {
 
   it.each([
     ["Home", "/app"], ["Content", "/app/content"], ["Campaigns", "/app/campaigns"],
-    ["Creative Studio", "/app/creative-studio"], ["WhatsApp", "/app/whatsapp/inbox"], ["Leads", "/app/leads"],
+    ["Creative Studio", "/app/creative-studio"], ["Messages", "/app/whatsapp/inbox"], ["Leads", "/app/leads"],
     ["Analytics", "/app/analytics"], ["Flow AI", "/app/flow-ai"], ["Automations", "/app/automations"],
     ["Integrations", "/app/integrations"], ["Settings", "/app/settings"],
   ])("marks %s as the accessible current page", (label, path) => {
@@ -32,14 +32,14 @@ describe("AppSidebar active state", () => {
   });
 
   it.each([
-    ["/app/whatsapp/inbox", "WhatsApp Inbox"],
-    ["/app/whatsapp/contacts", "WhatsApp Contacts"],
-    ["/app/whatsapp/templates", "WhatsApp Templates"],
-    ["/app/whatsapp/settings", "WhatsApp Settings"],
+    ["/app/whatsapp/inbox", "Messages Inbox"],
+    ["/app/whatsapp/contacts", "Messages Contacts"],
+    ["/app/whatsapp/templates", "Messages Templates"],
+    ["/app/whatsapp/settings", "Messages Settings"],
   ])("keeps the WhatsApp parent selected and marks the child at %s", (path, childName) => {
     renderSidebar(path);
     // The single "WhatsApp" parent stays selected across every child page.
-    expect(screen.getByRole("link", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("aria-current", "page");
     // ...and the specific child route is marked current too.
     expect(screen.getByRole("link", { name: childName })).toHaveAttribute("aria-current", "page");
     // No cross-contamination with the top-level items.
@@ -48,19 +48,19 @@ describe("AppSidebar active state", () => {
 
   it("exposes the WhatsApp child navigation only while inside the section", () => {
     renderSidebar("/app/leads");
-    expect(screen.queryByRole("link", { name: "WhatsApp Contacts" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Messages Contacts" })).not.toBeInTheDocument();
     cleanup();
     renderSidebar("/app/whatsapp/inbox");
-    expect(screen.getByRole("link", { name: "WhatsApp Contacts" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "WhatsApp Templates" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Messages Contacts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Messages Templates" })).toBeInTheDocument();
   });
 
   it("links the WhatsApp sub-nav Automations into the shared module with a WhatsApp filter, and Analytics to the WhatsApp-owned page", () => {
     renderSidebar("/app/whatsapp/inbox");
-    expect(screen.getByRole("link", { name: "WhatsApp Automations" })).toHaveAttribute("href", "/app/automations?trigger=conversation");
+    expect(screen.getByRole("link", { name: "Messages Automations" })).toHaveAttribute("href", "/app/automations?trigger=conversation");
     // Phase 11: WhatsApp Analytics is now its own operational page inside
     // the WhatsApp section, not a filtered link into global Analytics.
-    expect(screen.getByRole("link", { name: "WhatsApp Analytics" })).toHaveAttribute("href", "/app/whatsapp/analytics");
+    expect(screen.getByRole("link", { name: "Messages Analytics" })).toHaveAttribute("href", "/app/whatsapp/analytics");
   });
 });
 
@@ -93,7 +93,7 @@ describe("AppSidebar mobile drawer", () => {
 
   it.each([
     ["Home", "/app"], ["Business Studio", "/app/business-studio"], ["My Business", "/app/business"], ["Documents", "/app/documents"],
-    ["Content", "/app/content"], ["Campaigns", "/app/campaigns"], ["Creative Studio", "/app/creative-studio"], ["WhatsApp", "/app/whatsapp"],
+    ["Content", "/app/content"], ["Campaigns", "/app/campaigns"], ["Creative Studio", "/app/creative-studio"], ["Messages", "/app/whatsapp"],
     ["Leads", "/app/leads"], ["Customers", "/app/customers"], ["Analytics", "/app/analytics"], ["Flow AI", "/app/flow-ai"],
     ["Automations", "/app/automations"], ["Integrations", "/app/integrations"], ["Billing", "/app/billing"], ["Settings", "/app/settings"],
   ])("selecting %s navigates and fully closes the drawer", async (label, to) => {
