@@ -225,7 +225,7 @@ export default function Billing() {
             >
               {checkout.isPending && checkout.variables === price.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {price.purchasable
-                ? plan.plan_kind === "subscription" && currentHolding.kind !== "free"
+                ? plan.plan_kind === "subscription"
                   ? `Upgrade to ${plan.name}`
                   : plan.marketing.cta ?? "Choose"
                 : "Coming soon"}
