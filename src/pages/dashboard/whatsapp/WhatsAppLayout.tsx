@@ -98,7 +98,7 @@ export default function WhatsAppLayout() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">WhatsApp</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Messages</h1>
         <p className="text-sm text-muted-foreground">Conversations, contacts, templates and automations for your connected WhatsApp Business number.</p>
       </div>
 
@@ -155,7 +155,7 @@ export default function WhatsAppLayout() {
         </div>
       )}
 
-      <nav aria-label="WhatsApp sections" className="flex gap-1 overflow-x-auto border-b">
+      <nav aria-label="Messages sections" className="flex gap-1 overflow-x-auto border-b">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}
