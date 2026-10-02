@@ -549,7 +549,8 @@ insert into public.entitlement_definitions (key, name, description, kind, unit, 
   ('website_monitoring', 'Website monitoring', 'Periodically recheck your website for changes.', 'boolean', null, 'none', 60),
   ('website_scans', 'Website scans', 'Website scans per month.', 'allowance', 'scans', 'month', 70),
   ('ai_credits', 'AI writing credits', 'AI wording improvements per month.', 'allowance', 'credits', 'month', 80),
-  ('team_seats', 'Team members', 'Number of workspace members.', 'limit', 'seats', 'none', 90)
+  ('team_seats', 'Team members', 'Number of workspace members.', 'limit', 'seats', 'none', 90),
+  ('automation_runs', 'Automation runs', 'Automation runs per month. Available on subscription plans.', 'allowance', 'runs', 'month', 100)
 on conflict (key) do nothing;
 
 insert into public.billing_plans (product_id, code, name, description, plan_kind, tier_rank, is_public, is_active, sort_order, marketing)
@@ -557,13 +558,13 @@ select pr.id, v.code, v.name, v.description, v.plan_kind, v.tier_rank, v.is_publ
 from public.billing_products pr
 cross join (values
   ('free', 'Free', 'Try Business Studio and build your first profile draft.', 'free', 0, true, true, 10,
-    '{"features": ["Scan your website", "Review and correct your business facts", "Preview your profile"], "cta": "Start free"}'),
+    '{"features": ["Build your My Business profile", "See a protected Business Studio sample", "Upgrade when you are ready to create the full profile", "Automations require a subscription"], "cta": "Start free"}'),
   ('profile_once', 'Professional Profile', 'A once-off professional A4 company profile PDF.', 'one_off', 10, true, true, 20,
-    '{"features": ["Professional A4 PDF", "No watermark", "Premium designs"], "cta": "Buy once"}'),
+    '{"features": ["Professional company profile PDF", "No watermark on the purchased final PDF", "Premium profile designs", "No recurring AI or website-scan allowance", "Automations require a subscription"], "cta": "Buy profile"}'),
   ('business', 'Business', 'Keep your company profile current and hosted.', 'subscription', 20, true, true, 30,
-    '{"features": ["Everything in Professional Profile", "Hosted business profile", "Website monitoring", "More AI credits"], "cta": "Choose Business", "badge": "Most popular"}'),
+    '{"features": ["Everything in Professional Profile", "Leads & CRM", "Customer management", "Content management", "Hosted business profile", "Website monitoring", "500 automation runs / month", "More AI credits"], "cta": "Choose Business", "badge": "Most popular"}'),
   ('growth', 'Growth', 'For growing businesses with more documents and team members.', 'subscription', 30, true, true, 40,
-    '{"features": ["Everything in Business", "More documents and scans", "More team members"], "cta": "Choose Growth"}'),
+    '{"features": ["Everything in Business", "WhatsApp Business & unified inbox", "Meta advertising", "Facebook & Instagram integrations", "2,000 automation runs / month", "Automation & AI", "Advanced analytics", "Higher usage limits", "More team members"], "cta": "Choose Growth"}'),
   ('pro', 'Pro', 'Advanced StabiFlow modules (coming later).', 'subscription', 40, false, false, 50, '{}')
 ) as v(code, name, description, plan_kind, tier_rank, is_public, is_active, sort_order, marketing)
 where pr.code = 'business_studio'
@@ -587,6 +588,7 @@ select p.id, v.k, v.b, v.l
 from public.billing_plans p
 join (values
   ('free', 'team_seats', null, 1),
+  ('free', 'automation_runs', null, 0),
   ('profile_once', 'business_profile.pdf_export', true, null),
   ('profile_once', 'business_profile.premium_designs', true, null),
   ('profile_once', 'business_profile.documents', null, 2),
@@ -599,6 +601,7 @@ join (values
   ('business', 'website_scans', null, 10),
   ('business', 'ai_credits', null, 100),
   ('business', 'team_seats', null, 3),
+  ('business', 'automation_runs', null, 500),
   ('growth', 'business_studio.access', true, null),
   ('growth', 'business_profile.pdf_export', true, null),
   ('growth', 'business_profile.premium_designs', true, null),
@@ -607,6 +610,7 @@ join (values
   ('growth', 'website_monitoring', true, null),
   ('growth', 'website_scans', null, 40),
   ('growth', 'ai_credits', null, 500),
-  ('growth', 'team_seats', null, 10)
+  ('growth', 'team_seats', null, 10),
+  ('growth', 'automation_runs', null, 2000)
 ) as v(code, k, b, l) on v.code = p.code
 on conflict (plan_id, entitlement_key) do nothing;
