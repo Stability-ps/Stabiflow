@@ -136,6 +136,10 @@ Deno.serve(async (req: Request) => {
         website: identity?.website ?? null,
         short_description: identity?.short_description ?? null,
         long_description: identity?.long_description ?? null,
+        tagline: identity?.tagline ?? null,
+        mission: identity?.mission ?? null,
+        vision: identity?.vision ?? null,
+        core_values: Array.isArray(identity?.core_values) ? identity.core_values : [],
         offerings: (offerings ?? []).map((o) => ({ name: o.name, description: o.description })),
       };
       if (!source.trading_name && !source.industry && !source.short_description && !source.long_description && source.offerings.length === 0) {
