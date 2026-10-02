@@ -127,7 +127,7 @@ Deno.serve(async (req: Request) => {
       const cred = aiCredential();
       if (!cred) return json(req, { error: "AI profile drafting is not available right now" }, 503);
       const [{ data: identity }, { data: offerings }] = await Promise.all([
-        sb.from("business_identities").select("trading_name, industry, website, short_description, long_description").eq("workspace_id", workspaceId).single(),
+        sb.from("business_identities").select("trading_name, industry, website, tagline, short_description, long_description, mission, vision, core_values").eq("workspace_id", workspaceId).single(),
         sb.from("business_offerings").select("name, description").eq("workspace_id", workspaceId).limit(30),
       ]);
       const source = {
