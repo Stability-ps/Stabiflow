@@ -16,7 +16,7 @@
  *    (Supabase REST/auth/storage, Edge Functions) and any other path.
  * Bump VERSION to drop every cache from earlier worker versions.
  */
-const VERSION = "v3";
+const VERSION = "v4";
 const PREFIX = "sf-";
 const SHELL_CACHE = `${PREFIX}shell-${VERSION}`;
 const ASSET_PREFIX = `${PREFIX}assets-${VERSION}-`;
