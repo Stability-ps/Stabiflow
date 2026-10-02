@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ImagePlus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImagePlus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +13,7 @@ import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { platformKeyForContentPlatform, validateAssetForPlatform } from "@/lib/contentPlatformRules";
 import { parseLocalDateTimeInZone, toLocalDateTimeInputValue } from "@/lib/contentTimezone";
-import { scheduleContentPost, publishContentPostNow } from "@/lib/contentFunctions";
+import { scheduleContentPost, publishContentPostNow, generateContentCaption } from "@/lib/contentFunctions";
 
 type PlatformVariant = { id: string; platform: string; storage_path: string; width_px: number; height_px: number; mime_type: string; file_size_bytes: number };
 type MediaAsset = { id: string; title: string; storage_path: string; mime_type: string; width_px: number; height_px: number; file_size_bytes: number; content_platform_variants?: PlatformVariant[] };
@@ -33,6 +33,9 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initi
     return toLocalDateTimeInputValue(base, workspaceTimezone);
   });
   const [submitting, setSubmitting] = useState(false);
+  const [generatingCaption, setGeneratingCaption] = useState(false);
+  const [hashtags, setHashtags] = useState<string[]>([]);
+  const [tone, setTone] = useState("professional");
 
   const selectedAsset = (assets as MediaAsset[] | undefined)?.find((a) => a.id === selectedAssetId) ?? null;
   const [platform, destinationId] = destinationKey ? destinationKey.split(":") : [null, null];
@@ -66,7 +69,30 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initi
     setDestinationKey("");
     setSelectedAssetId("");
     setCaption("");
+    setHashtags([]);
+    setTone("professional");
     setWhenMode("schedule");
+  };
+
+  const handleGenerateCaption = async () => {
+    if (!currentWorkspaceId || !selectedAsset) return;
+    setGeneratingCaption(true);
+    try {
+      const result = await generateContentCaption({
+        workspace_id: currentWorkspaceId,
+        media_asset_id: selectedAsset.id,
+        target_platform: platform === "facebook" || platform === "instagram" ? platform : undefined,
+        tone,
+      });
+      const nextCaption = [result.suggestion.caption, result.suggestion.cta].filter(Boolean).join("\n\n");
+      setCaption(nextCaption);
+      setHashtags(result.suggestion.hashtags);
+      toast.success("AI caption ready - review it before scheduling");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to generate caption");
+    } finally {
+      setGeneratingCaption(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -85,6 +111,7 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initi
         instagram_account_id: platform === "instagram" ? destinationId : undefined,
         media_asset_id: selectedAsset.id,
         caption,
+        hashtags,
         scheduled_at: scheduledAt.toISOString(),
       });
 
@@ -182,9 +209,31 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initi
             </div>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="caption">Caption</Label>
-            <Textarea id="caption" rows={4} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Write your caption..." />
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label htmlFor="caption">Caption</Label>
+              <div className="flex items-center gap-2">
+                <Select value={tone} onValueChange={setTone}>
+                  <SelectTrigger className="h-8 w-[130px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="friendly">Friendly</SelectItem>
+                    <SelectItem value="confident">Confident</SelectItem>
+                    <SelectItem value="playful">Playful</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button type="button" size="sm" variant="outline" disabled={!selectedAsset || generatingCaption} onClick={handleGenerateCaption}>
+                  <Sparkles className="mr-1 h-4 w-4" /> {generatingCaption ? "Writing..." : "Write with AI"}
+                </Button>
+              </div>
+            </div>
+            <Textarea id="caption" rows={5} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder={selectedAsset ? "Write your own caption or let AI use this photo and your business profile..." : "Choose a photo first..."} />
+            {hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {hashtags.map((tag) => <button type="button" key={tag} className="rounded-full bg-muted px-2 py-1 text-xs" onClick={() => setHashtags((current) => current.filter((h) => h !== tag))}>#{tag} ×</button>)}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">AI uses the selected image together with your My Business profile and services. You stay in control and can edit everything before publishing.</p>
           </div>
 
           <div className="space-y-1.5">
