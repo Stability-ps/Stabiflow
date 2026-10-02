@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#07162d"/>
   <defs>
     <filter id="removeWhite" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
       <feColorMatrix type="matrix" values="
