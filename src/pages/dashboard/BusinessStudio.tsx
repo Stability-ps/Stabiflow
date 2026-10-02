@@ -111,6 +111,7 @@ export default function BusinessStudio() {
   const pendingReview = (pending.data ?? []).filter((p) => p.origin === "website_scan" || p.origin === "document_upload");
   const templates = preview.data?.templates ?? [];
   const fullStudio = preview.data?.accessMode === "full";
+  const teaserStudio = preview.data?.accessMode === "teaser";
   const template = templates.find((t) => t.key === templateKey) ?? templates[0];
   const templateLocked = !!template?.is_premium && !preview.data?.canUsePremium;
   const oneOff = (catalog.data ?? []).find((p) => p.plan_kind === "one_off");
@@ -330,18 +331,20 @@ export default function BusinessStudio() {
             <CardHeader>
               <CardTitle className="text-base">Get your company profile</CardTitle>
               <CardDescription>
-                {preview.data?.canExportPdf ? "Your plan includes the professional PDF." : "Download a free watermarked preview, or buy the professional PDF."}
+                {preview.data?.canExportPdf ? "Your professional profile is ready to generate as a clean PDF." : "This protected preview shows how your profile can look. Purchase the Professional Profile or choose a subscription to create the clean PDF."}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {templateLocked ? (
-                <p className="text-sm text-muted-foreground">The {template?.name} design is included with a paid plan. Choose Classic for a free preview, or buy below.</p>
-              ) : (
+                <p className="text-sm text-muted-foreground">The {template?.name} design is included after purchasing the Professional Profile or with an eligible subscription.</p>
+              ) : preview.data?.canExportPdf ? (
                 <Button onClick={() => docMutation.mutate()} disabled={!canEdit || docMutation.isPending}>
                   {docMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                  {preview.data?.canExportPdf ? "Create my PDF" : "Download watermarked preview"}
+                  Create my PDF
                 </Button>
-              )}
+              ) : teaserStudio ? (
+                <p className="text-sm text-muted-foreground">Preview only - the clean PDF is generated securely after purchase and is never sent to the browser beforehand.</p>
+              ) : null}
               {!preview.data?.canExportPdf && oneOffPrice && (
                 <Button variant="default" onClick={() => buy.mutate(oneOffPrice.id)} disabled={!hasPermission("manage_billing") || buy.isPending}>
                   Buy professional profile - {formatMoney(oneOffPrice.amount_minor, oneOffPrice.currency)}
