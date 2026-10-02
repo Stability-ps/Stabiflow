@@ -229,7 +229,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full bg-primary transition-all" style={{ width: `${completeness.score}%` }} />
           </div>
-          {missing.length > 0 && <Button size="sm" onClick={() => setOpenSection(missing.some(i => /registered|industry/i.test(i.label)) ? "company" : "about")}>Continue setup</Button>}
+          {missing.length > 0 && <Button size="sm" onClick={() => { const next = missing[0]?.section; setOpenSection(next === "company" ? "company" : next === "about" ? "about" : next === "branding" ? "brand" : next === "contacts" || next === "locations" ? "contact" : next === "offerings" ? "services" : next === "social" ? "social" : next === "team" ? "team" : "work"); }}>Continue setup</Button>}
         </CardContent>
       </Card>
 
