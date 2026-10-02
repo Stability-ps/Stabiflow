@@ -88,14 +88,30 @@ export function ActionConfigFields({ workspaceId, actionType, config, onChange, 
 
   if (actionType === "create_lead") {
     return (
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <Label className="text-xs">Contact name</Label>
-          <Input value={(config.contact_name as string) || ""} onChange={(e) => set("contact_name", e.target.value)} placeholder="Optional" />
-        </div>
-        <div>
-          <Label className="text-xs">Source</Label>
-          <Input value={(config.source as string) || "automation"} onChange={(e) => set("source", e.target.value)} />
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          For WhatsApp conversation triggers, StabiFlow creates the lead from the conversation automatically and copies the contact name, phone, intake and conversation context.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <Label className="text-xs">Contact name</Label>
+            <Input value={(config.contact_name as string) || ""} onChange={(e) => set("contact_name", e.target.value)} placeholder="For non-conversation triggers" />
+          </div>
+          <div>
+            <Label className="text-xs">Source</Label>
+            <Select value={(config.source as string) || "manual"} onValueChange={(v) => set("source", v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="manual">Manual</SelectItem>
+                <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                <SelectItem value="meta">Meta</SelectItem>
+                <SelectItem value="website">Website</SelectItem>
+                <SelectItem value="referral">Referral</SelectItem>
+                <SelectItem value="organic">Organic</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
     );
