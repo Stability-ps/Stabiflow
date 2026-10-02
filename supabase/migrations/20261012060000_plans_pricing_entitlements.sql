@@ -586,15 +586,10 @@ insert into public.plan_entitlements (plan_id, entitlement_key, bool_value, limi
 select p.id, v.k, v.b, v.l
 from public.billing_plans p
 join (values
-  ('free', 'business_studio.access', true, null::bigint),
-  ('free', 'business_profile.documents', null, 1),
-  ('free', 'website_scans', null, 2),
-  ('free', 'ai_credits', null, 10),
   ('free', 'team_seats', null, 1),
   ('profile_once', 'business_profile.pdf_export', true, null),
   ('profile_once', 'business_profile.premium_designs', true, null),
   ('profile_once', 'business_profile.documents', null, 2),
-  ('profile_once', 'ai_credits', null, 30),
   ('business', 'business_studio.access', true, null),
   ('business', 'business_profile.pdf_export', true, null),
   ('business', 'business_profile.premium_designs', true, null),
