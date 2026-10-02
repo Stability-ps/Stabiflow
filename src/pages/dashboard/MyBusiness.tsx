@@ -19,7 +19,7 @@ import {
   type BusinessIdentity, type BusinessIdentityBundle,
 } from "@/lib/businessIdentity";
 import type { BrandProfile } from "@/lib/brandProfiles";
-import { draftProfile } from "@/lib/businessStudio";
+import { draftProfile, scanWebsite } from "@/lib/businessStudio";
 
 const EMPLOYEE_RANGES = ["1", "2-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
@@ -106,15 +106,24 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   async function createAiDraft() {
     setDrafting(true);
     try {
-      const result = await draftProfile(currentWorkspaceId);
-      if (result.suggestions > 0) {
-        toast.success(`${result.suggestions} AI draft suggestion${result.suggestions === 1 ? "" : "s"} ready to review`);
-        await queryClient.invalidateQueries({ queryKey: ["fact-proposals", currentWorkspaceId] });
+      let websiteSuggestions = 0;
+      if (identity.website) {
+        const scan = await scanWebsite(currentWorkspaceId, identity.website);
+        websiteSuggestions = scan.proposalsCreated;
+      }
+      const draft = await draftProfile(currentWorkspaceId);
+      const total = websiteSuggestions + draft.suggestions;
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["fact-proposals", currentWorkspaceId] }),
+        queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] }),
+      ]);
+      if (total > 0) {
+        toast.success(`${total} suggestion${total === 1 ? "" : "s"} ready to review`);
       } else {
-        toast.info("Your profile already contains the narrative details AI can draft from the available information.");
+        toast.info("Your website and business details are already covered. There are no new suggestions to review.");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not prepare AI draft");
+      toast.error(e instanceof Error ? e.message : "Could not complete your profile with AI");
     } finally {
       setDrafting(false);
     }
@@ -236,15 +245,15 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
       <Card className="overflow-hidden border-border/70 shadow-sm">
         <CardHeader className="border-b bg-muted/15 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
           <div>
-            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4" /> AI review</CardTitle>
-            <CardDescription className="mt-1">Review suggestions StabiFlow found or drafted. Nothing is added until you approve it.</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4" /> Complete with AI</CardTitle>
+            <CardDescription className="mt-1">StabiFlow scans your website for industry, contact details, locations, services, social links and other supported facts, then drafts the About wording. Review everything before it is added.</CardDescription>
           </div>
           {canEdit && <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting}>
-            {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Check for suggestions
+            {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Complete with AI
           </Button>}
         </CardHeader>
         <CardContent className="pt-5">
-          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions need your review right now." />
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
         </CardContent>
       </Card>
 
