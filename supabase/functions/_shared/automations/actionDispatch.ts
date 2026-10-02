@@ -127,7 +127,24 @@ export async function dispatchAction(opts: {
 
   switch (opts.actionType) {
     case "create_lead":
-      return callDispatcher("leads-actions", opts.accessToken, { workspace_id: opts.workspaceId, action: "create_manual", ...config }, opts.automationContext);
+      // Conversation-triggered lead creation must use the canonical
+      // conversion path so the lead inherits the WhatsApp contact name,
+      // phone, intake, summary/documents and is linked back to the
+      // conversation. For non-conversation triggers, keep the manual path.
+      if (opts.event.entityType === "inbox_conversation" && opts.event.entityId) {
+        return callDispatcher("leads-actions", opts.accessToken, {
+          workspace_id: opts.workspaceId,
+          action: "create_from_conversation",
+          conversation_id: opts.event.entityId,
+          ...(config.force === true ? { force: true } : {}),
+        }, opts.automationContext);
+      }
+      return callDispatcher("leads-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId,
+        action: "create_manual",
+        source: typeof config.source === "string" && config.source ? config.source : "manual",
+        ...config,
+      }, opts.automationContext);
 
     case "assign_lead":
       return callDispatcher("leads-actions", opts.accessToken, { workspace_id: opts.workspaceId, action: "assign", target_type: "lead", target_id: config.lead_id ?? opts.event.entityId, staff_id: config.staff_id }, opts.automationContext);
