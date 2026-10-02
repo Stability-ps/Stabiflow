@@ -441,6 +441,81 @@ describe("Automation Engine (Phase J, release blocker)", () => {
     });
   });
 
+  describe("WhatsApp conversation -> lead automation", () => {
+    it("creates one linked WhatsApp lead with the conversation contact details", async () => {
+      const number = await seedWhatsAppSetup(workspace.workspaceId);
+      const waId = `27${Date.now()}${Math.floor(Math.random() * 1000)}`;
+
+      const created = await callAutomationsActions(managerToken, {
+        workspace_id: workspace.workspaceId,
+        action: "create",
+        name: "New conversation creates a lead",
+        trigger_event_type: "conversation.started",
+        actions: [{ action_type: "create_lead", action_config: {} }],
+      });
+      expect(created.status).toBe(200);
+      const automationId = created.body.automation.id;
+      const enabled = await callAutomationsActions(managerToken, {
+        workspace_id: workspace.workspaceId,
+        action: "set_status",
+        automation_id: automationId,
+        status: "enabled",
+      });
+      expect(enabled.status).toBe(200);
+
+      try {
+        const webhook = await postWebhook(textMessagePayload(
+          number.phone_number_id,
+          waId,
+          `wamid.lead-conversion-${Date.now()}`,
+          "I am interested",
+        ));
+        expect(webhook.status).toBe(200);
+
+        const { data: conversation } = await admin
+          .from("inbox_conversations")
+          .select("id, display_name, phone_number, lead_id")
+          .eq("whatsapp_number_id", number.id)
+          .eq("wa_id", waId)
+          .single();
+
+        await tick();
+
+        const { data: after } = await admin
+          .from("inbox_conversations")
+          .select("lead_id")
+          .eq("id", conversation!.id)
+          .single();
+        expect(after!.lead_id).toBeTruthy();
+
+        const { data: lead } = await admin
+          .from("leads")
+          .select("id, contact_name, phone, source, created_from_conversation_id")
+          .eq("id", after!.lead_id)
+          .single();
+        expect(lead!.source).toBe("whatsapp");
+        expect(lead!.contact_name).toBe(conversation!.display_name);
+        expect(lead!.phone).toBe(conversation!.phone_number);
+        expect(lead!.created_from_conversation_id).toBe(conversation!.id);
+
+        const { data: startedEvent } = await admin
+          .from("domain_events")
+          .select("id")
+          .eq("dedupe_key", `conversation.started:${conversation!.id}`)
+          .single();
+        const { data: runs } = await admin
+          .from("automation_runs")
+          .select("id, status")
+          .eq("automation_id", automationId)
+          .eq("domain_event_id", startedEvent!.id);
+        expect(runs).toHaveLength(1);
+        expect(runs![0].status).toBe("succeeded");
+      } finally {
+        await admin.from("automations").delete().eq("id", automationId);
+      }
+    });
+  });
+
   describe("concurrent event delivery collapses to exactly one domain event, one run, one notification", () => {
     it("REGRESSION: two concurrent webhook deliveries for the same brand-new WhatsApp contact never produce two conversation.started events or two runs", async () => {
       const number = await seedWhatsAppSetup(workspace.workspaceId);

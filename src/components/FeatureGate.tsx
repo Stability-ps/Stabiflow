@@ -21,15 +21,27 @@ export function FeatureGate({ flag, children }: { flag: FeatureFlagKey; children
     );
   }
   if (!isEnabled(flag)) {
+    const isAutomations = flag === "module.automations";
     return (
       <EmptyState
         icon={Lock}
-        title="Not available on your workspace yet"
-        description="This part of StabiFlow isn't switched on for your workspace. Your data is safe - nothing has been removed."
+        title={isAutomations ? "Automations are a Growth feature" : "Not available on your workspace yet"}
+        description={
+          isAutomations
+            ? "Automations are included with Growth and Pro workspaces. Upgrade to create, enable and run automated workflows. Existing automation data is kept safely if your plan changes."
+            : "This part of StabiFlow isn't switched on for your workspace. Your data is safe - nothing has been removed."
+        }
         action={
-          <Button asChild variant="outline">
-            <Link to="/app">Back to home</Link>
-          </Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            {isAutomations && (
+              <Button asChild>
+                <Link to="/app/billing">View plans</Link>
+              </Button>
+            )}
+            <Button asChild variant="outline">
+              <Link to="/app">Back to home</Link>
+            </Button>
+          </div>
         }
       />
     );
