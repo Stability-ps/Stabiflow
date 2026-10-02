@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowRight, BarChart3, DollarSign, MessageSquare, Plus, Sparkles, TrendingUp, Users, Wallet,
+  ArrowRight, BarChart3, Building2, DollarSign, FileText, Megaphone, MessageSquare, Plus, Sparkles, TrendingUp, UserPlus, Users, Wallet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceActivity } from "@/hooks/useWorkspaceActivity";
@@ -13,6 +13,7 @@ import { useOnboardingStatus } from "@/hooks/useOnboardingStatus";
 import { useWorkspaceCurrency } from "@/hooks/useWorkspaceCurrency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MetricCard } from "@/components/layout/MetricCard";
 import { EmptyState } from "@/components/EmptyState";
 import { OnboardingChecklist } from "@/components/dashboard/OnboardingChecklist";
@@ -35,6 +36,12 @@ export default function Overview() {
   const workspaceCurrency = useWorkspaceCurrency(currentWorkspaceId);
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
+  const createActions = [
+    hasPermission("lead.create") && { label: "New lead", description: "Add someone to your pipeline", icon: UserPlus, to: "/app/leads" },
+    hasPermission("content.create") && { label: "New content", description: "Create or upload marketing content", icon: FileText, to: "/app/content" },
+    hasPermission("campaign.create") && { label: "New campaign", description: "Build a campaign for Meta", icon: Megaphone, to: "/app/campaigns/new" },
+    { label: "Business profile", description: "Build or update your company profile", icon: Building2, to: "/app/business-studio" },
+  ].filter(Boolean) as Array<{ label: string; description: string; icon: typeof Plus; to: string }>;
 
   const [now] = useState(() => new Date());
   const range = useMemo(() => resolveDateRangePreset("last_30_days", timezone, now), [timezone, now]);
@@ -124,10 +131,32 @@ export default function Overview() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">Your business command centre — priorities, performance and activity in one place.</p>
         </div>
-        <Button className="shrink-0 gap-2 shadow-sm" onClick={() => navigate("/app/business-hub")}>
-          <Plus className="h-4 w-4" />
-          Create
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button className="shrink-0 gap-2 shadow-sm">
+              <Plus className="h-4 w-4" />
+              Create
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72 p-2">
+            <DropdownMenuLabel className="px-2 py-1.5">
+              <span className="block text-sm font-semibold">Create something</span>
+              <span className="block text-xs font-normal text-muted-foreground">Start from the right place in StabiFlow.</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {createActions.map((action) => (
+              <DropdownMenuItem key={action.label} onClick={() => navigate(action.to)} className="gap-3 rounded-lg p-2.5">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                  <action.icon className="h-4 w-4" />
+                </span>
+                <span>
+                  <span className="block text-sm font-medium">{action.label}</span>
+                  <span className="block text-xs text-muted-foreground">{action.description}</span>
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {showOnboardingFirst && onboardingBlock}
@@ -139,8 +168,7 @@ export default function Overview() {
       {!showOnboardingFirst && onboardingBlock}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
+        <Card className="border-border/70 shadow-sm">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
             {campaignsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -159,7 +187,7 @@ export default function Overview() {
                 title="No campaign data yet"
                 description="Connect your Meta account to launch and track campaigns."
                 action={<Button size="sm" onClick={() => navigate("/app/integrations")}>Go to Integrations</Button>}
-                className="py-8"
+                className="py-4"
               />
             ) : (
               <EmptyState
@@ -167,14 +195,13 @@ export default function Overview() {
                 title="No campaign data yet"
                 description="Launch your first campaign to see performance here."
                 action={<Button size="sm" onClick={() => navigate("/app/campaigns/new")}>Create a campaign</Button>}
-                className="py-8"
+                className="py-4"
               />
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
+        <Card className="border-border/70 shadow-sm">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
             {conversationsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -193,14 +220,14 @@ export default function Overview() {
                 title="No conversations yet"
                 description="Connect WhatsApp to start receiving conversations here."
                 action={<Button size="sm" onClick={() => navigate("/app/integrations")}>Connect WhatsApp</Button>}
-                className="py-8"
+                className="py-4"
               />
             ) : (
               <EmptyState
                 icon={MessageSquare}
                 title="Waiting for your first conversation"
                 description="StabiFlow is connected and ready — new WhatsApp messages will appear here automatically."
-                className="py-8"
+                className="py-4"
               />
             )}
           </CardContent>
@@ -235,7 +262,7 @@ export default function Overview() {
           ) : activityQuery.isError ? (
             <p className="text-sm text-destructive">Unable to load recent activity.</p>
           ) : !visibleActivity.length ? (
-            <EmptyState icon={TrendingUp} title="No activity yet" description="Actions taken in this workspace will show up here." />
+            <EmptyState icon={TrendingUp} title="No activity yet" description="Actions taken in this workspace will show up here." className="py-4" />
           ) : (
             <ul className="space-y-2">
               {visibleActivity.map((row) => (
