@@ -109,6 +109,14 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
         canInbox
           ? supabase.from("workspace_settings").select("handoff_sla_minutes, handoff_sla_enabled").eq("workspace_id", wid).limit(1)
           : Promise.resolve({ data: [], error: null }),
+        roleHasPermission(role, "manage_billing")
+          ? supabase
+              .from("billing_transactions")
+              .select("reference, status, amount_minor, currency, created_at")
+              .eq("workspace_id", wid)
+              .in("status", ["failed", "needs_review"])
+              .order("created_at", { ascending: false }).limit(5)
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       const alerts = value(settled[0] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
@@ -117,6 +125,7 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
       const failedRuns = value(settled[3] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
       const unownedLeads = value(settled[4] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
       const slaRows = value(settled[5] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
+      const billingIssues = value(settled[6] as PromiseSettledResult<{ data: unknown[] | null; error: unknown }>, []);
       const slaRow = ("data" in slaRows && slaRows.data.length > 0)
         ? (slaRows.data[0] as { handoff_sla_minutes?: number; handoff_sla_enabled?: boolean })
         : null;
@@ -124,7 +133,7 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
         handoff_sla_minutes: slaRow?.handoff_sla_minutes ?? 10,
         handoff_sla_enabled: slaRow?.handoff_sla_enabled ?? true,
       };
-      for (const s of [alerts, failedCampaigns, integrations, failedRuns, unownedLeads]) {
+      for (const s of [alerts, failedCampaigns, integrations, failedRuns, unownedLeads, billingIssues]) {
         if ("failed" in s) partialFailure = true;
       }
 
@@ -275,6 +284,30 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
             actionPath: "/app/automations",
             actionLabel: canEditAutomation ? "Review automation" : "View runs",
             canAct: canEditAutomation,
+          });
+        }
+      }
+
+      if ("data" in billingIssues) {
+        for (const b of billingIssues.data as Array<{ reference: string; status: string; amount_minor: number; currency: string; created_at: string }>) {
+          let amount = `${b.currency} ${(Number(b.amount_minor) / 100).toFixed(2)}`;
+          try {
+            amount = new Intl.NumberFormat("en-ZA", { style: "currency", currency: b.currency }).format(Number(b.amount_minor) / 100);
+          } catch {
+            // Currency formatting is best-effort; the raw ISO currency remains clear.
+          }
+          items.push({
+            id: `billing:${b.reference}`,
+            kind: "billing_payment",
+            severity: b.status === "needs_review" ? "critical" : "warning",
+            title: b.status === "needs_review" ? "Payment needs review" : "Payment failed",
+            description: `${amount} billing transaction needs attention.`,
+            occurredAt: b.created_at,
+            targetType: "billing",
+            targetId: b.reference,
+            actionPath: "/app/billing",
+            actionLabel: "Review billing",
+            canAct: true,
           });
         }
       }
