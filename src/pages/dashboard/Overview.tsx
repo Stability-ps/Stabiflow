@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  BarChart3, DollarSign, MessageSquare, Sparkles, TrendingUp, Users, Wallet,
+  ArrowRight, BarChart3, DollarSign, MessageSquare, Plus, Sparkles, TrendingUp, Users, Wallet,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceActivity } from "@/hooks/useWorkspaceActivity";
@@ -89,7 +89,7 @@ export default function Overview() {
   const showOnboardingFirst = !onboardingComplete && !hasRealActivity;
 
   const kpiGrid = (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {kpis ? (
         <>
           <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage={metaConnected ? "No data yet" : "Meta not connected"} value={dashboardMoneyValue(kpis.spend, workspaceCurrency)} />
@@ -116,11 +116,18 @@ export default function Overview() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          {currentMembership ? `${currentMembership.workspace.name} - business overview` : "Business overview"}
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace overview</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            {currentMembership ? currentMembership.workspace.name : "Dashboard"}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">Your business command centre — priorities, performance and activity in one place.</p>
+        </div>
+        <Button className="shrink-0 gap-2 shadow-sm" onClick={() => navigate("/app/business-hub")}>
+          <Plus className="h-4 w-4" />
+          Create
+        </Button>
       </div>
 
       {showOnboardingFirst && onboardingBlock}
@@ -200,20 +207,27 @@ export default function Overview() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Flow AI recommendations</CardTitle></CardHeader>
-        <CardContent>
-          <EmptyState
-            icon={Sparkles}
-            title="No recommendations yet"
-            description="Flow AI needs campaign and conversion data before it can recommend useful next steps."
-            action={<Button size="sm" variant="outline" onClick={() => navigate("/app/flow-ai")}>Try Flow AI</Button>}
-            className="py-8"
-          />
+      <Card className="border-border/70 bg-muted/15 shadow-sm">
+        <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-background shadow-sm">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold">Flow AI recommendations</p>
+              <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                No recommendations yet. As StabiFlow collects campaign and conversion data, useful next steps will appear here.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" className="shrink-0 gap-2" onClick={() => navigate("/app/flow-ai")}>
+            Open Flow AI
+            <ArrowRight className="h-4 w-4" />
+          </Button>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="border-border/70 shadow-sm">
         <CardHeader><CardTitle className="text-base">Recent activity</CardTitle></CardHeader>
         <CardContent>
           {activityQuery.isLoading ? (
