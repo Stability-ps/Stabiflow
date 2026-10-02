@@ -83,6 +83,7 @@ export type ScanResult = {
 export const scanWebsite = (workspaceId: string, url: string) => invoke<ScanResult>({ action: "scan", workspace_id: workspaceId, url });
 export const extractFromText = (workspaceId: string, text: string) => invoke<{ proposalsCreated: number }>({ action: "extract_text", workspace_id: workspaceId, text });
 export const improveWording = (workspaceId: string, tone: string) => invoke<{ suggestions: number; rejected: string[] }>({ action: "improve_wording", workspace_id: workspaceId, tone });
+export const draftProfile = (workspaceId: string) => invoke<{ suggestions: number }>({ action: "draft_profile", workspace_id: workspaceId });
 export const fetchPreview = (workspaceId: string) =>
   invoke<{ content: ProfileContent; templates: ProfileTemplate[]; canExportPdf: boolean; canUsePremium: boolean }>({ action: "preview", workspace_id: workspaceId });
 export const generateDocument = (workspaceId: string, templateKey: string, title?: string) =>

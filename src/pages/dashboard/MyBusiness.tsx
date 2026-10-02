@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, Loader2 } from "lucide-react";
+import { Building2, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   type BusinessIdentity, type BusinessIdentityBundle,
 } from "@/lib/businessIdentity";
 import type { BrandProfile } from "@/lib/brandProfiles";
+import { draftProfile } from "@/lib/businessStudio";
 
 const EMPLOYEE_RANGES = ["1", "2-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
@@ -92,6 +93,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const canEdit = currentMembership?.role === "owner" || currentMembership?.role === "admin";
   const [form, setForm] = useState<IdentityForm>(() => toForm(bundle.identity));
   const [saving, setSaving] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
@@ -100,6 +102,23 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const identity = bundle.identity;
   const provenance = (identity.field_provenance ?? {}) as Record<string, { source?: string }>;
   const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  async function createAiDraft() {
+    setDrafting(true);
+    try {
+      const result = await draftProfile(currentWorkspaceId);
+      if (result.suggestions > 0) {
+        toast.success(`${result.suggestions} AI draft suggestion${result.suggestions === 1 ? "" : "s"} ready to review`);
+        await queryClient.invalidateQueries({ queryKey: ["fact-proposals", currentWorkspaceId] });
+      } else {
+        toast.info("Your profile already contains the narrative details AI can draft from the available information.");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not prepare AI draft");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   async function saveIdentity() {
     const year = form.founded_year.trim() ? Number(form.founded_year) : null;
@@ -196,13 +215,21 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Changes to review</CardTitle>
-          <CardDescription>Details found on your website or in your documents. Nothing changes until you accept it.</CardDescription>
+      <Card className="overflow-hidden border-border/70 shadow-sm">
+        <CardHeader className="border-b bg-muted/15 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4" /> Review your AI-prepared profile</CardTitle>
+            <CardDescription className="mt-1">Website facts stay factual. AI can draft the wording around them, and nothing is added to your profile until you approve it.</CardDescription>
+          </div>
+          {canEdit && (
+            <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting}>
+              {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              Prepare AI draft
+            </Button>
+          )}
         </CardHeader>
-        <CardContent>
-          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="You're up to date - nothing waiting for review." />
+        <CardContent className="pt-5">
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions waiting. Use Prepare AI draft to let StabiFlow draft the narrative parts from your business information." />
         </CardContent>
       </Card>
 
@@ -274,7 +301,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
               onSelect={setSelectedBrand}
             />
           )}
-          {canEdit && selectedBrand && selectedBrand.id !== identity.brand_profile_id && (
+          {canEdit && selectedBrand && selectedBrand.id !== identity.brand_profile_id && selectedBrand.workspaceId === currentWorkspaceId && (
             <Button size="sm" variant="outline" onClick={useBrandForProfile}>
               Use "{selectedBrand.name}" for my business profile
             </Button>
