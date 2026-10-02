@@ -311,5 +311,4 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
       </div>
     </div>
   );
-  );
 }
