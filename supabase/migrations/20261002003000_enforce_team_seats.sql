@@ -33,11 +33,13 @@ begin
   from public.workspace_invitations
   where workspace_id = new.workspace_id
     and status = 'pending'
-    and expires_at > now();
+    and expires_at > now()
+    and (tg_table_name <> 'workspace_members' or accepted_by is distinct from new.user_id);
 
   if tg_table_name = 'workspace_members' then
-    -- Accepting an invitation changes that invitation to accepted in the same
-    -- transaction, so only other pending invitations reserve seats here.
+    -- accept_workspace_invitation inserts the membership before marking its
+    -- invitation accepted. Exclude the invitation belonging to this user so
+    -- the same seat is not counted twice during acceptance.
     if v_members + v_pending + 1 > v_ent.limit_value then
       raise exception 'Your workspace has reached its team-seat limit. Upgrade your plan to add another member.' using errcode = 'P0001';
     end if;
