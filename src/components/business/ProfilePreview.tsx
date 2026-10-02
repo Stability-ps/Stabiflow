@@ -25,10 +25,22 @@ export function ProfilePreview({ content: c, layout, serif, watermark }: { conte
   const services = c.offerings.every((o) => o.kind === "product") ? "Our products" : "What we do";
 
   return (
-    <div className="relative overflow-hidden rounded-md border bg-white text-[#212329] shadow-sm" aria-label="Profile preview">
+    <div
+      className="relative overflow-hidden rounded-md border bg-white text-[#212329] shadow-sm select-none"
+      aria-label="Profile preview"
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      style={{ WebkitUserSelect: "none", userSelect: "none" }}
+    >
       {watermark && (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center" aria-hidden="true">
-          <span className="-rotate-45 select-none text-7xl font-bold text-gray-400/30">PREVIEW</span>
+          <div className="absolute inset-0 overflow-hidden">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <span key={i} className="absolute -rotate-45 whitespace-nowrap text-3xl font-bold tracking-widest text-gray-500/20" style={{ left: `${(i % 3) * 38 - 10}%`, top: `${Math.floor(i / 3) * 30 + 4}%` }}>STABIFLOW PREVIEW</span>
+            ))}
+          </div>
         </div>
       )}
       <div className={layout === "sidebar" ? "grid grid-cols-[36%_1fr]" : ""}>
