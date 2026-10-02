@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { NavLink, useLocation } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import {
@@ -7,6 +8,8 @@ import {
 } from "@/components/ui/sidebar";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { isNavItemActive, NAV_ITEMS, type NavChild, type NavItem } from "@/lib/navigation";
+import { useAuth } from "@/hooks/useAuth";
+import { fetchBillingState } from "@/lib/billing";
 
 function isChildActive(child: NavChild, pathname: string): boolean {
   if (child.external) return false;
@@ -60,6 +63,15 @@ function navItemByPath(items: NavItem[], path: string) {
 // filtered list (see filterNavItems) so this component stays presentational.
 export function AppSidebar({ items = NAV_ITEMS }: { items?: NavItem[] }) {
   const { pathname } = useLocation();
+  const { currentMembership, currentWorkspaceId } = useAuth();
+  const billingState = useQuery({
+    queryKey: ["sidebar-billing-state", currentWorkspaceId],
+    queryFn: () => fetchBillingState(currentWorkspaceId as string),
+    enabled: !!currentWorkspaceId,
+    staleTime: 5 * 60_000,
+  });
+  const planName = billingState.data?.subscription?.plan?.name ?? billingState.data?.purchases?.[0]?.plan?.name ?? "Free";
+  const workspaceName = currentMembership?.workspace.name ?? "Workspace";
 
   const groupedSections = useMemo(
     () =>
@@ -257,13 +269,16 @@ export function AppSidebar({ items = NAV_ITEMS }: { items?: NavItem[] }) {
 
       <SidebarFooter className="px-3 pb-4 pt-2 group-data-[collapsible=icon]:hidden">
         <div className="rounded-xl border border-sidebar-border/70 bg-sidebar-accent/40 px-3 py-2.5 shadow-sm">
-          <div className="flex items-center gap-2 text-xs font-semibold text-sidebar-foreground">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />
-            StabiFlow Workspace
-          </div>
-          <p className="mt-1 text-[11px] leading-4 text-sidebar-foreground/55">
-            Everything your business needs, in one place.
-          </p>
+          <NavLink to="/app/billing" className="block rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs font-semibold text-sidebar-foreground">{workspaceName}</span>
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-sidebar-foreground/40" />
+            </div>
+            <div className="mt-1 flex items-center gap-2 text-[11px] text-sidebar-foreground/60">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]" />
+              <span className="truncate">{billingState.isLoading ? "Checking plan..." : `${planName} plan`}</span>
+            </div>
+          </NavLink>
         </div>
       </SidebarFooter>
     </Sidebar>
