@@ -28,6 +28,34 @@
     <title>StabiFlow | Meta Ads, WhatsApp, CRM & Business Automation</title>
   </head>
   <body style="background-color:#07162d">
+    <div id="pwa-launch-screen" aria-hidden="true">
+      <img src="/brand/StabiFlow_Icon.png" alt="" />
+    </div>
+    <style>
+      #pwa-launch-screen { display: none; }
+      @media (display-mode: standalone) {
+        #pwa-launch-screen {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483647;
+          display: grid;
+          place-items: center;
+          background: #07162d;
+          opacity: 1;
+          transition: opacity 180ms ease;
+        }
+        #pwa-launch-screen img {
+          width: 112px;
+          height: 112px;
+          object-fit: contain;
+          mix-blend-mode: screen;
+        }
+        #pwa-launch-screen[data-hide="true"] {
+          opacity: 0;
+          pointer-events: none;
+        }
+      }
+    </style>
     <div id="root"></div>
     <script>
       window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
