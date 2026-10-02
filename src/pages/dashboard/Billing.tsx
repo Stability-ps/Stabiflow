@@ -274,7 +274,7 @@ export default function Billing() {
           </div>
           {(entitlements.data ?? []).length > 0 && (
             <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:grid-cols-2">
-              {(entitlements.data ?? []).map((e) => (
+              {(entitlements.data ?? []).filter((e) => e.enabled || e.kind === "boolean").map((e) => (
                 <div key={e.entitlement_key} className="flex min-w-0 items-center gap-2 py-1">
                   <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
                     {e.enabled ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
