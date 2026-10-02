@@ -13,9 +13,9 @@ describe("AppSidebar active state", () => {
 
   it.each([
     ["Home", "/app"], ["Content", "/app/content"], ["Campaigns", "/app/campaigns"],
-    ["Creative Studio", "/app/creative-studio"], ["WhatsApp", "/app/whatsapp/inbox"], ["Leads", "/app/leads"],
+    ["Creative Studio", "/app/creative-studio"], ["Messages", "/app/whatsapp/inbox"], ["Leads", "/app/leads"],
     ["Analytics", "/app/analytics"], ["Flow AI", "/app/flow-ai"], ["Automations", "/app/automations"],
-    ["Integrations", "/app/integrations"], ["Settings", "/app/settings"],
+    ["Integrations", "/app/integrations"], ["Billing", "/app/billing"], ["Settings", "/app/settings"],
   ])("marks %s as the accessible current page", (label, path) => {
     renderSidebar(path);
     expect(screen.getByRole("link", { name: label })).toHaveAttribute("aria-current", "page");
@@ -32,34 +32,45 @@ describe("AppSidebar active state", () => {
   });
 
   it.each([
-    ["/app/whatsapp/inbox", "WhatsApp Inbox"],
-    ["/app/whatsapp/contacts", "WhatsApp Contacts"],
-    ["/app/whatsapp/templates", "WhatsApp Templates"],
-    ["/app/whatsapp/settings", "WhatsApp Settings"],
-  ])("keeps the WhatsApp parent selected and marks the child at %s", (path, childName) => {
+    ["/app/whatsapp/inbox", "Messages Inbox"],
+    ["/app/whatsapp/contacts", "Messages Contacts"],
+    ["/app/whatsapp/templates", "Messages Templates"],
+    ["/app/whatsapp/settings", "Messages Settings"],
+  ])("keeps the Messages parent selected and marks the child at %s", (path, childName) => {
     renderSidebar(path);
-    // The single "WhatsApp" parent stays selected across every child page.
-    expect(screen.getByRole("link", { name: "WhatsApp" })).toHaveAttribute("aria-current", "page");
+    // The single "Messages" parent stays selected across every child page.
+    expect(screen.getByRole("link", { name: "Messages" })).toHaveAttribute("aria-current", "page");
     // ...and the specific child route is marked current too.
     expect(screen.getByRole("link", { name: childName })).toHaveAttribute("aria-current", "page");
     // No cross-contamination with the top-level items.
     expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   });
 
-  it("exposes the WhatsApp child navigation only while inside the section", () => {
-    renderSidebar("/app/leads");
-    expect(screen.queryByRole("link", { name: "WhatsApp Contacts" })).not.toBeInTheDocument();
-    cleanup();
-    renderSidebar("/app/whatsapp/inbox");
-    expect(screen.getByRole("link", { name: "WhatsApp Contacts" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "WhatsApp Templates" })).toBeInTheDocument();
+  it("groups related destinations while keeping Billing and Settings directly visible", () => {
+    renderSidebar("/app");
+    expect(screen.getByRole("button", { name: "Business" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Marketing" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Customers" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Automations" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Insights" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Billing" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
   });
 
-  it("links the WhatsApp sub-nav Automations into the shared module with a WhatsApp filter, and Analytics to the WhatsApp-owned page", () => {
+  it("exposes the Messages child navigation only while inside the section", () => {
+    renderSidebar("/app/leads");
+    expect(screen.queryByRole("link", { name: "Messages Contacts" })).not.toBeInTheDocument();
+    cleanup();
     renderSidebar("/app/whatsapp/inbox");
-    expect(screen.getByRole("link", { name: "WhatsApp Automations" })).toHaveAttribute("href", "/app/automations?trigger=conversation");
-    // Phase 11: WhatsApp Analytics is now its own operational page inside
-    // the WhatsApp section, not a filtered link into global Analytics.
-    expect(screen.getByRole("link", { name: "WhatsApp Analytics" })).toHaveAttribute("href", "/app/whatsapp/analytics");
+    expect(screen.getByRole("link", { name: "Messages Contacts" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Messages Templates" })).toBeInTheDocument();
+  });
+
+  it("links the Messages sub-nav Automations into the shared module with a Messages filter, and Analytics to the Messages-owned page", () => {
+    renderSidebar("/app/whatsapp/inbox");
+    expect(screen.getByRole("link", { name: "Messages Automations" })).toHaveAttribute("href", "/app/automations?trigger=conversation");
+    // Phase 11: Messages Analytics is now its own operational page inside
+    // the Messages section, not a filtered link into global Analytics.
+    expect(screen.getByRole("link", { name: "Messages Analytics" })).toHaveAttribute("href", "/app/whatsapp/analytics");
   });
 });
