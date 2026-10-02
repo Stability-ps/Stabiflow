@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -192,7 +192,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   ];
 
   const missing = completeness.items.filter((i) => !i.done);
-  const sectionButton = (id: string, title: string, description: string, complete: boolean, content: React.ReactNode) => {
+  const sectionButton = (id: string, title: string, description: string, complete: boolean, content: ReactNode) => {
     const open = openSection === id;
     return (
       <Card className="overflow-hidden border-border/70 shadow-sm">
