@@ -61,7 +61,7 @@ export class BusinessStudioError extends Error {
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(import.meta.env.VITE_BUSINESS_STUDIO_FUNCTION || "business-studio", { body });
+  const { data, error } = await supabase.functions.invoke("business-studio-preview", { body });
   if (error) {
     const payload = ((await readErrorPayloadFromContext(error)) ?? data) as { error?: string; code?: string } | null;
     throw new BusinessStudioError(payload?.error || error.message || "Request failed", payload?.code);
