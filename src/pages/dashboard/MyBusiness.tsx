@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -100,6 +100,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
 
   const identity = bundle.identity;
+  useEffect(() => { setForm(toForm(identity)); }, [identity]);
   const provenance = (identity.field_provenance ?? {}) as Record<string, { source?: string }>;
   const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -294,7 +295,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         {sectionButton("contact", "Contact & locations", "Email, phone, WhatsApp and business locations", bundle.contacts.length > 0 && bundle.locations.length > 0, (
           <div className="space-y-4">
             <FactListSection {...listProps} title="Contact details" table="business_contacts" rows={bundle.contacts as never} fields={contactFields} defaults={{ kind: "email", is_public: true }} summarize={(r) => `${String(r.kind)}: ${String(r.value)}${r.label ? ` (${String(r.label)})` : ""}${r.is_primary ? " · main" : ""}`} />
-            <FactListSection {...listProps} title="Locations" table="business_locations" rows={bundle.locations as never} fields={[{ name: "label", label: "Label", placeholder: "e.g. Head office" },{ name: "address_line1", label: "Address", required: true },{ name: "address_line2", label: "Address line 2" },{ name: "city", label: "City" },{ name: "region", label: "Province / region" },{ name: "postal_code", label: "Postal code" },{ name: "is_primary", label: "Main location", type: "checkbox" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")} />
+            <FactListSection {...listProps} title="Locations" table="business_locations" rows={bundle.locations as never} fields={[{ name: "label", label: "Label", placeholder: "e.g. Head office or Online" },{ name: "address_line1", label: "Address" },{ name: "address_line2", label: "Address line 2" },{ name: "city", label: "City" },{ name: "region", label: "Province / region" },{ name: "postal_code", label: "Postal code" },{ name: "is_primary", label: "Main location", type: "checkbox" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")} />
           </div>
         ))}
 
@@ -314,7 +315,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           <div className="space-y-4">
             <FactListSection {...listProps} title="Projects" table="business_projects" rows={bundle.projects as never} fields={[{ name: "title", label: "Project", required: true },{ name: "client_name", label: "Client" },{ name: "location", label: "Location" },{ name: "completed_year", label: "Year completed", type: "number" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.title)}${r.client_name ? ` for ${String(r.client_name)}` : ""}`} />
             <FactListSection {...listProps} title="Certifications and accreditations" table="business_certifications" rows={bundle.certifications as never} fields={[{ name: "name", label: "Name", required: true },{ name: "issuer", label: "Issued by" },{ name: "credential_id", label: "Certificate number" },{ name: "issued_on", label: "Issued on", type: "date" },{ name: "expires_on", label: "Expires on", type: "date" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => String(r.name)} />
-            <FactListSection {...listProps} title="Registration numbers" description="Private unless you choose to show them." table="business_identifiers" rows={bundle.identifiers as never} fields={[{ name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },{ name: "value", label: "Number", required: true },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ country_code: identity.country_code, is_public: false }} summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`} />
+            <FactListSection {...listProps} title="Registration numbers" description="Private unless you choose to show them." table="business_identifiers" rows={bundle.identifiers as never} sortable={false} fields={[{ name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },{ name: "value", label: "Number", required: true },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ country_code: identity.country_code, is_public: false }} summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`} />
           </div>
         ))}
       </div>
