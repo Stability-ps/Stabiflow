@@ -96,7 +96,9 @@ Deno.serve(async (req: Request) => {
       ]);
       const hasSubscription = (accessPlans.data ?? []).some((p: { source?: string }) => p.source === "subscription");
       const fullStudio = hasSubscription && !!ents["business_studio.access"]?.enabled;
-      const teaserContent = fullStudio ? content : {
+      const canExportPdf = !!ents["business_profile.pdf_export"]?.enabled;
+      const purchasedProfile = !fullStudio && canExportPdf;
+      const previewContent = (fullStudio || purchasedProfile) ? content : {
         ...content,
         about: content.about ? content.about.slice(0, 220) + (content.about.length > 220 ? "..." : "") : null,
         mission: null, vision: null, values: [],
@@ -106,11 +108,11 @@ Deno.serve(async (req: Request) => {
       };
       return json(req, {
         ok: true,
-        content: teaserContent,
+        content: previewContent,
         templates: templates.data ?? [],
-        accessMode: fullStudio ? "full" : "teaser",
-        canExportPdf: !!ents["business_profile.pdf_export"]?.enabled,
-        canUsePremium: fullStudio && !!ents["business_profile.premium_designs"]?.enabled,
+        accessMode: fullStudio ? "full" : purchasedProfile ? "purchased" : "teaser",
+        canExportPdf,
+        canUsePremium: !!ents["business_profile.premium_designs"]?.enabled,
       });
     }
 
