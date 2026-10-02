@@ -132,8 +132,7 @@ export default function WhatsAppIntake() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Intake</h2>
           <p className="text-sm text-muted-foreground">
-            Define what StabiFlow must collect before an enquiry is qualified. The AI extracts these answers from a WhatsApp
-            conversation, asks the next missing one, and fires <code className="text-xs">conversation.intake_completed</code> when they're all in.
+            Choose the information StabiFlow should collect from new WhatsApp enquiries. AI can recognise answers already given and ask only for the important information that is still missing.
           </p>
         </div>
         {canManage && <Button size="sm" onClick={handleCreateSchema} disabled={busy}><Plus className="mr-1.5 h-4 w-4" /> New schema</Button>}
@@ -143,7 +142,7 @@ export default function WhatsAppIntake() {
         <EmptyState
           icon={ClipboardList}
           title="No intake schema configured"
-          description="Create one if you want StabiFlow to automatically qualify enquiries and identify missing information. Until then, WhatsApp AI keeps working with its normal conversation logic."
+          description="Create a question set if you want StabiFlow to qualify new enquiries automatically. You choose what information matters; without one, Messages continues working normally."
           action={canManage ? <Button onClick={handleCreateSchema} disabled={busy}>Create a schema</Button> : undefined}
         />
       ) : (
@@ -213,7 +212,7 @@ export default function WhatsAppIntake() {
 
                 {fields.length === 0 ? (
                   <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-                    No fields yet. Add the questions this schema should collect - order matters: the AI asks them top to bottom.
+                    No questions yet. Add what StabiFlow should learn from a new enquiry. The order controls which missing question AI asks first.
                   </p>
                 ) : (
                   <div className="overflow-x-auto rounded-lg border">
@@ -268,11 +267,11 @@ export default function WhatsAppIntake() {
 
                 {canManage && numbers.length > 0 && (
                   <div className="rounded-md border p-3">
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">Which schema each WhatsApp number uses</p>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Question set used by each WhatsApp number</p>
                     <div className="space-y-1.5">
                       {numbers.map((n) => (
                         <div key={n.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                          <span>{n.verified_name || n.display_phone_number || n.phone_number_id}</span>
+                          <span><span className="block font-medium">{n.verified_name || "WhatsApp Business"}</span><span className="block text-xs text-muted-foreground">{n.display_phone_number || n.phone_number_id}</span></span>
                           <Select
                             defaultValue={n.intake_schema_id ?? "__default__"}
                             onValueChange={(v) => guard(async () => { await setNumberIntakeSchema(workspaceId, n.id, v === "__default__" ? null : v); toast.success("Number updated"); })}
