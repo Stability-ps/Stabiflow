@@ -117,6 +117,13 @@ export function ConversationList({
           </Button>
         </div>
 
+        <div className="flex gap-1 overflow-x-auto pb-0.5">
+          <Button type="button" size="sm" variant={!filters.unreadOnly && !filters.assignment && !filters.handling ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ unreadOnly: false, assignment: null, assignedStaffId: null, handling: null })}>All</Button>
+          <Button type="button" size="sm" variant={filters.unreadOnly ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ unreadOnly: !filters.unreadOnly })}>Unread</Button>
+          <Button type="button" size="sm" variant={filters.assignment === "unassigned" ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ assignment: filters.assignment === "unassigned" ? null : "unassigned", assignedStaffId: null })}>Unassigned</Button>
+          <Button type="button" size="sm" variant={filters.handling === "human_attention" ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ handling: filters.handling === "human_attention" ? null : "human_attention" })}>Needs reply</Button>
+        </div>
+
         {panelOpen && (
           <div className="space-y-2 rounded-md border bg-muted/30 p-2">
             <Select value={filters.inboxStatus ?? "all"} onValueChange={(v) => set({ inboxStatus: v === "all" ? null : (v as InboxConversationFilters["inboxStatus"]) })}>
