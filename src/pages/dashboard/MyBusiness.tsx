@@ -301,7 +301,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
               onSelect={setSelectedBrand}
             />
           )}
-          {canEdit && selectedBrand && selectedBrand.id !== identity.brand_profile_id && selectedBrand.workspace_id === currentWorkspaceId && (
+          {canEdit && selectedBrand && selectedBrand.id !== identity.brand_profile_id && selectedBrand.workspaceId === currentWorkspaceId && (
             <Button size="sm" variant="outline" onClick={useBrandForProfile}>
               Use "{selectedBrand.name}" for my business profile
             </Button>
