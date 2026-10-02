@@ -37,6 +37,7 @@ type Props = {
   canEdit: boolean;
   onChanged: () => void;
   defaults?: Record<string, unknown>;
+  sortable?: boolean;
 };
 
 function emptyDraft(fields: FactField[], defaults: Record<string, unknown> = {}): Record<string, unknown> {
@@ -63,7 +64,7 @@ function toDbValues(fields: FactField[], draft: Record<string, unknown>): Record
  * whether the customer has confirmed it; a user edit resets the source to
  * "Entered by you".
  */
-export function FactListSection({ title, description, table, workspaceId, userId, rows, fields, summarize, canEdit, onChanged, defaults }: Props) {
+export function FactListSection({ title, description, table, workspaceId, userId, rows, fields, summarize, canEdit, onChanged, defaults, sortable = true }: Props) {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
@@ -93,7 +94,7 @@ export function FactListSection({ title, description, table, workspaceId, userId
         // Defaults for keys with no visible field (e.g. an identifier's
         // country_code) are still written on insert.
         const hiddenDefaults = Object.fromEntries(Object.entries(defaults ?? {}).filter(([k]) => !fields.some((f) => f.name === k)));
-        await insertBusinessChild(table, { ...hiddenDefaults, ...values, workspace_id: workspaceId, source: "user", sort_order: rows.length });
+        await insertBusinessChild(table, { ...hiddenDefaults, ...values, workspace_id: workspaceId, source: "user", ...(sortable ? { sort_order: rows.length } : {}) });
       } else if (editingId) {
         await updateBusinessChild(table, editingId, { ...values, source: "user" });
       }
