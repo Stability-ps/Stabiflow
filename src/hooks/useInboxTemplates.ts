@@ -26,7 +26,16 @@ export function useInboxTemplates(workspaceId: string | null) {
         .eq("workspace_id", workspaceId as string)
         .order("name", { ascending: true });
       if (error) throw new Error(error.message);
-      return data as WhatsAppTemplateRow[];
+      // Meta can expose the same logical template through more than one synced
+      // number/account row. Keep one visible row per name/language/body so the
+      // customer does not see confusing duplicates in Messages.
+      const unique = new Map<string, WhatsAppTemplateRow>();
+      for (const row of (data as WhatsAppTemplateRow[])) {
+        const body = row.components.find((part) => (part.type || "").toUpperCase() === "BODY")?.text?.trim() || "";
+        const key = [row.name, row.language, row.category || "", row.provider_status, body].join("|");
+        if (!unique.has(key)) unique.set(key, row);
+      }
+      return Array.from(unique.values());
     },
     enabled: !!workspaceId,
   });
