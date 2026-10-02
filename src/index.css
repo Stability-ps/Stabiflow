@@ -113,3 +113,99 @@
     caret-color: hsl(var(--foreground));
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile / PWA shell
+   --------------------------------------------------------------------------- */
+:root {
+  /* Height of the phone bottom navigation bar (without the safe-area inset). */
+  --bottom-nav-bar: 3.75rem;
+  /* Space page content must leave for the bottom nav - 0 on md+ where the
+     desktop sidebar is used instead. */
+  --bottom-nav-height: 0px;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --bottom-nav-height: calc(var(--bottom-nav-bar) + env(safe-area-inset-bottom));
+  }
+
+  /* Keep focused fields / anchored targets clear of the sticky header and
+     bottom navigation when the browser scrolls them into view. */
+  html {
+    scroll-padding-top: calc(4rem + env(safe-area-inset-top));
+    scroll-padding-bottom: calc(var(--bottom-nav-height) + 1rem);
+  }
+
+  /* iOS zooms into any focused control under 16px - keep form text at 16px
+     on phones (desktop sizes unchanged). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Dense creation/document tools opt in with .mobile-touch. Keep their
+     desktop density, but give phone controls a reliable 44px touch target. */
+  .mobile-touch :is(button:not([role="checkbox"]):not([role="radio"]), [role="combobox"], select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])) {
+    min-height: 44px;
+  }
+
+  .mobile-touch :is([role="checkbox"], [role="radio"]) {
+    position: relative;
+  }
+
+  .mobile-touch :is([role="checkbox"], [role="radio"])::after {
+    content: "";
+    position: absolute;
+    inset: -14px;
+  }
+
+  /* Toasts sit above the bottom navigation instead of covering it. */
+  [data-sonner-toaster][data-y-position="bottom"] {
+    bottom: calc(var(--bottom-nav-height) + 0.75rem) !important;
+  }
+
+  /* While the on-screen keyboard is open the bottom bar would float above
+     it and hide the field being edited - tuck it away (set by AppLayout). */
+  html[data-keyboard-open] .mobile-bottom-nav {
+    display: none;
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Installed PWA: no pull-to-refresh bounce revealing the browser chrome. */
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Card padding: 1rem on phones, the original 1.5rem from sm up. A component
+   class (not a utility) so any p-* a caller passes still overrides it. */
+@layer components {
+  .card-pad {
+    padding: 1rem;
+  }
+  @media (min-width: 640px) {
+    .card-pad {
+      padding: 1.5rem;
+    }
+  }
+}
