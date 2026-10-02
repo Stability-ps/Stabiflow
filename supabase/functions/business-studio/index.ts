@@ -156,7 +156,7 @@ Deno.serve(async (req: Request) => {
         const value = result.draft[field];
         if (value && !existing?.[field]) entries.push({ field, value });
       }
-      if (result.draft.core_values.length) entries.push({ field: "core_values", value: result.draft.core_values });
+      if (result.draft.core_values.length && (!Array.isArray(existing?.core_values) || existing.core_values.length === 0)) entries.push({ field: "core_values", value: result.draft.core_values });
       if (entries.length) {
         await sb.from("business_fact_proposals").update({ status: "superseded", reviewed_at: new Date().toISOString() })
           .eq("workspace_id", workspaceId).eq("origin", "ai_wording").eq("status", "pending");
