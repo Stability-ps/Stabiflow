@@ -15,7 +15,8 @@ export type NeedsAttentionKind =
   | "campaign_failed"
   | "integration_unhealthy"
   | "automation_failed"
-  | "lead_unowned";
+  | "lead_unowned"
+  | "billing_payment";
 
 export type NeedsAttentionItem = {
   /** stable + unique per render - the underlying alert/row id, never a
@@ -28,7 +29,7 @@ export type NeedsAttentionItem = {
   /** ISO timestamp of the underlying event, or null when genuinely unknown
    *  (never a synthesised "now" - audit M14). */
   occurredAt: string | null;
-  targetType: "conversation" | "campaign" | "integration" | "automation" | "lead";
+  targetType: "conversation" | "campaign" | "integration" | "automation" | "lead" | "billing";
   targetId: string;
   actionPath: string;
   /** the verb shown when the viewer may actually perform the action */
