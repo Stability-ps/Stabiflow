@@ -163,6 +163,8 @@ export default function Billing() {
   const plans = (catalog.data ?? []).filter((p) => p.plan_kind !== "free");
   const oneOff = plans.filter((p) => p.plan_kind === "one_off");
   const recurring = plans.filter((p) => p.plan_kind === "subscription");
+  const currentLabel = sub?.plan?.name ?? highestPurchase?.plan?.name ?? "Free";
+  const currentIsPaid = !!sub || !!highestPurchase;
 
   const planCard = (plan: CatalogPlan, priceInterval: BillingInterval) => {
     const price = plan.prices.find((p) => p.billing_interval === priceInterval);
@@ -242,11 +244,11 @@ export default function Billing() {
         </Card>
       )}
 
-      <Card className={sub ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm"}>
+      <Card className={currentIsPaid ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm"}>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${sub ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${currentIsPaid ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
                 <CreditCard className="h-4 w-4" />
               </span>
               Current plan
@@ -255,14 +257,23 @@ export default function Billing() {
               <Badge className={sub.status === "active" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
                 {STATUS_LABELS[sub.status] ?? sub.status}
               </Badge>
+            ) : highestPurchase ? (
+              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Purchased</Badge>
             ) : (
               <Badge variant="secondary">Free</Badge>
             )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-white/70 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your access</p>
+              <p className="truncate font-semibold text-slate-900">{currentLabel}</p>
+            </div>
+            {highestPurchase && !sub && <span className="shrink-0 text-xs font-medium text-emerald-700">Paid once · permanent</span>}
+          </div>
           {(entitlements.data ?? []).length > 0 && (
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1.5 border-b border-slate-200 pb-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:grid-cols-2">
               {(entitlements.data ?? []).map((e) => (
                 <div key={e.entitlement_key} className="flex min-w-0 items-center gap-2 py-1">
                   <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
