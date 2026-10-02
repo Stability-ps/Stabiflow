@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { MoreVertical, Plus, Workflow } from "lucide-react";
@@ -12,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
 import { useAutomations, type AutomationRow } from "@/hooks/useAutomations";
 import { setAutomationStatus, deleteAutomation, EVENT_TYPE_LABELS } from "@/lib/automations";
+import { fetchEntitlements } from "@/lib/billing";
 import { AutomationBuilderDialog, type AutomationTemplate } from "@/pages/dashboard/automations/AutomationBuilderDialog";
 import { AutomationRunsSheet } from "@/pages/dashboard/automations/AutomationRunsSheet";
 
@@ -37,6 +39,13 @@ export default function Automations() {
   const canEnable = roleHasPermission(role, "automation.enable");
   const canDelete = roleHasPermission(role, "automation.delete");
   const canViewRuns = roleHasPermission(role, "automation.view_runs");
+  const entitlementQuery = useQuery({
+    queryKey: ["entitlements", currentWorkspaceId],
+    queryFn: () => fetchEntitlements(currentWorkspaceId as string),
+    enabled: !!currentWorkspaceId,
+  });
+  const automationEntitlement = entitlementQuery.data?.find((e) => e.entitlement_key === "automation_runs");
+  const hasAutomationSubscription = automationEntitlement?.enabled === true;
 
   const { data: automations, isLoading, refetch } = useAutomations(canView ? currentWorkspaceId : null);
 
@@ -57,12 +66,23 @@ export default function Automations() {
   const [runsAutomation, setRunsAutomation] = useState<AutomationRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  if (!currentWorkspaceId || isLoading) {
+  if (!currentWorkspaceId || isLoading || entitlementQuery.isLoading) {
     return <div className="h-[70vh] animate-pulse rounded-lg bg-muted" />;
   }
 
   if (!canView) {
     return <EmptyState icon={Workflow} title="Automations" description="You don't have permission to view this workspace's automations. Ask a workspace owner or admin." />;
+  }
+
+  if (!hasAutomationSubscription) {
+    return (
+      <EmptyState
+        icon={Workflow}
+        title="Unlock Automations"
+        description="Automations are included with a StabiFlow subscription. Upgrade to Business for 500 runs per month or Growth for 2,000 runs per month."
+        action={<Button size="sm" asChild><a href="/app/billing">View plans</a></Button>}
+      />
+    );
   }
 
   async function toggleStatus(automation: AutomationRow) {
