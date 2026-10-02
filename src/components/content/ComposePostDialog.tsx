@@ -18,7 +18,7 @@ import { scheduleContentPost, publishContentPostNow } from "@/lib/contentFunctio
 type PlatformVariant = { id: string; platform: string; storage_path: string; width_px: number; height_px: number; mime_type: string; file_size_bytes: number };
 type MediaAsset = { id: string; title: string; storage_path: string; mime_type: string; width_px: number; height_px: number; file_size_bytes: number; content_platform_variants?: PlatformVariant[] };
 
-export function ComposePostDialog({ open, onOpenChange, workspaceTimezone }: { open: boolean; onOpenChange: (open: boolean) => void; workspaceTimezone: string }) {
+export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initialDate }: { open: boolean; onOpenChange: (open: boolean) => void; workspaceTimezone: string; initialDate?: Date }) {
   const { currentWorkspaceId } = useAuth();
   const queryClient = useQueryClient();
   const { data: destinations } = useSocialDestinations(currentWorkspaceId);
@@ -28,7 +28,10 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone }: { o
   const [selectedAssetId, setSelectedAssetId] = useState<string>("");
   const [caption, setCaption] = useState("");
   const [whenMode, setWhenMode] = useState<"now" | "schedule">("schedule");
-  const [scheduledAtLocal, setScheduledAtLocal] = useState(() => toLocalDateTimeInputValue(new Date(Date.now() + 60 * 60 * 1000), workspaceTimezone));
+  const [scheduledAtLocal, setScheduledAtLocal] = useState(() => {
+    const base = initialDate ? new Date(initialDate.getFullYear(), initialDate.getMonth(), initialDate.getDate(), 9, 0) : new Date(Date.now() + 60 * 60 * 1000);
+    return toLocalDateTimeInputValue(base, workspaceTimezone);
+  });
   const [submitting, setSubmitting] = useState(false);
 
   const selectedAsset = (assets as MediaAsset[] | undefined)?.find((a) => a.id === selectedAssetId) ?? null;
