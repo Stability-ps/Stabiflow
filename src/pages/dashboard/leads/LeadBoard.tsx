@@ -25,6 +25,7 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
   const activeStages = (stages || []).filter((s) => s.is_active).sort((a, b) => a.sort_order - b.sort_order);
   const boardLeads = leads.filter((l) => l.pipeline_id === selectedPipelineId && l.status === "active");
   const totalValue = boardLeads.reduce((sum, lead) => sum + (Number(lead.estimated_value) || 0), 0);
+  const overdueCount = boardLeads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at).getTime() < Date.now()).length;
 
   const handleDrop = async (stageId: string) => {
     const leadId = dragLeadId;
@@ -59,6 +60,7 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="rounded-full bg-muted px-2.5 py-1"><strong>{boardLeads.length}</strong> open</span>
           <span className="rounded-full bg-muted px-2.5 py-1"><strong>{boardLeads.filter((lead) => lead.qualification_status === "qualified").length}</strong> qualified</span>
+          {overdueCount > 0 && <span className="rounded-full bg-destructive/10 px-2.5 py-1 text-destructive"><strong>{overdueCount}</strong> overdue</span>}
           {totalValue > 0 && <span className="rounded-full bg-muted px-2.5 py-1"><strong>R{totalValue.toLocaleString("en-ZA", { maximumFractionDigits: 0 })}</strong> pipeline value</span>}
         </div>
       </div>
@@ -93,6 +95,7 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
                   <div className="mt-2 flex flex-wrap items-center gap-1">
                     <Badge variant="outline" className="text-[10px]">{lead.source || "manual"}</Badge>
                     {lead.qualification_status === "qualified" && <Badge variant="secondary" className="text-[10px]">Qualified</Badge>}
+                    {lead.next_follow_up_at && <Badge variant="outline" className={`text-[10px] ${new Date(lead.next_follow_up_at).getTime() < Date.now() ? "border-destructive/40 text-destructive" : ""}`}>{new Date(lead.next_follow_up_at).getTime() < Date.now() ? "Follow-up overdue" : `Follow up ${new Date(lead.next_follow_up_at).toLocaleDateString()}`}</Badge>}
                     <span className="ml-auto text-[10px] text-muted-foreground">{lead.human_reference}</span>
                   </div>
                 </div>
