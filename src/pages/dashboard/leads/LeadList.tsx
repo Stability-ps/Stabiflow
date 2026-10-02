@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { qualificationStatusLabel } from "@/lib/qualification";
 import type { LeadRow } from "@/hooks/useLeads";
 
-export type LeadListFilter = "all" | "active" | "converted" | "lost";
+export type LeadListFilter = "all" | "active" | "qualified" | "follow_up" | "overdue" | "converted" | "lost";
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
@@ -23,7 +23,12 @@ export function LeadList({ leads, onSelect, filter, onFilterChange, search, onSe
   onSearchChange: (value: string) => void;
 }) {
   const filtered = leads.filter((l) => {
-    if (filter !== "all" && l.status !== filter) return false;
+    if (filter === "active" && l.status !== "active") return false;
+    if (filter === "converted" && l.status !== "converted") return false;
+    if (filter === "lost" && l.status !== "lost") return false;
+    if (filter === "qualified" && (l.status !== "active" || l.qualification_status !== "qualified")) return false;
+    if (filter === "follow_up" && (l.status !== "active" || !l.next_follow_up_at)) return false;
+    if (filter === "overdue" && (l.status !== "active" || !l.next_follow_up_at || new Date(l.next_follow_up_at).getTime() >= Date.now())) return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       if (![l.contact_name, l.phone, l.email, l.human_reference, l.company_name].some((v) => (v || "").toLowerCase().includes(q))) return false;
@@ -43,6 +48,9 @@ export function LeadList({ leads, onSelect, filter, onFilterChange, search, onSe
           <SelectContent>
             <SelectItem value="all">All leads</SelectItem>
             <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="qualified">Qualified</SelectItem>
+            <SelectItem value="follow_up">Needs follow-up</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
             <SelectItem value="converted">Converted</SelectItem>
             <SelectItem value="lost">Lost</SelectItem>
           </SelectContent>
@@ -61,7 +69,8 @@ export function LeadList({ leads, onSelect, filter, onFilterChange, search, onSe
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{l.contact_name || l.phone || l.human_reference}</p>
-                <p className="truncate text-xs text-muted-foreground">{l.human_reference} - {l.source}</p>
+                <p className="truncate text-xs text-muted-foreground">{l.company_name ? `${l.company_name} · ` : ""}{l.human_reference} · {l.source}</p>
+                {l.next_follow_up_at && <p className={`mt-1 text-xs ${new Date(l.next_follow_up_at).getTime() < Date.now() ? "font-medium text-destructive" : "text-muted-foreground"}`}>{new Date(l.next_follow_up_at).getTime() < Date.now() ? "Overdue" : "Follow up"} · {new Date(l.next_follow_up_at).toLocaleString()}</p>}
               </div>
               <Badge variant="secondary" className="shrink-0">{qualificationStatusLabel(l.qualification_status)}</Badge>
               <Badge variant="secondary" className={`shrink-0 ${STATUS_TONE[l.status]}`}>{l.status}</Badge>
