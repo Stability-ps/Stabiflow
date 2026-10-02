@@ -31,9 +31,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Business Studio", path: "/app/business-studio", icon: Wand2, flag: "module.business_studio" },
   { label: "My Business", path: "/app/business", icon: Building2 },
   { label: "Documents", path: "/app/documents", icon: Files },
+  { label: "Creative Studio", path: "/app/creative-studio", icon: Palette, flag: "module.creative_studio" },
   { label: "Content", path: "/app/content", icon: FileText, flag: "module.content" },
   { label: "Campaigns", path: "/app/campaigns", icon: Megaphone, flag: "module.campaigns" },
-  { label: "Creative Studio", path: "/app/creative-studio", icon: Palette, flag: "module.creative_studio" },
   {
     // path is the section root (the index route redirects to /inbox). Using
     // the root - not a child path - is what lets the single sidebar item
@@ -103,7 +103,7 @@ export type MobileNavItem = {
 
 // Order of the "More" sheet. Business Studio itself lives in the Business hub.
 const MORE_ORDER = [
-  "/app/documents", "/app/content", "/app/campaigns", "/app/creative-studio", "/app/customers", "/app/analytics",
+  "/app/documents", "/app/creative-studio", "/app/content", "/app/campaigns", "/app/customers", "/app/analytics",
   "/app/flow-ai", "/app/automations", "/app/integrations", "/app/billing", "/app/settings",
 ];
 
