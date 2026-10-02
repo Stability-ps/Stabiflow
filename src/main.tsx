@@ -9,6 +9,12 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
+// index.html starts with the branded launch background so Android never
+// flashes a white canvas between the native splash and the first React paint.
+window.requestAnimationFrame(() => {
+  document.body.style.removeProperty("background-color")
+})
+
 // Keep the installed PWA on the same production release as the browser app.
 // A new service worker takes control immediately (skipWaiting + clients.claim
 // in /sw.js); when that happens to an already-installed app, reload once so
