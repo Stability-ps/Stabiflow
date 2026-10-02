@@ -62,8 +62,8 @@ export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
                 <Download className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">Install StabiFlow</span>
-                <span className="block text-xs text-muted-foreground">Open without the browser bar</span>
+                <span className="block text-sm font-medium">{pwa.installReady ? "Install StabiFlow" : "Prepare StabiFlow app"}</span>
+                <span className="block text-xs text-muted-foreground">{pwa.installReady ? "Install the full app on this phone" : "Chrome is still preparing the full app install"}</span>
               </span>
               <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             </button>
@@ -75,7 +75,7 @@ export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
                 {pwa.isiOS ? (
                   <p><Share2 className="mr-1 inline h-4 w-4" aria-hidden="true" />In Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.</p>
                 ) : pwa.isAndroid ? (
-                  <p>For the full app experience, open this page directly in <strong>Chrome</strong>, then use <strong>Install app</strong>. If Chrome only offers <strong>Add to Home screen</strong>, it is creating a shortcut rather than installing the PWA.</p>
+                  <p>Do not add a shortcut. Close this message, stay on <strong>app.stabiflow.com</strong> in Chrome and try <strong>Install StabiFlow</strong> again after Chrome finishes checking the app. A real install opens StabiFlow without the browser bar.</p>
                 ) : (
                   <p>Open your browser menu and choose <strong>Install app</strong>. If that option is missing, the browser may still be checking install requirements.</p>
                 )}

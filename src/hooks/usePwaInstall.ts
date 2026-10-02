@@ -74,6 +74,7 @@ export function usePwaInstall() {
 
   return {
     canInstall: !installed,
+    installReady: !!installPrompt,
     installed,
     isiOS,
     isAndroid,
