@@ -18,8 +18,8 @@ import { QUALIFICATION_STATUSES, qualificationStatusLabel, validateQualification
 import { opportunityStatusLabel } from "@/lib/opportunityLifecycle";
 import { openOpportunityActionLabel, pluralizeLabel } from "@/lib/terminology";
 import {
-  addCrmNote, assignLead, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
-  moveLeadStage, reopenLead, reopenOpportunity, setLeadQualification, signLeadAttachment,
+  addCrmNote, assignLead, completeLeadFollowUp, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
+  moveLeadStage, reopenLead, reopenOpportunity, setLeadFollowUp, setLeadQualification, signLeadAttachment,
 } from "@/lib/leads";
 import { Paperclip } from "lucide-react";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
@@ -129,6 +129,8 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
   const [newOpportunityTitle, setNewOpportunityTitle] = useState("");
   const [customerSheetId, setCustomerSheetId] = useState<string | null>(null);
   const [showOpportunityForm, setShowOpportunityForm] = useState(!!autoOpenOpportunityForm);
+  const [followUpAt, setFollowUpAt] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
@@ -190,6 +192,35 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
       toast.success("Stage updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to move this lead");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleScheduleFollowUp = async () => {
+    if (!followUpAt) return;
+    setBusy(true);
+    try {
+      await setLeadFollowUp(workspaceId, leadId, new Date(followUpAt).toISOString(), followUpNote.trim() || undefined);
+      setFollowUpAt("");
+      setFollowUpNote("");
+      invalidate();
+      toast.success("Follow-up scheduled");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to schedule follow-up");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCompleteFollowUp = async () => {
+    setBusy(true);
+    try {
+      await completeLeadFollowUp(workspaceId, leadId);
+      invalidate();
+      toast.success("Follow-up completed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to complete follow-up");
     } finally {
       setBusy(false);
     }
@@ -390,6 +421,29 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
             )}
             <Textarea placeholder="Qualification notes" defaultValue={lead.qualification_notes || ""} onChange={(e) => setQualificationNotes(e.target.value)} className="min-h-[60px] text-xs" />
             <Button size="sm" variant="outline" onClick={handleSaveQualification} disabled={busy}>Save qualification</Button>
+          </section>
+        )}
+
+        {canEdit && lead.status === "active" && (
+          <section className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Next follow-up</p>
+                {lead.next_follow_up_at && (
+                  <p className={`mt-0.5 text-sm font-medium ${new Date(lead.next_follow_up_at).getTime() < Date.now() ? "text-destructive" : ""}`}>
+                    {new Date(lead.next_follow_up_at).toLocaleString()}
+                    {new Date(lead.next_follow_up_at).getTime() < Date.now() ? " · Overdue" : ""}
+                  </p>
+                )}
+                {lead.follow_up_note && <p className="mt-0.5 text-xs text-muted-foreground">{lead.follow_up_note}</p>}
+              </div>
+              {lead.next_follow_up_at && <Button size="sm" variant="outline" onClick={handleCompleteFollowUp} disabled={busy}>Done</Button>}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+              <Input type="datetime-local" value={followUpAt} onChange={(e) => setFollowUpAt(e.target.value)} className="h-8 text-xs" />
+              <Input placeholder="What should happen next?" value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} maxLength={500} className="h-8 text-xs" />
+              <Button size="sm" onClick={handleScheduleFollowUp} disabled={busy || !followUpAt}>{lead.next_follow_up_at ? "Reschedule" : "Schedule"}</Button>
+            </div>
           </section>
         )}
 
