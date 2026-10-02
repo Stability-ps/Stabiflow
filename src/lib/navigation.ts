@@ -16,11 +16,9 @@ export type NavChild = {
 
 export type NavItem = { label: string; path: string; icon: LucideIcon; children?: NavChild[]; flag?: FeatureFlagKey };
 
-// The primary sections from the StabiFlow product brief. "Messages" is the
-// WhatsApp channel area with its own child navigation - the Inbox, Contacts and
-// Templates pages plus filtered links into the shared Automations and
-// Analytics modules and its own Settings view. Every other item is a
-// single page.
+// The primary sections from the StabiFlow product brief. Messages keeps its
+// own page-level tabs for Inbox, Contacts, Templates and Intake, so the global
+// sidebar does not duplicate those destinations.
 //
 // Launch navigation: items with a `flag` are advanced StabiFlow modules,
 // hidden unless the workspace's feature flag is on (grandfathered
@@ -42,14 +40,6 @@ export const NAV_ITEMS: NavItem[] = [
     path: "/app/whatsapp",
     icon: MessageCircle,
     flag: "module.whatsapp",
-    children: [
-      { label: "Inbox", to: "/app/whatsapp/inbox" },
-      { label: "Contacts", to: "/app/whatsapp/contacts" },
-      { label: "Templates", to: "/app/whatsapp/templates" },
-      { label: "Automations", to: "/app/automations?trigger=conversation", external: true, flag: "module.automations" },
-      { label: "Analytics", to: "/app/whatsapp/analytics" },
-      { label: "Settings", to: "/app/whatsapp/settings" },
-    ],
   },
   { label: "Leads", path: "/app/leads", icon: Users, flag: "module.leads" },
   { label: "Customers", path: "/app/customers", icon: Contact, flag: "module.customers" },
