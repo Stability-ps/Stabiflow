@@ -161,6 +161,19 @@ export default function CreativeStudio() {
 
   const totalAds = conceptCount * Math.max(formats.length, 1);
 
+  function handleBrandSelect(profile: BrandProfile | null) {
+    if (profile?.id !== selectedBrand?.id) {
+      // Never carry brand-specific manual copy into a different company.
+      setCta("");
+      setHeadline("");
+      setSupportingText("");
+      setSelectedAssetId(null);
+      setAssetPurpose(null);
+      setReferencePreferences(DEFAULT_REFERENCE_PREFERENCES);
+    }
+    setSelectedBrand(profile);
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -187,12 +200,13 @@ export default function CreativeStudio() {
           )}
 
           {currentWorkspaceId && user && (
+            {selectedBrand && <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"><span className="font-medium">Active brand:</span> {selectedBrand.name}<span className="ml-2 text-xs text-muted-foreground">New adverts use this brand's saved identity and contact details.</span></div>}
             <BrandProfileSelector
               workspaceId={currentWorkspaceId}
               workspaceName={currentMembership?.workspace.name ?? ""}
               userId={user.id}
               selectedProfileId={selectedBrand?.id ?? null}
-              onSelect={setSelectedBrand}
+              onSelect={handleBrandSelect}
             />
           )}
 
