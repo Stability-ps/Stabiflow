@@ -16,7 +16,7 @@
  *    (Supabase REST/auth/storage, Edge Functions) and any other path.
  * Bump VERSION to drop every cache from earlier worker versions.
  */
-const VERSION = "v2";
+const VERSION = "v3";
 const PREFIX = "sf-";
 const SHELL_CACHE = `${PREFIX}shell-${VERSION}`;
 const ASSET_PREFIX = `${PREFIX}assets-${VERSION}-`;
@@ -94,7 +94,7 @@ self.addEventListener("fetch", (event) => {
 
   if (req.mode === "navigate") {
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: "no-store" })
         .then((res) => {
           if (res.ok && (res.headers.get("content-type") || "").includes("text/html")) {
             event.waitUntil(res.clone().text().then(storeShell).catch(() => undefined));
