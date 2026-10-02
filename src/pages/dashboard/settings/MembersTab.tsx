@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Mail, MoreHorizontal, UserMinus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceMembers, useWorkspacePendingInvitations } from "@/hooks/useWorkspaceMembers";
+import { fetchEntitlements } from "@/lib/billing";
 import { changeMemberRole, inviteMember, removeMember, revokeInvitation } from "@/lib/workspaceMembers";
 import { ROLE_LABELS, WORKSPACE_ROLES, canGrantRole, canManageMemberWithRole, type WorkspaceRole } from "@/lib/workspaceRoles";
 
@@ -31,6 +32,11 @@ export function MembersTab() {
   const queryClient = useQueryClient();
   const { data: members, isLoading: membersLoading } = useWorkspaceMembers(currentWorkspaceId);
   const { data: invitations, isLoading: invitesLoading } = useWorkspacePendingInvitations(currentWorkspaceId);
+  const entitlements = useQuery({
+    queryKey: ["entitlements", currentWorkspaceId],
+    queryFn: () => fetchEntitlements(currentWorkspaceId as string),
+    enabled: !!currentWorkspaceId,
+  });
   const callerRole = currentMembership?.role;
 
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -43,7 +49,12 @@ export function MembersTab() {
   const [renderedAt] = useState(() => Date.now());
 
   const grantableRoles = WORKSPACE_ROLES.filter((r) => canGrantRole(callerRole, r));
+  const seatEntitlement = entitlements.data?.find((e) => e.entitlement_key === "team_seats");
+  const seatLimit = seatEntitlement?.unlimited ? null : seatEntitlement?.limit_value ?? null;
+  const seatsUsed = members?.length ?? 0;
+  const seatAvailable = seatEntitlement?.enabled !== false && (seatLimit === null || seatsUsed < seatLimit);
   const canInvite = grantableRoles.length > 0;
+  const canCreateInvite = canInvite && seatAvailable;
 
   const invalidate = () =>
     Promise.all([
@@ -106,7 +117,7 @@ export function MembersTab() {
     }
   };
 
-  if (membersLoading || invitesLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  if (membersLoading || invitesLoading || entitlements.isLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
 
   return (
     <div className="space-y-6">
@@ -114,12 +125,21 @@ export function MembersTab() {
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <div>
             <CardTitle>Members</CardTitle>
-            <CardDescription>Everyone with access to this workspace.</CardDescription>
+            <CardDescription>
+              Everyone with access to this workspace.
+              {seatEntitlement?.enabled && (
+                <span className="ml-1">
+                  {seatLimit === null ? `${seatsUsed} seats used · unlimited` : `${seatsUsed} of ${seatLimit} seats used`}
+                </span>
+              )}
+            </CardDescription>
           </div>
           {canInvite && (
             <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) { setInvitationConfirmation(null); setCopiedLink(null); } }}>
               <DialogTrigger asChild>
-                <Button size="sm"><UserPlus className="mr-2 h-4 w-4" /> Invite member</Button>
+                <Button size="sm" disabled={!canCreateInvite} title={!seatAvailable ? "Your current plan has no available team seats" : undefined}>
+                  <UserPlus className="mr-2 h-4 w-4" /> Invite member
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-sm">
                 <DialogHeader><DialogTitle>Invite a member</DialogTitle></DialogHeader>
@@ -163,7 +183,7 @@ export function MembersTab() {
                       </Select>
                     </div>
                     <DialogFooter>
-                      <Button className="w-full" disabled={!inviteEmail.trim() || inviting} onClick={handleInvite}>
+                      <Button className="w-full" disabled={!inviteEmail.trim() || inviting || !seatAvailable} onClick={handleInvite}>
                         {inviting ? "Creating..." : "Create invitation"}
                       </Button>
                     </DialogFooter>
