@@ -150,13 +150,13 @@ describe("legacy /app/inbox compatibility", () => {
   it("redirects /app/inbox to /app/whatsapp/inbox", () => {
     renderArea("/app/inbox");
     // The WhatsApp product header renders once the redirect lands.
-    expect(screen.getByRole("heading", { name: "Messages", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Messages sections" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "WhatsApp", level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "WhatsApp sections" })).toBeInTheDocument();
   });
 
   it("redirects the section index /app/whatsapp to the Inbox child", () => {
     renderArea("/app/whatsapp");
-    expect(screen.getByRole("navigation", { name: "Messages sections" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "WhatsApp sections" })).toBeInTheDocument();
   });
 });
 

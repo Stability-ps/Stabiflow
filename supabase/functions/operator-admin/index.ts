@@ -106,6 +106,135 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      case "usage_overview": {
+        const since30 = new Date(Date.now() - 30 * DAY).toISOString();
+        const [aiRows, usageRows, automationRows] = await Promise.all([
+          sb.from("ai_usage_events").select("feature, estimated_cost, total_tokens").gte("created_at", since30).limit(10000),
+          sb.from("entitlement_usage").select("workspace_id, entitlement_key, used, period_start, workspaces(name)").in("entitlement_key", ["creative_generations", "automation_runs", "whatsapp_ai_turns"]).order("used", { ascending: false }).limit(5000),
+          sb.from("automation_runs").select("status").gte("created_at", since30).limit(10000),
+        ]);
+        const ai = (aiRows.data ?? []) as { feature: string | null; estimated_cost: number | null; total_tokens: number | null }[];
+        const byFeature: Record<string, { tokens: number; cost_usd: number; calls: number }> = {};
+        let tokens = 0, costUsd = 0;
+        for (const row of ai) {
+          const feature = row.feature || "unknown";
+          const t = Number(row.total_tokens ?? 0), cost = Number(row.estimated_cost ?? 0);
+          tokens += t; costUsd += cost;
+          const cur = byFeature[feature] ?? { tokens: 0, cost_usd: 0, calls: 0 };
+          cur.tokens += t; cur.cost_usd += cost; cur.calls += 1; byFeature[feature] = cur;
+        }
+        const usage = (usageRows.data ?? []) as { workspace_id: string; entitlement_key: string; used: number; workspaces: { name: string } | null }[];
+        const allowances = [];
+        for (const row of usage) {
+          const { data: ents } = await sb.rpc("get_workspace_entitlements", { p_workspace_id: row.workspace_id });
+          const ent = ((ents ?? []) as { entitlement_key: string; limit_value: number | null; unlimited: boolean }[]).find((x) => x.entitlement_key === row.entitlement_key);
+          const limit = ent?.limit_value ?? null;
+          allowances.push({
+            workspace_id: row.workspace_id, workspace_name: row.workspaces?.name ?? row.workspace_id.slice(0, 8), key: row.entitlement_key,
+            used: Number(row.used ?? 0), limit, unlimited: ent?.unlimited ?? false,
+            pct: limit && limit > 0 ? (Number(row.used ?? 0) / limit) * 100 : null,
+          });
+        }
+        const runs = (automationRows.data ?? []) as { status: string }[];
+        return json(req, {
+          ok: true,
+          ai30d: { tokens, cost_usd: costUsd, by_feature: byFeature },
+          allowances,
+          automation30d: { total: runs.length, blocked_usage_limit: runs.filter((r) => r.status === "blocked_usage_limit").length, failed: runs.filter((r) => r.status === "failed").length },
+        });
+      }
+
+      case "launch_readiness": {
+        const since7 = new Date(Date.now() - 7 * DAY).toISOString();
+        const appBase = (Deno.env.get("APP_BASE_URL") ?? "").replace(/\/+$/, "");
+        const [plansRes, failedWebhooks, mismatches, pendingCheckouts, legalVersions, flagsRes, growthEntitlements] = await Promise.all([
+          sb.from("billing_plans").select("code, name, is_public, is_active, plan_kind, billing_prices(id, is_active, paystack_plan_code, billing_interval)").in("code", ["free", "profile_once", "business", "growth"]).order("sort_order"),
+          count(sb.from("billing_webhook_events").select("id", { count: "exact", head: true }).eq("processing_status", "failed").gte("received_at", since7)),
+          count(sb.from("billing_transactions").select("id", { count: "exact", head: true }).eq("status", "amount_mismatch")),
+          count(sb.from("billing_transactions").select("id", { count: "exact", head: true }).eq("status", "initialized")),
+          sb.from("legal_document_versions").select("document_type, current_version").in("document_type", ["privacy_policy", "terms_of_service"]),
+          sb.from("feature_flags").select("key, is_enabled, audience, plan_codes").in("key", ["module.content", "module.leads", "module.customers", "module.whatsapp", "module.campaigns", "module.creative_studio", "module.analytics", "module.flow_ai", "module.automations", "module.integrations"]),
+          sb.from("plan_entitlements").select("entitlement_key, limit_value, billing_plans!inner(code)").eq("billing_plans.code", "growth").in("entitlement_key", ["creative_generations", "automation_runs", "whatsapp_ai_turns"]),
+        ]);
+        type Price = { id: string; is_active: boolean; paystack_plan_code: string | null; billing_interval: string };
+        type Plan = { code: string; name: string; is_public: boolean; is_active: boolean; plan_kind: string; billing_prices: Price[] };
+        type FlagRow = { key: string; is_enabled: boolean; audience: string; plan_codes: string[] };
+        const rawPlans = (plansRes.data ?? []) as Plan[];
+        const paystackMode = Deno.env.get("PAYSTACK_SECRET_KEY")?.startsWith("sk_live_") ? "live" : Deno.env.get("PAYSTACK_SECRET_KEY") ? "test" : "not_configured";
+        const plans = rawPlans.map((p) => ({
+          code: p.code, name: p.name, is_public: p.is_public, is_active: p.is_active,
+          prices: p.billing_prices.length,
+          purchasable_prices: p.billing_prices.filter((x) => x.is_active && (x.billing_interval === "once" || !!x.paystack_plan_code)).length,
+        }));
+        const checks: { key: string; label: string; status: "pass" | "warn" | "fail"; detail: string }[] = [];
+
+        const commercial = plans.filter((p) => p.code === "profile_once" || p.code === "business" || p.code === "growth");
+        const badPlan = commercial.find((p) => !p.is_active || !p.is_public || p.prices === 0 || p.purchasable_prices === 0);
+        checks.push({ key: "catalog", label: "Public commercial catalogue", status: badPlan ? "fail" : "pass", detail: badPlan ? "One or more paid plans is hidden, inactive or has no purchasable price." : "Profile, Business and Growth are active, public and have purchasable prices." });
+
+        const flags = (flagsRes.data ?? []) as FlagRow[];
+        const businessExpected = ["module.content", "module.leads", "module.customers"];
+        const growthExpected = ["module.content", "module.leads", "module.customers", "module.whatsapp", "module.campaigns", "module.creative_studio", "module.analytics", "module.flow_ai", "module.automations", "module.integrations"];
+        const badBusinessFlag = businessExpected.find((key) => {
+          const f = flags.find((x) => x.key === key);
+          return !f?.is_enabled || f.audience !== "targeted" || !f.plan_codes.includes("business");
+        });
+        const badGrowthFlag = growthExpected.find((key) => {
+          const f = flags.find((x) => x.key === key);
+          return !f?.is_enabled || f.audience !== "targeted" || !f.plan_codes.includes("growth");
+        });
+        checks.push({ key: "plan-modules", label: "Plan-to-module access", status: badBusinessFlag || badGrowthFlag ? "fail" : "pass", detail: badBusinessFlag || badGrowthFlag ? "One or more advertised modules is not mapped to the expected paid plan." : "Business and Growth module access matches the commercial catalogue." });
+
+        const gEnts = (growthEntitlements.data ?? []) as { entitlement_key: string; limit_value: number | null }[];
+        const expectedLimits: Record<string, number> = { creative_generations: 100, automation_runs: 1000, whatsapp_ai_turns: 500 };
+        const badAllowance = Object.entries(expectedLimits).find(([key, value]) => gEnts.find((x) => x.entitlement_key === key)?.limit_value !== value);
+        checks.push({ key: "usage-guardrails", label: "Growth usage guardrails", status: badAllowance ? "fail" : "pass", detail: badAllowance ? "Growth API/AI allowances do not match the certified limits." : "Growth has finite Creative Studio, automation and WhatsApp AI monthly allowances." });
+
+        const legal = (legalVersions.data ?? []) as { document_type: string; current_version: string }[];
+        const privacy = legal.find((x) => x.document_type === "privacy_policy")?.current_version;
+        const terms = legal.find((x) => x.document_type === "terms_of_service")?.current_version;
+        checks.push({ key: "legal", label: "Signup legal versioning", status: privacy && terms ? "pass" : "fail", detail: privacy && terms ? "Privacy Policy " + privacy + " and Terms " + terms + " are versioned for durable signup acceptance." : "Privacy Policy and Terms must both have current server-side versions." });
+
+        let manifestOk = false, serviceWorkerOk = false, pricingOk = false, signupOk = false;
+        if (appBase) {
+          const probe = async (path: string) => {
+            try {
+              const res = await fetch(appBase + path, { redirect: "follow", signal: AbortSignal.timeout(3500), headers: { "User-Agent": "StabiFlow-Launch-Readiness/1.0" } });
+              return res;
+            } catch {
+              return null;
+            }
+          };
+          const [manifestRes, swRes, pricingRes, signupRes] = await Promise.all([probe("/manifest.webmanifest"), probe("/sw.js"), probe("/pricing"), probe("/signup")]);
+          if (manifestRes?.ok) {
+            try {
+              const manifest = await manifestRes.json() as { name?: string; display?: string; start_url?: string; icons?: unknown[] };
+              manifestOk = manifest.name === "StabiFlow" && manifest.display === "standalone" && typeof manifest.start_url === "string" && Array.isArray(manifest.icons) && manifest.icons.length >= 2;
+            } catch { manifestOk = false; }
+          }
+          if (swRes?.ok) {
+            const swText = await swRes.text().catch(() => "");
+            serviceWorkerOk = swText.includes("self.addEventListener") && swText.includes("fetch");
+          }
+          pricingOk = !!pricingRes?.ok;
+          signupOk = !!signupRes?.ok;
+        }
+        checks.push({ key: "public-routes", label: "Public signup and pricing routes", status: pricingOk && signupOk ? "pass" : appBase ? "warn" : "fail", detail: pricingOk && signupOk ? "Production signup and pricing routes respond successfully." : appBase ? "One or more production public routes could not be verified from the launch checker." : "APP_BASE_URL is not configured." });
+        checks.push({ key: "pwa", label: "Installable mobile web app", status: manifestOk && serviceWorkerOk ? "pass" : appBase ? "warn" : "fail", detail: manifestOk && serviceWorkerOk ? "Production manifest and service worker are reachable and structurally valid." : appBase ? "Manifest or service worker could not be verified in production." : "APP_BASE_URL is not configured." });
+
+        checks.push({ key: "paystack", label: "Paystack production credentials", status: paystackMode === "live" ? "pass" : "warn", detail: paystackMode === "live" ? "Live Paystack secret is configured." : paystackMode === "test" ? "Deferred: Paystack is still using a test secret." : "Deferred: PAYSTACK_SECRET_KEY is not configured yet." });
+        checks.push({ key: "webhooks", label: "Payment webhook health", status: failedWebhooks === 0 ? "pass" : "warn", detail: failedWebhooks === 0 ? "No failed payment webhooks in the last 7 days." : String(failedWebhooks) + " failed payment webhook(s) in the last 7 days." });
+        checks.push({ key: "mismatch", label: "Payment amount integrity", status: mismatches === 0 ? "pass" : "warn", detail: mismatches === 0 ? "No amount mismatches require review." : String(mismatches) + " amount mismatch transaction(s) require review." });
+
+        const summary = { pass: checks.filter((x) => x.status === "pass").length, warn: checks.filter((x) => x.status === "warn").length, fail: checks.filter((x) => x.status === "fail").length };
+        return json(req, {
+          ok: true, checks, summary, plans,
+          billing: { paystack_mode: paystackMode, failed_webhooks_7d: failedWebhooks, amount_mismatches: mismatches, pending_checkouts: pendingCheckouts },
+          deferred: paystackMode === "live" ? [] : ["Run one controlled live checkout after PAYSTACK_SECRET_KEY is configured.", "Confirm the signed Paystack webhook is processed and the paid plan unlocks immediately.", "Confirm renewal/cancellation behavior against the live Paystack subscription."],
+          mobile: { manifest: manifestOk, service_worker: serviceWorkerOk, installable_shell: manifestOk && serviceWorkerOk },
+        });
+      }
+
       // -- Catalogue ---------------------------------------------------------------
       case "list_catalog": {
         const [products, plans, definitions] = await Promise.all([

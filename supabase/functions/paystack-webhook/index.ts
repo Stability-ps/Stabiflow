@@ -15,6 +15,7 @@
 import { createServiceClient } from "../_shared/contentAuth.ts";
 import { paystackConfigFromEnv, sha256Hex, verifyPaystackSignature } from "../_shared/billing/paystack.ts";
 import { processPaystackEvent, type PaystackEvent } from "../_shared/billing/processPaystackEvent.ts";
+import { sendBillingEmailForEvent } from "../_shared/billing/billingEmail.ts";
 
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -72,6 +73,12 @@ Deno.serve(async (req: Request) => {
     outcome = await processPaystackEvent(sb, cfg, event, "webhook");
   } catch (e) {
     outcome = { status: "failed" as const, result: e instanceof Error ? e.message.slice(0, 900) : "processing error", workspaceId: null };
+  }
+
+  if (outcome.status === "processed" && outcome.workspaceId) {
+    await sendBillingEmailForEvent(sb, event, outcome).catch((e) =>
+      console.error("billing email hook failed", e instanceof Error ? e.message : "error")
+    );
   }
 
   await sb

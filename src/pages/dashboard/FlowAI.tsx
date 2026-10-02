@@ -64,31 +64,29 @@ export default function FlowAI() {
   const handleStarterPrompt = (prompt: string) => sendMessage(prompt);
 
   return (
-    // Phones: the conversation list is a compact horizontal strip above the
-    // chat (desktop keeps the side column). Height clears the bottom nav.
-    <div className="flex h-[calc(100dvh-8rem-var(--bottom-nav-height))] min-h-[24rem] flex-col gap-3 md:h-[calc(100vh-8rem)] md:flex-row md:gap-4">
-      <aside className="flex shrink-0 gap-2 overflow-x-auto border-b pb-2 md:block md:w-64 md:space-y-2 md:overflow-y-auto md:border-b-0 md:border-r md:pb-0 md:pr-3">
-        <Button variant="outline" size="sm" className="shrink-0 justify-start gap-2 md:w-full" onClick={() => setSelectedConversationId(null)}>
+    <div className="flex h-[calc(100vh-8rem)] gap-4">
+      <aside className="w-64 shrink-0 space-y-2 overflow-y-auto border-r pr-3">
+        <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => setSelectedConversationId(null)}>
           <Plus className="h-4 w-4" /> New conversation
         </Button>
-        <div className="flex gap-1 md:block md:space-y-1">
+        <div className="space-y-1">
           {(conversationsQuery.data ?? []).map((c) => (
             <button
               key={c.id}
               onClick={() => setSelectedConversationId(c.id)}
               className={cn(
-                "max-w-[12rem] shrink-0 truncate rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted md:w-full md:max-w-none",
+                "w-full truncate rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
                 c.id === selectedConversationId && "bg-muted font-medium",
               )}
             >
               {c.title}
             </button>
           ))}
-          {conversationsQuery.data?.length === 0 && <p className="hidden px-2 py-1.5 text-xs text-muted-foreground md:block">No conversations yet.</p>}
+          {conversationsQuery.data?.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No conversations yet.</p>}
         </div>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex flex-1 flex-col">
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pb-4">
           {!selectedConversationId && (messagesQuery.data ?? []).length === 0 && !streamingText && (
             <div className="space-y-4">

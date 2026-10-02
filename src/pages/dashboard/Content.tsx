@@ -16,14 +16,14 @@ export default function Content() {
         <h1 className="text-2xl font-bold tracking-tight">Content</h1>
         <p className="text-muted-foreground">Calendar, scheduled posts, drafts, and your Media Library.</p>
       </div>
-      <nav className="-mx-4 flex gap-1 overflow-x-auto border-b px-4 sm:mx-0 sm:px-0">
+      <nav className="flex gap-1 border-b">
         {CONTENT_TABS.map((tab) => (
           <NavLink
             key={tab.path}
             to={tab.path}
             className={({ isActive }) =>
               cn(
-                "shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
                 isActive ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
               )
             }

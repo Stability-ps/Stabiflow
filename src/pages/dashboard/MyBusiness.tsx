@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, Loader2 } from "lucide-react";
@@ -15,8 +15,6 @@ import { BrandProfileSelector } from "@/components/creative-studio/BrandProfileS
 import { ProposalReview } from "@/components/business/ProposalReview";
 import { WebsiteMonitorCard } from "@/components/business/WebsiteMonitorCard";
 import { useAuth } from "@/hooks/useAuth";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { MobileMyBusiness, type MyBusinessBlock } from "@/pages/dashboard/myBusiness/MobileMyBusiness";
 import {
   COUNTRY_IDENTIFIER_SCHEMES, computeCompleteness, fetchBusinessIdentity, identifierSchemeLabel, updateBusinessIdentity,
   type BusinessIdentity, type BusinessIdentityBundle,
@@ -93,16 +91,8 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const queryClient = useQueryClient();
   const canEdit = currentMembership?.role === "owner" || currentMembership?.role === "admin";
   const [form, setForm] = useState<IdentityForm>(() => toForm(bundle.identity));
-  // Last saved values - the baseline for "unsaved changes" (the loaded bundle
-  // only catches up after the background refetch).
-  const [savedForm, setSavedForm] = useState<IdentityForm>(() => toForm(bundle.identity));
-  const dirty = JSON.stringify(form) !== JSON.stringify(savedForm);
   const [saving, setSaving] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
-  // Same breakpoint as the app shell (bottom nav below md, sidebar from md):
-  // tablet rotation (e.g. 820 <-> 1180) never swaps layouts, so in-progress
-  // section drafts stay mounted.
-  const isDesktop = useMediaQuery("(min-width: 768px)");
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
@@ -111,12 +101,11 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const provenance = (identity.field_provenance ?? {}) as Record<string, { source?: string }>;
   const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  /** Resolves true when the details were saved (callers may then navigate away). */
-  async function saveIdentity(): Promise<boolean> {
+  async function saveIdentity() {
     const year = form.founded_year.trim() ? Number(form.founded_year) : null;
     if (year !== null && (!Number.isInteger(year) || year < 1800 || year > 2100)) {
       toast.error("Founded year must be a year between 1800 and 2100");
-      return false;
+      return;
     }
     setSaving(true);
     try {
@@ -136,13 +125,10 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         core_values: form.core_values.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 20),
       });
       setForm(toForm(updated));
-      setSavedForm(toForm(updated));
       toast.success("Business details saved");
       refresh();
-      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
-      return false;
     } finally {
       setSaving(false);
     }
@@ -186,330 +172,244 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
     { name: "is_public", label: "Show on my public profile", type: "checkbox" },
   ];
 
-  // Each section is defined once. Desktop renders them in the original
-  // order; phones (below lg) get a section list with one section open at a
-  // time (MobileMyBusiness).
-  const blocks: Record<MyBusinessBlock, ReactNode> = {
-    header: (
-      <>
-        <div>
-          <h1 className="text-2xl font-semibold">My Business</h1>
-          <p className="text-sm text-muted-foreground">The verified facts about your business. Your company profile and documents are built from this.</p>
-        </div>
-      </>
-    ),
-    progress: (
-      <>
-        <Card>
-          <CardContent className="space-y-3 pt-6">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">Profile completeness</span>
-              <span aria-label="Completeness percentage">{completeness.score}%</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100}>
-              <div className="h-full bg-primary transition-all" style={{ width: `${completeness.score}%` }} />
-            </div>
-            {completeness.items.some((i) => !i.done) && (
-              <p className="text-xs text-muted-foreground">
-                Still missing: {completeness.items.filter((i) => !i.done).map((i) => i.label).join(", ")}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </>
-    ),
-    review: (
-      <>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Changes to review</CardTitle>
-            <CardDescription>Details found on your website or in your documents. Nothing changes until you accept it.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="You're up to date - nothing waiting for review." />
-          </CardContent>
-        </Card>
-      </>
-    ),
-    company: (
-      <>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Company</CardTitle>
-            <CardDescription>Your registered and trading identity.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            {text("Trading name", "trading_name")}
-            {text("Registered (legal) name", "legal_name", { placeholder: "e.g. Acme (Pty) Ltd" })}
-            {text("Industry", "industry")}
-            {text("Website", "website", { type: "url", placeholder: "https://" })}
-            {text("Year founded", "founded_year", { type: "number" })}
-            <div className="space-y-1">
-              <Label htmlFor="bi-employees">Team size</Label>
-              <Select value={form.employee_count_range} onValueChange={(v) => setForm((f) => ({ ...f, employee_count_range: v }))} disabled={!canEdit}>
-                <SelectTrigger id="bi-employees">
-                  <SelectValue placeholder="Choose..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {EMPLOYEE_RANGES.map((r) => (
-                    <SelectItem key={r} value={r}>
-                      {r} {r === "1" ? "person" : "people"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {text("Country (2-letter code)", "country_code")}
-          </CardContent>
-        </Card>
-      </>
-    ),
-    about: (
-      <>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">About</CardTitle>
-            <CardDescription>How you describe your business. Only include what is true - nothing here is invented for you.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">{text("Tagline", "tagline")}</div>
-            {area("Short description", "short_description", "One or two sentences")}
-            {area("About the business", "long_description")}
-            {area("Mission", "mission")}
-            {area("Vision", "vision")}
-            <div className="sm:col-span-2">{text("Core values (comma separated)", "core_values")}</div>
-          </CardContent>
-        </Card>
-      </>
-    ),
-    save: (
-      <>
-        {canEdit && (
-          <div className="flex justify-end">
-            <Button onClick={saveIdentity} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save business details
-            </Button>
-          </div>
-        )}
-      </>
-    ),
-    branding: (
-      <>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Branding</CardTitle>
-            <CardDescription>Logo and colours used on your company profile and adverts.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {user && (
-              <BrandProfileSelector
-                workspaceId={currentWorkspaceId}
-                workspaceName={identity.trading_name ?? profile?.full_name ?? "My business"}
-                userId={user.id}
-                selectedProfileId={identity.brand_profile_id}
-                onSelect={setSelectedBrand}
-              />
-            )}
-            {canEdit && selectedBrand && selectedBrand.id !== identity.brand_profile_id && (
-              <Button size="sm" variant="outline" onClick={useBrandForProfile}>
-                Use "{selectedBrand.name}" for my business profile
-              </Button>
-            )}
-            {identity.brand_profile_id && <p className="text-xs text-muted-foreground">A brand is linked to your business profile.</p>}
-          </CardContent>
-        </Card>
-      </>
-    ),
-    contacts: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Contact details"
-          table="business_contacts"
-          rows={bundle.contacts as never}
-          fields={contactFields}
-          defaults={{ kind: "email", is_public: true }}
-          summarize={(r) => `${String(r.kind)}: ${String(r.value)}${r.label ? ` (${String(r.label)})` : ""}${r.is_primary ? " · main" : ""}`}
-        />
-      </>
-    ),
-    locations: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Locations"
-          table="business_locations"
-          rows={bundle.locations as never}
-          fields={[
-            { name: "label", label: "Label", placeholder: "e.g. Head office" },
-            { name: "address_line1", label: "Address", required: true },
-            { name: "address_line2", label: "Address line 2" },
-            { name: "city", label: "City" },
-            { name: "region", label: "Province / region" },
-            { name: "postal_code", label: "Postal code" },
-            { name: "is_primary", label: "Main location", type: "checkbox" },
-            { name: "is_public", label: "Show on my public profile", type: "checkbox" },
-          ]}
-          defaults={{ is_public: true }}
-          summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")}
-        />
-      </>
-    ),
-    offerings: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Services and products"
-          description="Add at least three for a strong profile."
-          table="business_offerings"
-          rows={bundle.offerings as never}
-          fields={[
-            { name: "kind", label: "Type", type: "select", required: true, options: [{ value: "service", label: "Service" }, { value: "product", label: "Product" }] },
-            { name: "name", label: "Name", required: true },
-            { name: "price_text", label: "Price (optional)", placeholder: "e.g. From R1 500" },
-            { name: "description", label: "Description", type: "textarea" },
-            { name: "is_featured", label: "Feature this", type: "checkbox" },
-          ]}
-          defaults={{ kind: "service" }}
-          summarize={(r) => `${String(r.name)}${r.price_text ? ` · ${String(r.price_text)}` : ""}`}
-        />
-      </>
-    ),
-    social: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Social media"
-          table="business_social_links"
-          rows={bundle.socialLinks as never}
-          fields={[
-            { name: "platform", label: "Platform", type: "select", required: true, options: [
-              { value: "facebook", label: "Facebook" }, { value: "instagram", label: "Instagram" }, { value: "linkedin", label: "LinkedIn" },
-              { value: "x", label: "X" }, { value: "tiktok", label: "TikTok" }, { value: "youtube", label: "YouTube" },
-              { value: "pinterest", label: "Pinterest" }, { value: "google_business", label: "Google Business" }, { value: "other", label: "Other" },
-            ] },
-            { name: "url", label: "Link", type: "url", required: true, placeholder: "https://" },
-          ]}
-          summarize={(r) => `${String(r.platform)}: ${String(r.url)}`}
-        />
-      </>
-    ),
-    team: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Team"
-          table="business_team_members"
-          rows={bundle.team as never}
-          fields={[
-            { name: "full_name", label: "Full name", required: true },
-            { name: "role_title", label: "Role" },
-            { name: "bio", label: "Short bio", type: "textarea" },
-            { name: "is_public", label: "Show on my public profile", type: "checkbox" },
-          ]}
-          defaults={{ is_public: true }}
-          summarize={(r) => `${String(r.full_name)}${r.role_title ? ` · ${String(r.role_title)}` : ""}`}
-        />
-      </>
-    ),
-    projects: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Projects"
-          table="business_projects"
-          rows={bundle.projects as never}
-          fields={[
-            { name: "title", label: "Project", required: true },
-            { name: "client_name", label: "Client" },
-            { name: "location", label: "Location" },
-            { name: "completed_year", label: "Year completed", type: "number" },
-            { name: "description", label: "Description", type: "textarea" },
-            { name: "is_public", label: "Show on my public profile", type: "checkbox" },
-          ]}
-          defaults={{ is_public: true }}
-          summarize={(r) => `${String(r.title)}${r.client_name ? ` for ${String(r.client_name)}` : ""}${r.completed_year ? ` (${String(r.completed_year)})` : ""}`}
-        />
-      </>
-    ),
-    certifications: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Certifications and accreditations"
-          table="business_certifications"
-          rows={bundle.certifications as never}
-          fields={[
-            { name: "name", label: "Name", required: true },
-            { name: "issuer", label: "Issued by" },
-            { name: "credential_id", label: "Certificate number" },
-            { name: "issued_on", label: "Issued on", type: "date" },
-            { name: "expires_on", label: "Expires on", type: "date" },
-            { name: "is_public", label: "Show on my public profile", type: "checkbox" },
-          ]}
-          defaults={{ is_public: true }}
-          summarize={(r) => `${String(r.name)}${r.issuer ? ` · ${String(r.issuer)}` : ""}${r.expires_on ? ` · expires ${String(r.expires_on)}` : ""}`}
-        />
-      </>
-    ),
-    monitor: (
-      <>
-        <WebsiteMonitorCard workspaceId={currentWorkspaceId} defaultUrl={identity.website ?? ""} canEdit={canEdit} />
-      </>
-    ),
-    identifiers: (
-      <>
-        <FactListSection
-          {...listProps}
-          title="Registration numbers"
-          description="Private unless you choose to show them."
-          table="business_identifiers"
-          rows={bundle.identifiers as never}
-          fields={[
-            { name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },
-            { name: "value", label: "Number", required: true },
-            { name: "is_public", label: "Show on my public profile", type: "checkbox" },
-          ]}
-          defaults={{ country_code: identity.country_code, is_public: false }}
-          summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`}
-        />
-      </>
-    ),
-  };
-
-  if (!isDesktop) {
-    return (
-      <MobileMyBusiness
-        workspaceId={currentWorkspaceId}
-        bundle={bundle}
-        completeness={completeness}
-        blocks={blocks}
-        canEdit={canEdit}
-        saving={saving}
-        dirty={dirty}
-        onSave={saveIdentity}
-      />
-    );
-  }
-
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      {blocks.header}
-      {blocks.progress}
-      {blocks.review}
-      {blocks.company}
-      {blocks.about}
-      {blocks.save}
-      {blocks.branding}
-      {blocks.contacts}
-      {blocks.locations}
-      {blocks.offerings}
-      {blocks.social}
-      {blocks.team}
-      {blocks.projects}
-      {blocks.certifications}
-      {blocks.monitor}
-      {blocks.identifiers}
+      <div>
+        <h1 className="text-2xl font-semibold">My Business</h1>
+        <p className="text-sm text-muted-foreground">The verified facts about your business. Your company profile and documents are built from this.</p>
+      </div>
+
+      <Card>
+        <CardContent className="space-y-3 pt-6">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Profile completeness</span>
+            <span aria-label="Completeness percentage">{completeness.score}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-full bg-primary transition-all" style={{ width: `${completeness.score}%` }} />
+          </div>
+          {completeness.items.some((i) => !i.done) && (
+            <p className="text-xs text-muted-foreground">
+              Still missing: {completeness.items.filter((i) => !i.done).map((i) => i.label).join(", ")}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Changes to review</CardTitle>
+          <CardDescription>Details found on your website or in your documents. Nothing changes until you accept it.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="You're up to date - nothing waiting for review." />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Company</CardTitle>
+          <CardDescription>Your registered and trading identity.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          {text("Trading name", "trading_name")}
+          {text("Registered (legal) name", "legal_name", { placeholder: "e.g. Acme (Pty) Ltd" })}
+          {text("Industry", "industry")}
+          {text("Website", "website", { type: "url", placeholder: "https://" })}
+          {text("Year founded", "founded_year", { type: "number" })}
+          <div className="space-y-1">
+            <Label htmlFor="bi-employees">Team size</Label>
+            <Select value={form.employee_count_range} onValueChange={(v) => setForm((f) => ({ ...f, employee_count_range: v }))} disabled={!canEdit}>
+              <SelectTrigger id="bi-employees">
+                <SelectValue placeholder="Choose..." />
+              </SelectTrigger>
+              <SelectContent>
+                {EMPLOYEE_RANGES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r} {r === "1" ? "person" : "people"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {text("Country (2-letter code)", "country_code")}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">About</CardTitle>
+          <CardDescription>How you describe your business. Only include what is true - nothing here is invented for you.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">{text("Tagline", "tagline")}</div>
+          {area("Short description", "short_description", "One or two sentences")}
+          {area("About the business", "long_description")}
+          {area("Mission", "mission")}
+          {area("Vision", "vision")}
+          <div className="sm:col-span-2">{text("Core values (comma separated)", "core_values")}</div>
+        </CardContent>
+      </Card>
+
+      {canEdit && (
+        <div className="flex justify-end">
+          <Button onClick={saveIdentity} disabled={saving}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save business details
+          </Button>
+        </div>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Branding</CardTitle>
+          <CardDescription>Logo and colours used on your company profile and adverts.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {user && (
+            <BrandProfileSelector
+              workspaceId={currentWorkspaceId}
+              workspaceName={identity.trading_name ?? profile?.full_name ?? "My business"}
+              userId={user.id}
+              selectedProfileId={identity.brand_profile_id}
+              onSelect={setSelectedBrand}
+            />
+          )}
+          {canEdit && selectedBrand && selectedBrand.id !== identity.brand_profile_id && (
+            <Button size="sm" variant="outline" onClick={useBrandForProfile}>
+              Use "{selectedBrand.name}" for my business profile
+            </Button>
+          )}
+          {identity.brand_profile_id && <p className="text-xs text-muted-foreground">A brand is linked to your business profile.</p>}
+        </CardContent>
+      </Card>
+
+      <FactListSection
+        {...listProps}
+        title="Contact details"
+        table="business_contacts"
+        rows={bundle.contacts as never}
+        fields={contactFields}
+        defaults={{ kind: "email", is_public: true }}
+        summarize={(r) => `${String(r.kind)}: ${String(r.value)}${r.label ? ` (${String(r.label)})` : ""}${r.is_primary ? " · main" : ""}`}
+      />
+
+      <FactListSection
+        {...listProps}
+        title="Locations"
+        table="business_locations"
+        rows={bundle.locations as never}
+        fields={[
+          { name: "label", label: "Label", placeholder: "e.g. Head office" },
+          { name: "address_line1", label: "Address", required: true },
+          { name: "address_line2", label: "Address line 2" },
+          { name: "city", label: "City" },
+          { name: "region", label: "Province / region" },
+          { name: "postal_code", label: "Postal code" },
+          { name: "is_primary", label: "Main location", type: "checkbox" },
+          { name: "is_public", label: "Show on my public profile", type: "checkbox" },
+        ]}
+        defaults={{ is_public: true }}
+        summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")}
+      />
+
+      <FactListSection
+        {...listProps}
+        title="Services and products"
+        description="Add at least three for a strong profile."
+        table="business_offerings"
+        rows={bundle.offerings as never}
+        fields={[
+          { name: "kind", label: "Type", type: "select", required: true, options: [{ value: "service", label: "Service" }, { value: "product", label: "Product" }] },
+          { name: "name", label: "Name", required: true },
+          { name: "price_text", label: "Price (optional)", placeholder: "e.g. From R1 500" },
+          { name: "description", label: "Description", type: "textarea" },
+          { name: "is_featured", label: "Feature this", type: "checkbox" },
+        ]}
+        defaults={{ kind: "service" }}
+        summarize={(r) => `${String(r.name)}${r.price_text ? ` · ${String(r.price_text)}` : ""}`}
+      />
+
+      <FactListSection
+        {...listProps}
+        title="Social media"
+        table="business_social_links"
+        rows={bundle.socialLinks as never}
+        fields={[
+          { name: "platform", label: "Platform", type: "select", required: true, options: [
+            { value: "facebook", label: "Facebook" }, { value: "instagram", label: "Instagram" }, { value: "linkedin", label: "LinkedIn" },
+            { value: "x", label: "X" }, { value: "tiktok", label: "TikTok" }, { value: "youtube", label: "YouTube" },
+            { value: "pinterest", label: "Pinterest" }, { value: "google_business", label: "Google Business" }, { value: "other", label: "Other" },
+          ] },
+          { name: "url", label: "Link", type: "url", required: true, placeholder: "https://" },
+        ]}
+        summarize={(r) => `${String(r.platform)}: ${String(r.url)}`}
+      />
+
+      <FactListSection
+        {...listProps}
+        title="Team"
+        table="business_team_members"
+        rows={bundle.team as never}
+        fields={[
+          { name: "full_name", label: "Full name", required: true },
+          { name: "role_title", label: "Role" },
+          { name: "bio", label: "Short bio", type: "textarea" },
+          { name: "is_public", label: "Show on my public profile", type: "checkbox" },
+        ]}
+        defaults={{ is_public: true }}
+        summarize={(r) => `${String(r.full_name)}${r.role_title ? ` · ${String(r.role_title)}` : ""}`}
+      />
+
+      <FactListSection
+        {...listProps}
+        title="Projects"
+        table="business_projects"
+        rows={bundle.projects as never}
+        fields={[
+          { name: "title", label: "Project", required: true },
+          { name: "client_name", label: "Client" },
+          { name: "location", label: "Location" },
+          { name: "completed_year", label: "Year completed", type: "number" },
+          { name: "description", label: "Description", type: "textarea" },
+          { name: "is_public", label: "Show on my public profile", type: "checkbox" },
+        ]}
+        defaults={{ is_public: true }}
+        summarize={(r) => `${String(r.title)}${r.client_name ? ` for ${String(r.client_name)}` : ""}${r.completed_year ? ` (${String(r.completed_year)})` : ""}`}
+      />
+
+      <FactListSection
+        {...listProps}
+        title="Certifications and accreditations"
+        table="business_certifications"
+        rows={bundle.certifications as never}
+        fields={[
+          { name: "name", label: "Name", required: true },
+          { name: "issuer", label: "Issued by" },
+          { name: "credential_id", label: "Certificate number" },
+          { name: "issued_on", label: "Issued on", type: "date" },
+          { name: "expires_on", label: "Expires on", type: "date" },
+          { name: "is_public", label: "Show on my public profile", type: "checkbox" },
+        ]}
+        defaults={{ is_public: true }}
+        summarize={(r) => `${String(r.name)}${r.issuer ? ` · ${String(r.issuer)}` : ""}${r.expires_on ? ` · expires ${String(r.expires_on)}` : ""}`}
+      />
+
+      <WebsiteMonitorCard workspaceId={currentWorkspaceId} defaultUrl={identity.website ?? ""} canEdit={canEdit} />
+
+      <FactListSection
+        {...listProps}
+        title="Registration numbers"
+        description="Private unless you choose to show them."
+        table="business_identifiers"
+        rows={bundle.identifiers as never}
+        fields={[
+          { name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },
+          { name: "value", label: "Number", required: true },
+          { name: "is_public", label: "Show on my public profile", type: "checkbox" },
+        ]}
+        defaults={{ country_code: identity.country_code, is_public: false }}
+        summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`}
+      />
     </div>
   );
 }

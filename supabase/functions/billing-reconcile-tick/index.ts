@@ -11,6 +11,7 @@
 import { createServiceClient } from "../_shared/contentAuth.ts";
 import { paystackConfigFromEnv, timingSafeEqualHex, verifyTransaction } from "../_shared/billing/paystack.ts";
 import { processPaystackEvent } from "../_shared/billing/processPaystackEvent.ts";
+import { sendBillingEmailForEvent } from "../_shared/billing/billingEmail.ts";
 import { decideLifecycle, type SubscriptionSnapshot } from "../_shared/billing/subscriptionLifecycle.ts";
 
 const SUB_BATCH = 200;
@@ -69,7 +70,13 @@ Deno.serve(async (req: Request) => {
         // Mock mode must never auto-succeed a checkout nobody paid for.
         const verified = cfg.mockMode ? { status: "abandoned", amount: 0, currency: txn.currency, paid_at: null } : await verifyTransaction(cfg, txn.reference);
         if (verified.status === "success") {
-          await processPaystackEvent(sb, cfg, { event: "charge.success", data: { reference: txn.reference, amount: verified.amount, currency: verified.currency, paid_at: verified.paid_at } }, "reconcile");
+          const verifiedEvent = { event: "charge.success", data: { reference: txn.reference, amount: verified.amount, currency: verified.currency, paid_at: verified.paid_at } };
+          const outcome = await processPaystackEvent(sb, cfg, verifiedEvent, "reconcile");
+          if (outcome.status === "processed" && outcome.workspaceId) {
+            await sendBillingEmailForEvent(sb, verifiedEvent, outcome).catch((e) =>
+              console.error("billing reconcile email failed", e instanceof Error ? e.message : "error")
+            );
+          }
           summary.verified++;
         } else if (now.getTime() - Date.parse(txn.created_at) > abandonHours * 3_600_000) {
           await sb.from("billing_transactions").update({ status: "abandoned", failure_reason: "Checkout not completed" }).eq("reference", txn.reference).eq("status", "initialized");

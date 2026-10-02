@@ -50,7 +50,7 @@ describe("Platform admin shell", () => {
     authState.profile = { is_platform_operator: true };
     operatorAdmin.mockResolvedValue(overview);
     renderAt();
-    for (const label of ["Overview", "Businesses & users", "Plans & pricing", "Feature flags", "Subscriptions & payments", "Settings & content", "System & audit"]) {
+    for (const label of ["Overview", "Businesses & users", "Plans & pricing", "Feature flags", "Subscriptions & payments", "Usage & limits", "Launch readiness", "Settings & content", "System & audit"]) {
       expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
     }
     await waitFor(() => expect(screen.getByText("Payments needing review")).toBeInTheDocument());

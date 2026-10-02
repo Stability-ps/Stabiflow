@@ -16,6 +16,7 @@ import {
 } from "../_shared/contentAuth.ts";
 import { disableSubscription, paystackConfigFromEnv, verifyTransaction } from "../_shared/billing/paystack.ts";
 import { processPaystackEvent } from "../_shared/billing/processPaystackEvent.ts";
+import { sendBillingEmailForEvent } from "../_shared/billing/billingEmail.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return json(req, {}, 200);
@@ -61,10 +62,16 @@ Deno.serve(async (req: Request) => {
     }
     if (verified.status !== "success") return json(req, { ok: true, status: verified.status === "failed" ? "failed" : "pending" });
 
-    const outcome = await processPaystackEvent(sb, cfg, {
+    const verifiedEvent = {
       event: "charge.success",
       data: { reference, amount: verified.amount, currency: verified.currency, paid_at: verified.paid_at },
-    }, "verify_api");
+    };
+    const outcome = await processPaystackEvent(sb, cfg, verifiedEvent, "verify_api");
+    if (outcome.status === "processed" && outcome.workspaceId) {
+      await sendBillingEmailForEvent(sb, verifiedEvent, outcome).catch((e) =>
+        console.error("billing verify email failed", e instanceof Error ? e.message : "error")
+      );
+    }
     const applied = outcome.result.startsWith("applied") || outcome.result === "duplicate";
     return json(req, { ok: true, status: applied ? "success" : outcome.result === "amount_mismatch" ? "needs_review" : "pending" });
   }

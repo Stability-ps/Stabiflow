@@ -141,7 +141,7 @@ export type WorkspaceBillingState = {
     plan: { code: string; name: string } | null;
     price: SubscriptionPrice | null;
   } | null;
-  purchases: { id: string; status: string; paid_at: string | null; access_expires_at: string | null; plan: { name: string } | null }[];
+  purchases: { id: string; status: string; paid_at: string | null; access_expires_at: string | null; plan: { code: string; name: string; tier_rank: number } | null }[];
   transactions: { reference: string; kind: string; status: string; amount_minor: number; currency: string; paid_at: string | null; created_at: string }[];
 };
 
@@ -154,7 +154,7 @@ export async function fetchBillingState(workspaceId: string): Promise<WorkspaceB
       .in("status", ["active", "past_due", "grace", "cancelled"])
       .order("created_at", { ascending: false })
       .limit(1),
-    supabase.from("workspace_purchases").select("id, status, paid_at, access_expires_at, billing_plans(name)").eq("workspace_id", workspaceId).eq("status", "paid").order("paid_at", { ascending: false }),
+    supabase.from("workspace_purchases").select("id, status, paid_at, access_expires_at, billing_plans(code, name, tier_rank)").eq("workspace_id", workspaceId).eq("status", "paid").order("paid_at", { ascending: false }),
     supabase.from("billing_transactions").select("reference, kind, status, amount_minor, currency, paid_at, created_at").eq("workspace_id", workspaceId).order("created_at", { ascending: false }).limit(20),
   ]);
   const err = subs.error || purchases.error || transactions.error;
@@ -177,7 +177,7 @@ export async function fetchBillingState(workspaceId: string): Promise<WorkspaceB
       status: p.status as string,
       paid_at: p.paid_at as string | null,
       access_expires_at: p.access_expires_at as string | null,
-      plan: (p.billing_plans as { name: string } | null) ?? null,
+      plan: (p.billing_plans as { code: string; name: string; tier_rank: number } | null) ?? null,
     })),
     transactions: (transactions.data ?? []) as WorkspaceBillingState["transactions"],
   };
