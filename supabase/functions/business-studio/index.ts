@@ -74,17 +74,29 @@ Deno.serve(async (req: Request) => {
   try {
     // -- Preview (read-only) -------------------------------------------------------
     if (action === "preview") {
-      const [{ content }, ents, templates] = await Promise.all([
+      const [{ content }, ents, templates, accessPlans] = await Promise.all([
         loadProfileContent(sb, workspaceId),
         entitlements(sb, workspaceId),
         sb.from("profile_templates").select("key, name, description, is_premium, config, sort_order").eq("is_active", true).order("sort_order"),
+        sb.rpc("workspace_access_plans", { p_workspace_id: workspaceId }),
       ]);
+      const hasSubscription = (accessPlans.data ?? []).some((p: { source?: string }) => p.source === "subscription");
+      const fullStudio = hasSubscription && !!ents["business_studio.access"]?.enabled;
+      const teaserContent = fullStudio ? content : {
+        ...content,
+        about: content.about ? content.about.slice(0, 220) + (content.about.length > 220 ? "..." : "") : null,
+        mission: null, vision: null, values: [],
+        offerings: content.offerings.slice(0, 2).map((o) => ({ ...o, description: null, price: null })),
+        projects: [], team: [], certifications: [], identifiers: [], social: [],
+        contacts: [], locations: [],
+      };
       return json(req, {
         ok: true,
-        content,
+        content: teaserContent,
         templates: templates.data ?? [],
+        accessMode: fullStudio ? "full" : "teaser",
         canExportPdf: !!ents["business_profile.pdf_export"]?.enabled,
-        canUsePremium: !!ents["business_profile.premium_designs"]?.enabled,
+        canUsePremium: fullStudio && !!ents["business_profile.premium_designs"]?.enabled,
       });
     }
 
@@ -235,7 +247,10 @@ Deno.serve(async (req: Request) => {
       if (!docEnt?.enabled || (!docEnt.unlimited && (count ?? 0) >= Number(docEnt.limit_value ?? 0))) {
         return json(req, { error: "You've reached the number of saved documents on your plan. Delete one or upgrade.", code: "limit_reached" }, 402);
       }
-      const watermark = !ents["business_profile.pdf_export"]?.enabled;
+      if (!ents["business_profile.pdf_export"]?.enabled) {
+        return json(req, { error: "A Professional Profile purchase or subscription is required to generate the final PDF.", code: "upgrade_required" }, 402);
+      }
+      const watermark = false;
 
       const { content, logoPath } = await loadProfileContent(sb, workspaceId);
       const logo = await loadLogo(sb, logoPath);
