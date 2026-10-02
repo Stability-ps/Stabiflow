@@ -92,7 +92,7 @@ export async function runScan(
 
   const proposals: Proposal[] = deterministicProposals(crawl.pages);
   let aiDropped = 0;
-  if (input.ai && crawl.pages.some((p) => p.text.length > 200)) {
+  if (input.ai && crawl.pages.some((p) => p.text.length >= 80)) {
     try {
       const started = Date.now();
       const { parsed, usage } = await extractFacts(input.ai, crawl.pages);
@@ -117,6 +117,16 @@ export async function runScan(
     proposals.push({ target: "identity_field", field: "website", proposed: { value: crawl.finalUrl.replace(/\/$/, "") }, evidence: `Scanned website: ${crawl.finalUrl}`, evidence_url: crawl.finalUrl, extraction_method: "structured_data" });
   }
   const deduped = dedupeProposals(proposals, current);
+  console.log("business studio extraction", JSON.stringify({
+    workspaceId: input.workspaceId,
+    purpose: input.purpose,
+    pagesFetched: crawl.pages.length,
+    crawlErrors: crawl.errors.length,
+    candidates: proposals.length,
+    proposalsCreated: deduped.length,
+    aiDropped,
+    candidateTargets: proposals.map((p) => p.target === "identity_field" ? `identity:${p.field}` : p.target).slice(0, 40),
+  }));
 
   // Monitoring: a fresh set of proposals supersedes this workspace's older
   // PENDING monitoring proposals (never touches accepted/rejected ones).
