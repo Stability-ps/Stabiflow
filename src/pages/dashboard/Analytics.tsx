@@ -16,8 +16,9 @@ import { SourceBreakdownSection } from "@/components/analytics/SourceBreakdownSe
 import { WhatsAppAnalyticsSection } from "@/components/analytics/WhatsAppAnalyticsSection";
 import { RevenueAnalyticsSection } from "@/components/analytics/RevenueAnalyticsSection";
 import { RevenueAttributionView } from "@/components/analytics/RevenueAttributionView";
+import { CrmPerformanceSection } from "@/components/analytics/CrmPerformanceSection";
 import {
-  useAnalyticsKpis, useCampaignPerformance, useCreativePerformance, useLeadSourceBreakdown, useWhatsAppAnalytics,
+  useAnalyticsKpis, useCampaignPerformance, useCreativePerformance, useLeadSourceBreakdown, useWhatsAppAnalytics, useCrmPerformance,
 } from "@/hooks/useAnalytics";
 import { cn } from "@/lib/utils";
 import { DEFAULT_ATTRIBUTION_MODEL, type AttributionModel } from "@/lib/analytics";
@@ -81,6 +82,7 @@ export default function Analytics() {
   const creativesQuery = useCreativePerformance(canView ? currentWorkspaceId : null, range, attributionModel);
   const sourcesQuery = useLeadSourceBreakdown(canView ? currentWorkspaceId : null, range);
   const whatsappQuery = useWhatsAppAnalytics(canView ? currentWorkspaceId : null, range);
+  const crmQuery = useCrmPerformance(canView ? currentWorkspaceId : null, range);
 
   useEffect(() => {
     if (fromWhatsApp && whatsappQuery.data && whatsappSectionRef.current) {
@@ -148,6 +150,7 @@ export default function Analytics() {
         <>
           <KpiCards kpis={kpisQuery.data} previous={previousKpisQuery.data} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
           <FunnelSection kpis={kpisQuery.data} />
+          {crmQuery.data && <CrmPerformanceSection data={crmQuery.data} />}
           {canSeeRevenue && <RevenueAnalyticsSection kpis={kpisQuery.data} workspaceCurrency={workspaceCurrency} />}
           <CampaignPerformanceTable
             rows={campaignsQuery.data || []}
