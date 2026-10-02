@@ -6,19 +6,19 @@ create or replace function public.enforce_workspace_team_seats()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
-as $$
+set search_path = ''
+as $function$
 declare
   v_ent record;
   v_members bigint;
   v_pending bigint;
-  v_has_matching_invite boolean := false;
+  v_increment integer := 1;
 begin
-  select * into v_ent
-  from public._workspace_entitlements(new.workspace_id)
-  where entitlement_key = 'team_seats';
+  select e.* into v_ent
+  from public._workspace_entitlements(new.workspace_id) as e
+  where e.entitlement_key = 'team_seats';
 
-  if v_ent is null or not v_ent.enabled then
+  if not found or not v_ent.enabled then
     raise exception 'Your current plan does not include team seats' using errcode = 'P0001';
   end if;
 
@@ -36,34 +36,25 @@ begin
     and status = 'pending'
     and expires_at > now();
 
-  if tg_table_name = 'workspace_members' then
-    select exists (
-      select 1
-      from public.workspace_invitations wi
-      join auth.users au on lower(au.email) = lower(wi.email)
-      where wi.workspace_id = new.workspace_id
-        and wi.status = 'pending'
-        and wi.expires_at > now()
-        and au.id = new.user_id
-    ) into v_has_matching_invite;
+  if tg_table_name = 'workspace_members' and exists (
+    select 1
+    from public.workspace_invitations wi
+    join auth.users au on lower(au.email) = lower(wi.email)
+    where wi.workspace_id = new.workspace_id
+      and wi.status = 'pending'
+      and wi.expires_at > now()
+      and au.id = new.user_id
+  ) then
+    v_increment := 0;
   end if;
 
-  if tg_table_name = 'workspace_members' then
-    -- accept_workspace_invitation inserts the membership before marking its
-    -- invitation accepted. A matching pending invitation already reserves
-    -- this seat, so only add one for direct membership inserts.
-    if v_members + v_pending + (case when v_has_matching_invite then 0 else 1 end) > v_ent.limit_value then
-      raise exception 'Your workspace has reached its team-seat limit. Upgrade your plan to add another member.' using errcode = 'P0001';
-    end if;
-  else
-    if v_members + v_pending + 1 > v_ent.limit_value then
-      raise exception 'Your workspace has reached its team-seat limit. Upgrade your plan to invite another member.' using errcode = 'P0001';
-    end if;
+  if v_members + v_pending + v_increment > v_ent.limit_value then
+    raise exception 'Your workspace has reached its team-seat limit. Upgrade your plan to add another member.' using errcode = 'P0001';
   end if;
 
   return new;
 end;
-$$;
+$function$;
 
 drop trigger if exists workspace_members_team_seats_trg on public.workspace_members;
 create trigger workspace_members_team_seats_trg
