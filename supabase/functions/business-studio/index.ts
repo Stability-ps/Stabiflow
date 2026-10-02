@@ -152,22 +152,36 @@ Deno.serve(async (req: Request) => {
       });
       const existing = identity as Record<string, unknown>;
       const entries: Array<{ field: string; value: unknown }> = [];
+      if (result.draft.industry && !existing?.industry) entries.push({ field: "industry", value: result.draft.industry });
       for (const field of ["tagline", "short_description", "long_description", "mission", "vision"] as const) {
         const value = result.draft[field];
         if (value && !existing?.[field]) entries.push({ field, value });
       }
       if (result.draft.core_values.length && (!Array.isArray(existing?.core_values) || existing.core_values.length === 0)) entries.push({ field: "core_values", value: result.draft.core_values });
-      if (entries.length) {
-        await sb.from("business_fact_proposals").update({ status: "superseded", reviewed_at: new Date().toISOString() })
-          .eq("workspace_id", workspaceId).eq("origin", "ai_wording").eq("status", "pending");
-        await sb.from("business_fact_proposals").insert(entries.map(({ field, value }) => ({
+
+      const existingOfferingNames = new Set((offerings ?? []).map((o) => o.name.trim().toLowerCase()));
+      const offeringEntries = result.draft.offerings.filter((o) => !existingOfferingNames.has(o.name.trim().toLowerCase()));
+      const proposalRows = [
+        ...entries.map(({ field, value }) => ({
           workspace_id: workspaceId, origin: "ai_wording", target: "identity_field", field, proposed: { value },
           current_value: existing?.[field] ? { value: existing[field] } : null,
           evidence: "AI draft based on your verified and website-sourced business information - review before accepting",
           extraction_method: "ai_wording",
-        })));
+        })),
+        ...offeringEntries.map((o) => ({
+          workspace_id: workspaceId, origin: "ai_wording", target: "offering", field: null,
+          proposed: { kind: "service", name: o.name, description: o.description },
+          current_value: null,
+          evidence: "AI service suggestion derived from your verified and website-sourced business information - review before accepting",
+          extraction_method: "ai_wording",
+        })),
+      ];
+      if (proposalRows.length) {
+        await sb.from("business_fact_proposals").update({ status: "superseded", reviewed_at: new Date().toISOString() })
+          .eq("workspace_id", workspaceId).eq("origin", "ai_wording").eq("status", "pending");
+        await sb.from("business_fact_proposals").insert(proposalRows);
       }
-      return json(req, { ok: true, suggestions: entries.length });
+      return json(req, { ok: true, suggestions: proposalRows.length });
     }
 
     // -- Improve wording (AI, credit-metered) ----------------------------------------
