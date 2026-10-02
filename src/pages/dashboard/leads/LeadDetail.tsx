@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Trophy, XCircle } from "lucide-react";
+import { Mail, MessageCircle, Phone, Trophy, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -305,7 +305,12 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
       </SheetHeader>
 
       <div className="mt-4 space-y-6">
-        <section className="space-y-1 text-sm">
+        <section className="space-y-2 text-sm">
+          <div className="flex flex-wrap gap-2">
+            {lead.phone && <Button asChild size="sm" variant="outline" className="h-8"><a href={`tel:${lead.phone}`}><Phone className="mr-1.5 h-3.5 w-3.5" />Call</a></Button>}
+            {lead.phone && <Button asChild size="sm" variant="outline" className="h-8"><a href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"><MessageCircle className="mr-1.5 h-3.5 w-3.5" />WhatsApp</a></Button>}
+            {lead.email && <Button asChild size="sm" variant="outline" className="h-8"><a href={`mailto:${lead.email}`}><Mail className="mr-1.5 h-3.5 w-3.5" />Email</a></Button>}
+          </div>
           {lead.phone && <p><span className="text-muted-foreground">Phone:</span> {lead.phone}</p>}
           {lead.email && <p><span className="text-muted-foreground">Email:</span> {lead.email}</p>}
           {lead.company_name && <p><span className="text-muted-foreground">Company:</span> {lead.company_name}</p>}
@@ -473,7 +478,20 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
             <AlertDialogTitle>Mark this lead as lost?</AlertDialogTitle>
             <AlertDialogDescription>This lead won't appear in active pipeline views. You can reopen it later.</AlertDialogDescription>
           </AlertDialogHeader>
-          <Input placeholder="Reason (optional)" value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
+          <div className="space-y-2">
+            <Select value={lostReason} onValueChange={setLostReason}>
+              <SelectTrigger><SelectValue placeholder="Choose a reason (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="No response">No response</SelectItem>
+                <SelectItem value="Price / budget">Price / budget</SelectItem>
+                <SelectItem value="Chose a competitor">Chose a competitor</SelectItem>
+                <SelectItem value="Not qualified">Not qualified</SelectItem>
+                <SelectItem value="Postponed">Postponed</SelectItem>
+                <SelectItem value="No longer interested">No longer interested</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Or type another reason" value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleMarkLost}>Mark lost</AlertDialogAction>
