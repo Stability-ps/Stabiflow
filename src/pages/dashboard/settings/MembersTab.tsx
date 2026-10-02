@@ -52,7 +52,9 @@ export function MembersTab() {
   const seatEntitlement = entitlements.data?.find((e) => e.entitlement_key === "team_seats");
   const seatLimit = seatEntitlement?.unlimited ? null : seatEntitlement?.limit_value ?? null;
   const seatsUsed = members?.length ?? 0;
-  const seatAvailable = seatEntitlement?.enabled !== false && (seatLimit === null || seatsUsed < seatLimit);
+  const pendingSeats = (invitations ?? []).filter((inv) => new Date(inv.expires_at).getTime() > Date.now()).length;
+  const seatsCommitted = seatsUsed + pendingSeats;
+  const seatAvailable = seatEntitlement?.enabled === true && (seatLimit === null || seatsCommitted < seatLimit);
   const canInvite = grantableRoles.length > 0;
   const canCreateInvite = canInvite && seatAvailable;
 
@@ -129,7 +131,7 @@ export function MembersTab() {
               Everyone with access to this workspace.
               {seatEntitlement?.enabled && (
                 <span className="ml-1">
-                  {seatLimit === null ? `${seatsUsed} seats used · unlimited` : `${seatsUsed} of ${seatLimit} seats used`}
+                  {seatLimit === null ? `${seatsUsed} members · unlimited seats` : `${seatsCommitted} of ${seatLimit} seats committed`}
                 </span>
               )}
             </CardDescription>
