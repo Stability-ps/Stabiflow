@@ -25,21 +25,21 @@
       "name": "Home",
       "url": "/app",
       "icons": [
-        { "src": "/brand/StabiFlow_Favicon_192x192.png", "sizes": "192x192", "type": "image/png" }
+        { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png" }
       ]
     },
     {
       "name": "My Business",
       "url": "/app/business",
       "icons": [
-        { "src": "/brand/StabiFlow_Favicon_192x192.png", "sizes": "192x192", "type": "image/png" }
+        { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png" }
       ]
     },
     {
       "name": "Documents",
       "url": "/app/documents",
       "icons": [
-        { "src": "/brand/StabiFlow_Favicon_192x192.png", "sizes": "192x192", "type": "image/png" }
+        { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png" }
       ]
     }
   ]
