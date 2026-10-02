@@ -6,41 +6,16 @@
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "display_override": [
-    "standalone",
-    "minimal-ui"
-  ],
   "background_color": "#ffffff",
   "theme_color": "#0f172a",
-  "categories": [
-    "business",
-    "productivity"
-  ],
+  "categories": ["business", "productivity"],
   "icons": [
-    { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/brand/StabiFlow_Favicon_256x256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
-    {
-      "name": "Home",
-      "url": "/app",
-      "icons": [
-        { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png" }
-      ]
-    },
-    {
-      "name": "My Business",
-      "url": "/app/business",
-      "icons": [
-        { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png" }
-      ]
-    },
-    {
-      "name": "Documents",
-      "url": "/app/documents",
-      "icons": [
-        { "src": "/brand/StabiFlow_Favicon_512x512.png", "sizes": "512x512", "type": "image/png" }
-      ]
-    }
+    { "name": "Home", "url": "/app" },
+    { "name": "My Business", "url": "/app/business" },
+    { "name": "Documents", "url": "/app/documents" }
   ]
 }
