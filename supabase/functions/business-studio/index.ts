@@ -40,6 +40,20 @@ async function consume(sb: AnySupabaseClient, workspaceId: string, key: string):
   return data === true;
 }
 
+async function accessMode(sb: AnySupabaseClient, workspaceId: string): Promise<"full" | "teaser"> {
+  const { data, error } = await sb.rpc("workspace_access_plans", { p_workspace_id: workspaceId });
+  if (error) throw new Error(`access plans: ${error.message}`);
+  return (data ?? []).some((p: { source?: string }) => p.source === "subscription") ? "full" : "teaser";
+}
+
+async function requireFullStudio(sb: AnySupabaseClient, workspaceId: string) {
+  if (await accessMode(sb, workspaceId) !== "full") {
+    const error = new Error("A Business Studio subscription is required for website scanning and AI profile tools.");
+    (error as Error & { code?: string }).code = "upgrade_required";
+    throw error;
+  }
+}
+
 function aiCredential(): AiCredential | null {
   const apiKey = optionalEnvVar("OPENAI_API_KEY");
   if (!apiKey) return null;
@@ -104,6 +118,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Scan -------------------------------------------------------------------------
     if (action === "scan") {
+      await requireFullStudio(sb, workspaceId);
       let url: URL;
       try {
         url = normalizeWebsiteInput(typeof body.url === "string" ? body.url : "");
@@ -122,6 +137,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Existing profile text (AI, credit-metered) ------------------------------------
     if (action === "extract_text") {
+      await requireFullStudio(sb, workspaceId);
       const cred = aiCredential();
       if (!cred) return json(req, { error: "Reading an existing profile is not available right now" }, 503);
       const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -136,6 +152,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Draft profile narrative (AI, credit-metered) -------------------------------
     if (action === "draft_profile") {
+      await requireFullStudio(sb, workspaceId);
       const cred = aiCredential();
       if (!cred) return json(req, { error: "AI profile drafting is not available right now" }, 503);
       const [{ data: identity }, { data: offerings }] = await Promise.all([
@@ -198,6 +215,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Improve wording (AI, credit-metered) ----------------------------------------
     if (action === "improve_wording") {
+      await requireFullStudio(sb, workspaceId);
       const cred = aiCredential();
       if (!cred) return json(req, { error: "AI writing is not available right now" }, 503);
       const tone = typeof body.tone === "string" && TONES.has(body.tone) ? body.tone : "professional";
@@ -280,6 +298,8 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Unknown action" }, 400);
   } catch (e) {
     console.error("business-studio failed", action, e instanceof Error ? e.message : e);
+    const code = (e as Error & { code?: string })?.code;
+    if (code === "upgrade_required") return json(req, { error: e instanceof Error ? e.message : "Upgrade required", code }, 402);
     return json(req, { error: "Something went wrong. Please try again." }, 500);
   }
 });
