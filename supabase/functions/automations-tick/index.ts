@@ -73,6 +73,15 @@ type AutomationRow = { id: string; workspace_id: string; name: string; status: s
 // this one query already needed to fetch `limits` too - not a diverging
 // definition of "blocked").
 async function workspaceAutomationsDisabled(sb: ReturnType<typeof createServiceClient>, workspaceId: string): Promise<boolean> {
+  // Fail closed when the workspace no longer has module access. This stops
+  // already-enabled automations immediately after a downgrade/expiry instead
+  // of continuing to create runs until the monthly allowance rejects them.
+  const { data: featureEnabled, error: featureError } = await sb.rpc("is_feature_enabled", {
+    p_workspace_id: workspaceId,
+    p_flag_key: "module.automations",
+  });
+  if (featureError || featureEnabled !== true) return true;
+
   const { data } = await sb.from("workspace_billing").select("limits, status").eq("workspace_id", workspaceId).maybeSingle();
   if ((data?.limits as Record<string, unknown> | null)?.automations_disabled === true) return true;
   const status = data?.status as string | undefined;
