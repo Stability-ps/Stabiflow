@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, Loader2, Sparkles } from "lucide-react";
@@ -92,6 +92,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const queryClient = useQueryClient();
   const canEdit = currentMembership?.role === "owner" || currentMembership?.role === "admin";
   const [form, setForm] = useState<IdentityForm>(() => toForm(bundle.identity));
+  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
@@ -101,7 +102,14 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
 
   const identity = bundle.identity;
   const provenance = (identity.field_provenance ?? {}) as Record<string, { source?: string }>;
-  const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  useEffect(() => {
+    if (!dirty) setForm(toForm(bundle.identity));
+  }, [bundle.identity.updated_at, dirty]);
+
+  const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => {
+    setDirty(true);
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+  };
 
   async function createAiDraft() {
     setDrafting(true);
@@ -111,7 +119,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         toast.success(`${result.suggestions} AI draft suggestion${result.suggestions === 1 ? "" : "s"} ready to review`);
         await queryClient.invalidateQueries({ queryKey: ["fact-proposals", currentWorkspaceId] });
       } else {
-        toast.info("Your profile already contains the narrative details AI can draft from the available information.");
+        toast.info("No new draft was needed from the information currently available.");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not prepare AI draft");
@@ -144,6 +152,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         core_values: form.core_values.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 20),
       });
       setForm(toForm(updated));
+      setDirty(false);
       toast.success("Business details saved");
       refresh();
     } catch (e) {
@@ -246,7 +255,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           {text("Year founded", "founded_year", { type: "number" })}
           <div className="space-y-1">
             <Label htmlFor="bi-employees">Team size</Label>
-            <Select value={form.employee_count_range} onValueChange={(v) => setForm((f) => ({ ...f, employee_count_range: v }))} disabled={!canEdit}>
+            <Select value={form.employee_count_range} onValueChange={(v) => { setDirty(true); setForm((f) => ({ ...f, employee_count_range: v })); }} disabled={!canEdit}>
               <SelectTrigger id="bi-employees">
                 <SelectValue placeholder="Choose..." />
               </SelectTrigger>

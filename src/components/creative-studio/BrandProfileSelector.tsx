@@ -27,7 +27,8 @@ export function BrandProfileSelector({ workspaceId, workspaceName, userId, selec
   async function reload(preferId?: string) {
     const list = await listBrandProfiles(workspaceId);
     setProfiles(list);
-    const preferred = preferId ? list.find((p) => p.id === preferId) : undefined;
+    const preferredId = preferId ?? selectedProfileId ?? undefined;
+    const preferred = preferredId ? list.find((p) => p.id === preferredId) : undefined;
     const fallback = list.find((p) => p.isDefault) ?? list[0] ?? null;
     onSelect(preferred ?? fallback);
   }
@@ -43,7 +44,8 @@ export function BrandProfileSelector({ workspaceId, workspaceName, userId, selec
       }
       if (cancelled) return;
       setProfiles(list);
-      onSelect(list.find((p) => p.isDefault) ?? list[0] ?? null);
+      const linked = selectedProfileId ? list.find((p) => p.id === selectedProfileId) : undefined;
+      onSelect(linked ?? list.find((p) => p.isDefault) ?? list[0] ?? null);
       setLoading(false);
     })();
     return () => {
