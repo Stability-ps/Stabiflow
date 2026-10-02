@@ -52,7 +52,7 @@ begin
     -- accept_workspace_invitation inserts the membership before marking its
     -- invitation accepted. A matching pending invitation already reserves
     -- this seat, so only add one for direct membership inserts.
-    if v_members + v_pending + case when v_has_matching_invite then 0 else 1 end > v_ent.limit_value then
+    if v_members + v_pending + (case when v_has_matching_invite then 0 else 1 end) > v_ent.limit_value then
       raise exception 'Your workspace has reached its team-seat limit. Upgrade your plan to add another member.' using errcode = 'P0001';
     end if;
   else
