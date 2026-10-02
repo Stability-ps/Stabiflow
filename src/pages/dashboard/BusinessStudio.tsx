@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ProposalReview } from "@/components/business/ProposalReview";
 import { ProfilePreview } from "@/components/business/ProfilePreview";
 import { useAuth } from "@/hooks/useAuth";
-import { computeCompleteness, fetchBusinessIdentity } from "@/lib/businessIdentity";
+import { computeCompleteness, fetchBusinessIdentity, updateBusinessIdentity } from "@/lib/businessIdentity";
 import { fetchCatalog, formatMoney, startCheckout } from "@/lib/billing";
 import {
   BusinessStudioError, extractFromText, fetchPendingProposals, fetchPreview, generateDocument, improveWording, scanWebsite, type ScanResult,
@@ -32,6 +32,7 @@ export default function BusinessStudio() {
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [tone, setTone] = useState("professional");
   const [templateKey, setTemplateKey] = useState("classic");
+  const [studioDraft, setStudioDraft] = useState<Record<string, string>>({});
 
   const identity = useQuery({ queryKey: ["business-identity", ws], queryFn: () => fetchBusinessIdentity(ws as string), enabled: !!ws });
   const pending = useQuery({ queryKey: ["fact-proposals", ws], queryFn: () => fetchPendingProposals(ws as string), enabled: !!ws });
@@ -39,6 +40,23 @@ export default function BusinessStudio() {
   const catalog = useQuery({ queryKey: ["billing-catalog"], queryFn: fetchCatalog, enabled: step >= 5, staleTime: 5 * 60_000 });
 
   const completeness = useMemo(() => (identity.data ? computeCompleteness(identity.data) : null), [identity.data]);
+  const draftValue = (key: string, fallback: unknown) => studioDraft[key] ?? (typeof fallback === "string" ? fallback : "");
+  const saveStudioDetails = useMutation({
+    mutationFn: async () => {
+      if (!identity.data) throw new Error("Business details are still loading.");
+      await updateBusinessIdentity(identity.data.identity, {
+        legal_name: draftValue("legal_name", identity.data.identity.legal_name) || null,
+        industry: draftValue("industry", identity.data.identity.industry) || null,
+        website: draftValue("website", identity.data.identity.website) || null,
+        short_description: draftValue("short_description", identity.data.identity.short_description) || null,
+        long_description: draftValue("long_description", identity.data.identity.long_description) || null,
+        mission: draftValue("mission", identity.data.identity.mission) || null,
+        vision: draftValue("vision", identity.data.identity.vision) || null,
+      });
+    },
+    onSuccess: () => { setStudioDraft({}); refreshAll(); qc.invalidateQueries({ queryKey: ["bs-preview", ws] }); toast.success("Business details updated"); },
+    onError: handleError,
+  });
   const refreshAll = () => {
     qc.invalidateQueries({ queryKey: ["fact-proposals", ws] });
     qc.invalidateQueries({ queryKey: ["business-identity", ws] });
@@ -147,7 +165,7 @@ export default function BusinessStudio() {
               </TabsContent>
               <TabsContent value="scratch" className="space-y-3 pt-4">
                 <p className="text-sm">No website? Fill in your business details yourself - we'll guide you through what a strong profile needs.</p>
-                <Button asChild variant="outline"><Link to="/app/business">Enter my business details</Link></Button>
+                <Button variant="outline" onClick={() => setStep(2)}>Enter my business details</Button>
                 <Button variant="ghost" onClick={() => setStep(2)}>Skip to what's missing <ArrowRight className="ml-1 h-4 w-4" /></Button>
               </TabsContent>
               <TabsContent value="upload" className="space-y-3 pt-4">
@@ -205,8 +223,28 @@ export default function BusinessStudio() {
                 </li>
               ))}
             </ul>
-            <div className="flex flex-wrap justify-between gap-2">
-              <Button asChild variant="outline"><Link to="/app/business">Fill in my business details</Link></Button>
+            {identity.data && (
+              <div className="space-y-4 rounded-lg border p-4">
+                <div>
+                  <p className="font-medium">Complete the essentials here</p>
+                  <p className="text-xs text-muted-foreground">These are the same business facts used everywhere in StabiFlow. Saving keeps you in Business Studio.</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1"><Label>Registered (legal) name</Label><Input value={draftValue("legal_name", identity.data.identity.legal_name)} onChange={(e) => setStudioDraft((d) => ({...d, legal_name:e.target.value}))} /></div>
+                  <div className="space-y-1"><Label>Industry</Label><Input value={draftValue("industry", identity.data.identity.industry)} onChange={(e) => setStudioDraft((d) => ({...d, industry:e.target.value}))} /></div>
+                  <div className="space-y-1 sm:col-span-2"><Label>Website</Label><Input value={draftValue("website", identity.data.identity.website)} onChange={(e) => setStudioDraft((d) => ({...d, website:e.target.value}))} /></div>
+                  <div className="space-y-1 sm:col-span-2"><Label>Short description</Label><Textarea rows={2} value={draftValue("short_description", identity.data.identity.short_description)} onChange={(e) => setStudioDraft((d) => ({...d, short_description:e.target.value}))} /></div>
+                  <div className="space-y-1 sm:col-span-2"><Label>About the business</Label><Textarea rows={4} value={draftValue("long_description", identity.data.identity.long_description)} onChange={(e) => setStudioDraft((d) => ({...d, long_description:e.target.value}))} /></div>
+                  <div className="space-y-1"><Label>Mission</Label><Textarea rows={3} value={draftValue("mission", identity.data.identity.mission)} onChange={(e) => setStudioDraft((d) => ({...d, mission:e.target.value}))} /></div>
+                  <div className="space-y-1"><Label>Vision</Label><Textarea rows={3} value={draftValue("vision", identity.data.identity.vision)} onChange={(e) => setStudioDraft((d) => ({...d, vision:e.target.value}))} /></div>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Button variant="outline" asChild><Link to="/app/business?return=studio&section=contacts">More details</Link></Button>
+                  <Button onClick={() => saveStudioDetails.mutate()} disabled={!canEdit || saveStudioDetails.isPending}>{saveStudioDetails.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save & stay in Studio</Button>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end">
               <Button onClick={() => setStep(3)}>Continue <ArrowRight className="ml-1 h-4 w-4" /></Button>
             </div>
           </CardContent>
