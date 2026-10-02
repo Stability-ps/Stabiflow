@@ -109,7 +109,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
       const result = await draftProfile(currentWorkspaceId);
       if (result.suggestions > 0) {
         toast.success(`${result.suggestions} AI draft suggestion${result.suggestions === 1 ? "" : "s"} ready to review`);
-        await queryClient.invalidateQueries({ queryKey: ["business-fact-proposals", currentWorkspaceId] });
+        await queryClient.invalidateQueries({ queryKey: ["fact-proposals", currentWorkspaceId] });
       } else {
         toast.info("Your profile already contains the narrative details AI can draft from the available information.");
       }
