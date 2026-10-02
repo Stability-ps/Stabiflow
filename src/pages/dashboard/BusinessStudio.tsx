@@ -110,6 +110,7 @@ export default function BusinessStudio() {
   if (!ws) return null;
   const pendingReview = (pending.data ?? []).filter((p) => p.origin === "website_scan" || p.origin === "document_upload");
   const templates = preview.data?.templates ?? [];
+  const fullStudio = preview.data?.accessMode === "full";
   const template = templates.find((t) => t.key === templateKey) ?? templates[0];
   const templateLocked = !!template?.is_premium && !preview.data?.canUsePremium;
   const oneOff = (catalog.data ?? []).find((p) => p.plan_kind === "one_off");
