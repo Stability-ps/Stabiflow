@@ -254,7 +254,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           </Button>}
         </CardHeader>
         <CardContent className="pt-5">
-          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} onChanged={refresh} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
         </CardContent>
       </Card>
 
