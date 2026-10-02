@@ -19,7 +19,7 @@ import {
 } from "../_shared/contentAuth.ts";
 import { normalizeWebsiteInput, UnsafeUrlError } from "../_shared/businessStudio/safeFetch.ts";
 import { runScan, runTextExtraction } from "../_shared/businessStudio/scanRunner.ts";
-import { improveWording, WORDING_FIELDS, type AiCredential, type WordingField } from "../_shared/businessStudio/ai.ts";
+import { draftProfileNarrative, improveWording, WORDING_FIELDS, type AiCredential, type WordingField } from "../_shared/businessStudio/ai.ts";
 import { loadLogo, loadProfileContent } from "../_shared/businessStudio/documentData.ts";
 import { renderProfilePdf, type TemplateLayout } from "../_shared/businessStudio/profilePdf.ts";
 
@@ -120,6 +120,54 @@ Deno.serve(async (req: Request) => {
       }
       const outcome = await runTextExtraction(sb, { workspaceId, text, userId, ai: cred });
       return json(req, { ok: true, ...outcome });
+    }
+
+    // -- Draft profile narrative (AI, credit-metered) -------------------------------
+    if (action === "draft_profile") {
+      const cred = aiCredential();
+      if (!cred) return json(req, { error: "AI profile drafting is not available right now" }, 503);
+      const [{ data: identity }, { data: offerings }] = await Promise.all([
+        sb.from("business_identities").select("trading_name, industry, website, short_description, long_description").eq("workspace_id", workspaceId).single(),
+        sb.from("business_offerings").select("name, description").eq("workspace_id", workspaceId).limit(30),
+      ]);
+      const source = {
+        trading_name: identity?.trading_name ?? null,
+        industry: identity?.industry ?? null,
+        website: identity?.website ?? null,
+        short_description: identity?.short_description ?? null,
+        long_description: identity?.long_description ?? null,
+        offerings: (offerings ?? []).map((o) => ({ name: o.name, description: o.description })),
+      };
+      if (!source.trading_name && !source.industry && !source.short_description && !source.long_description && source.offerings.length === 0) {
+        return json(req, { error: "Scan your website or add some business information first so AI has reliable source material." }, 400);
+      }
+      if (!(await consume(sb, workspaceId, "ai_credits"))) {
+        return json(req, { error: "You've used all your AI credits for this month.", code: "limit_reached" }, 402);
+      }
+      const started = Date.now();
+      const result = await draftProfileNarrative(cred, source);
+      await sb.from("ai_usage_events").insert({
+        workspace_id: workspaceId, user_id: userId, feature: "business_studio_profile_draft", provider: "openai", model: cred.model,
+        input_tokens: result.usage.inputTokens, output_tokens: result.usage.outputTokens, latency_ms: Date.now() - started, status: "success",
+      });
+      const existing = identity as Record<string, unknown>;
+      const entries: Array<{ field: string; value: unknown }> = [];
+      for (const field of ["tagline", "short_description", "long_description", "mission", "vision"] as const) {
+        const value = result.draft[field];
+        if (value && !existing?.[field]) entries.push({ field, value });
+      }
+      if (result.draft.core_values.length) entries.push({ field: "core_values", value: result.draft.core_values });
+      if (entries.length) {
+        await sb.from("business_fact_proposals").update({ status: "superseded", reviewed_at: new Date().toISOString() })
+          .eq("workspace_id", workspaceId).eq("origin", "ai_wording").eq("status", "pending");
+        await sb.from("business_fact_proposals").insert(entries.map(({ field, value }) => ({
+          workspace_id: workspaceId, origin: "ai_wording", target: "identity_field", field, proposed: { value },
+          current_value: existing?.[field] ? { value: existing[field] } : null,
+          evidence: "AI draft based on your verified and website-sourced business information - review before accepting",
+          extraction_method: "ai_wording",
+        })));
+      }
+      return json(req, { ok: true, suggestions: entries.length });
     }
 
     // -- Improve wording (AI, credit-metered) ----------------------------------------
