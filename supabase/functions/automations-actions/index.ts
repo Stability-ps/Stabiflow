@@ -81,6 +81,19 @@ Deno.serve(async (req: Request) => {
   const workspaceId = body.workspace_id;
   if (typeof workspaceId !== "string" || !workspaceId) return json(req, { error: "workspace_id is required" }, 400);
 
+  // Plan/feature access is authoritative server-side. The route-level
+  // FeatureGate is only UX; direct calls to this dispatcher must not let a
+  // workspace create, edit, enable or delete Automations after access is
+  // removed. Explicit workspace targets (including grandfathering) still
+  // work because is_feature_enabled uses the same evaluator as the UI.
+  const { data: automationsEnabled, error: featureError } = await serviceSb.rpc("is_feature_enabled", {
+    p_workspace_id: workspaceId,
+    p_flag_key: "module.automations",
+  });
+  if (featureError || automationsEnabled !== true) {
+    return json(req, { error: "Automations are not included in this workspace's current plan." }, 403);
+  }
+
   if (action === "create") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "automation.create"))) return json(req, { error: "Forbidden" }, 403);
     const name = typeof body.name === "string" ? body.name.trim() : "";
