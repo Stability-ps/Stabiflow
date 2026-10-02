@@ -110,6 +110,10 @@ export type DraftProfileInput = {
   website: string | null;
   short_description: string | null;
   long_description: string | null;
+  tagline: string | null;
+  mission: string | null;
+  vision: string | null;
+  core_values: string[];
   offerings: { name: string; description: string | null }[];
 };
 
