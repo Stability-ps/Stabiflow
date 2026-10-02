@@ -28,9 +28,9 @@ export function NeedsAttentionPanel({ workspaceId, limit = 6 }: { workspaceId: s
   if (!currentMembership?.role) return null;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-3">
-        <CardTitle className="text-base">Needs attention</CardTitle>
+    <Card className="overflow-hidden border-border/70 shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 border-b bg-muted/15 pb-3">
+        <div><CardTitle className="text-base">Needs attention</CardTitle><p className="mt-1 text-xs text-muted-foreground">Your priority queue across messages, leads, campaigns, automations, connections and billing.</p></div>
         {items.length > 0 && <span className="text-xs text-muted-foreground">{summarize(items)}</span>}
       </CardHeader>
       <CardContent>
@@ -47,7 +47,7 @@ export function NeedsAttentionPanel({ workspaceId, limit = 6 }: { workspaceId: s
               {items.slice(0, limit).map((item) => {
                 const link = linkFor(item);
                 return (
-                  <li key={item.id} className="flex items-start justify-between gap-3 py-2.5">
+                  <li key={item.id} className="flex items-start justify-between gap-3 py-3">
                     <div className="flex min-w-0 items-start gap-2">
                       <AlertTriangle
                         className={`mt-0.5 h-4 w-4 shrink-0 ${item.severity === "critical" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}
