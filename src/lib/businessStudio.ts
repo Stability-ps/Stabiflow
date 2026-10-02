@@ -85,7 +85,7 @@ export const extractFromText = (workspaceId: string, text: string) => invoke<{ p
 export const improveWording = (workspaceId: string, tone: string) => invoke<{ suggestions: number; rejected: string[] }>({ action: "improve_wording", workspace_id: workspaceId, tone });
 export const draftProfile = (workspaceId: string) => invoke<{ suggestions: number }>({ action: "draft_profile", workspace_id: workspaceId });
 export const fetchPreview = (workspaceId: string) =>
-  invoke<{ content: ProfileContent; templates: ProfileTemplate[]; canExportPdf: boolean; canUsePremium: boolean }>({ action: "preview", workspace_id: workspaceId });
+  invoke<{ content: ProfileContent; templates: ProfileTemplate[]; accessMode: "teaser" | "full"; canExportPdf: boolean; canUsePremium: boolean }>({ action: "preview", workspace_id: workspaceId });
 export const generateDocument = (workspaceId: string, templateKey: string, title?: string) =>
   invoke<{ document: Pick<BusinessDocument, "id" | "title" | "template_key" | "watermarked" | "page_count" | "created_at">; url: string | null }>({
     action: "generate_document", workspace_id: workspaceId, template_key: templateKey, title,
