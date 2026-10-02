@@ -111,7 +111,7 @@ export function buildAiExtractionInstructions(): string {
     "Only report facts that are explicitly stated on the pages. Never infer, guess, embellish or add anything that is not written there.",
     "For every fact, `evidence` MUST be an exact, verbatim quote (5-300 characters) copied character-for-character from the page given by `page_index`, and the quote must contain the value.",
     "Do not paraphrase in `evidence`. If you cannot quote it exactly, leave the fact out.",
-    "Targets: identity_field (fields: legal_name, trading_name, industry, tagline, mission, vision), offering (a service or product the company sells: name + optional description), team_member (full_name + optional role_title), project (a named past project or client engagement: title + optional client_name), certification (name + optional issuer), location (address_line1 + optional city/region/postal_code), identifier (South African registration numbers: scheme one of za_cipc_registration, za_vat, za_bbbee_level, za_csd_supplier, za_cidb_grading).",
+    "Targets: identity_field (fields: legal_name, trading_name, industry, tagline, short_description, long_description, mission, vision, core_values), offering (a service or product the company sells: name + optional description), team_member (full_name + optional role_title), project (a named past project or client engagement: title + optional client_name), certification (name + optional issuer), location (address_line1 + optional city/region/postal_code), identifier (South African registration numbers: scheme one of za_cipc_registration, za_vat, za_bbbee_level, za_csd_supplier, za_cidb_grading).",
     "Contact emails, phone numbers and social links are extracted separately - do not report them.",
     "Return at most 40 facts. Prefer the most important ones.",
   ].join(" ");
@@ -164,7 +164,7 @@ function nearInjection(pageText: string, ev: string): boolean {
   return INJECTION_NEAR.test(pageText.slice(start, end));
 }
 
-const ALLOWED_AI_FIELDS = new Set(["legal_name", "trading_name", "industry", "tagline", "mission", "vision"]);
+const ALLOWED_AI_FIELDS = new Set(["legal_name", "trading_name", "industry", "tagline", "short_description", "long_description", "mission", "vision", "core_values"]);
 const ALLOWED_SCHEMES = new Set(["za_cipc_registration", "za_vat", "za_bbbee_level", "za_csd_supplier", "za_cidb_grading"]);
 
 function contains(haystack: string, needle: string | null): boolean {
