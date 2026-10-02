@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/EmptyState";
 import { useInboxConversations, type InboxConversationRow } from "@/hooks/useInboxConversations";
@@ -68,8 +69,14 @@ export default function WhatsAppContacts() {
   const { workspaceId } = useWhatsAppOutlet();
   const navigate = useNavigate();
   const { data: conversations, isLoading } = useInboxConversations(workspaceId);
+  const [search, setSearch] = useState("");
 
   const contacts = useMemo(() => toContacts(conversations || []), [conversations]);
+  const visibleContacts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter((contact) => [contact.display_name, contact.phone_number, contact.wa_id].some((value) => value?.toLowerCase().includes(q)));
+  }, [contacts, search]);
 
   if (isLoading) {
     return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
@@ -86,10 +93,14 @@ export default function WhatsAppContacts() {
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border">
-      <h2 className="sr-only">WhatsApp contacts</h2>
-      <ul className="divide-y">
-        {contacts.map((contact) => {
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 className="font-semibold">WhatsApp contacts</h2><p className="text-sm text-muted-foreground">{contacts.length} contact{contacts.length === 1 ? "" : "s"} from your conversations</p></div>
+        <div className="relative w-full sm:w-72"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search contacts" className="pl-8" /></div>
+      </div>
+      <div className="overflow-hidden rounded-lg border">
+      {visibleContacts.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">No contacts match your search.</p> : <ul className="divide-y">
+        {visibleContacts.map((contact) => {
           const name = contact.display_name || contact.phone_number;
           return (
             <li key={contact.wa_id}>
@@ -117,7 +128,8 @@ export default function WhatsAppContacts() {
             </li>
           );
         })}
-      </ul>
+      </ul>}
+      </div>
     </div>
   );
 }
