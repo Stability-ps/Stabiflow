@@ -13,6 +13,11 @@ createRoot(document.getElementById('root')!).render(
 // flashes a white canvas between the native splash and the first React paint.
 window.requestAnimationFrame(() => {
   document.body.style.removeProperty("background-color")
+  const launchScreen = document.getElementById("pwa-launch-screen")
+  if (launchScreen) {
+    launchScreen.setAttribute("data-hide", "true")
+    window.setTimeout(() => launchScreen.remove(), 220)
+  }
 })
 
 // Keep the installed PWA on the same production release as the browser app.
