@@ -25,5 +25,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/components/FeatureGate.tsx","src/components/analytics/CrmPerformanceSection.tsx","src/components/business/ProfilePreview.tsx","src/components/content/CalendarMonthView.tsx","src/components/content/ComposePostDialog.tsx","src/components/layout/AppSidebar.tsx","src/hooks/useAnalytics.ts"]
+  "include": ["src/components/FeatureGate.tsx"]
 }
