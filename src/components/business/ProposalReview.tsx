@@ -114,13 +114,14 @@ function ProposalRow({ p, canEdit, onDone }: { p: FactProposal; canEdit: boolean
  * profile or AI wording. Nothing reaches the Business Identity until the
  * customer accepts it here.
  */
-export function ProposalReview({ workspaceId, canEdit, origins, emptyText }: { workspaceId: string; canEdit: boolean; origins?: string[]; emptyText?: string }) {
+export function ProposalReview({ workspaceId, canEdit, origins, emptyText, onChanged }: { workspaceId: string; canEdit: boolean; origins?: string[]; emptyText?: string; onChanged?: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["fact-proposals", workspaceId], queryFn: () => fetchPendingProposals(workspaceId) });
   const [bulkBusy, setBulkBusy] = useState(false);
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["fact-proposals", workspaceId] });
     qc.invalidateQueries({ queryKey: ["business-identity", workspaceId] });
+    onChanged?.();
   };
   const rows = (q.data ?? []).filter((p) => !origins || origins.includes(p.origin));
   const structured = rows.filter((p) => p.extraction_method === "structured_data" || p.extraction_method === "pattern");

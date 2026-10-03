@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -83,7 +83,7 @@ export default function MyBusiness() {
   }
   // Keyed by identity id: the form initialises from the loaded record once
   // and is never overwritten by a background refetch mid-edit.
-  return <MyBusinessEditor key={query.data.identity.id} workspaceId={currentWorkspaceId} bundle={query.data} />;
+  return <MyBusinessEditor workspaceId={currentWorkspaceId} bundle={query.data} />;
 }
 
 function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspaceId: string; bundle: BusinessIdentityBundle }) {
@@ -96,6 +96,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
   const [openSection, setOpenSection] = useState<string | null>("company");
 
+  useEffect(() => { setForm(toForm(bundle.identity)); }, [bundle]);
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
 
@@ -253,7 +254,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           </Button>}
         </CardHeader>
         <CardContent className="pt-5">
-          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} onChanged={refresh} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
         </CardContent>
       </Card>
 
