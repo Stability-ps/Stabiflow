@@ -408,6 +408,11 @@ verify_jwt = false
 [functions.whatsapp-webhook]
 verify_jwt = false
 
+# User-invoked Creative Studio text generation. Requires a signed-in user JWT;
+# the function also verifies workspace content.create permission and allowance.
+[functions.creative-studio-generate]
+verify_jwt = true
+
 # Cron-triggered only (pg_cron -> pg_net, see
 # 20260912060300_schedule_automations_tick.sql) - authorizes itself via the
 # x-cron-secret header, never a Supabase JWT, since there is no live user

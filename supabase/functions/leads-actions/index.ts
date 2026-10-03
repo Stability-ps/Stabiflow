@@ -710,6 +710,63 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true });
   }
 
+  if (action === "set_follow_up") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    const followUpAt = typeof body.next_follow_up_at === "string" ? body.next_follow_up_at.trim() : "";
+    const note = typeof body.follow_up_note === "string" ? body.follow_up_note.trim() : "";
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    if (!followUpAt || Number.isNaN(Date.parse(followUpAt))) return json(req, { error: "A valid next_follow_up_at is required" }, 400);
+    if (note.length > 500) return json(req, { error: "Follow-up note must be 500 characters or fewer" }, 400);
+
+    const { data: lead } = await serviceSb.from("leads").select("id,status").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+    if (lead.status !== "active") return json(req, { error: "Follow-ups can only be scheduled for active leads" }, 409);
+
+    const { error } = await serviceSb.from("leads").update({
+      next_follow_up_at: new Date(followUpAt).toISOString(),
+      follow_up_note: note || null,
+    }).eq("id", leadId);
+    if (error) return json(req, { error: "Unable to schedule follow-up" }, 500);
+
+    await logActivity(serviceSb, workspaceId, actorId, "lead_follow_up_scheduled", "lead", leadId, {
+      next_follow_up_at: new Date(followUpAt).toISOString(),
+      follow_up_note: note || null,
+    });
+    await emitEvent("lead.follow_up_scheduled", "lead", leadId, {
+      entity_id: leadId,
+      next_follow_up_at: new Date(followUpAt).toISOString(),
+      follow_up_note: note || null,
+    }, `lead.follow_up_scheduled:${leadId}:${new Date(followUpAt).toISOString()}`);
+    return json(req, { ok: true });
+  }
+
+  if (action === "complete_follow_up") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+
+    const { data: lead } = await serviceSb.from("leads").select("id,status,next_follow_up_at").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+
+    const { error } = await serviceSb.from("leads").update({
+      next_follow_up_at: null,
+      follow_up_note: null,
+      follow_up_completed_at: nowIso,
+    }).eq("id", leadId);
+    if (error) return json(req, { error: "Unable to complete follow-up" }, 500);
+
+    await logActivity(serviceSb, workspaceId, actorId, "lead_follow_up_completed", "lead", leadId, {
+      scheduled_for: lead.next_follow_up_at ?? null,
+    });
+    await emitEvent("lead.follow_up_completed", "lead", leadId, {
+      entity_id: leadId,
+      scheduled_for: lead.next_follow_up_at ?? null,
+      completed_at: nowIso,
+    }, `lead.follow_up_completed:${leadId}:${nowIso}`);
+    return json(req, { ok: true });
+  }
+
   if (action === "mark_lead_lost") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.edit"))) return json(req, { error: "Forbidden" }, 403);
     const leadId = body.lead_id;

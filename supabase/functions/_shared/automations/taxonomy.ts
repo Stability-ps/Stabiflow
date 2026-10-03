@@ -9,7 +9,7 @@ export const EVENT_TYPES = [
   "conversation.document_received", "conversation.ai_limit_reached",
   "conversation.idle_timeout", "conversation.priority_changed",
   "message.delivery_failed",
-  "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout",
+  "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout", "lead.follow_up_scheduled", "lead.follow_up_completed",
   "opportunity.created", "opportunity.stage_changed", "opportunity.won", "opportunity.lost",
   "customer.created", "revenue.recorded",
   "content.published", "content.publish_failed",

@@ -40,6 +40,20 @@ async function consume(sb: AnySupabaseClient, workspaceId: string, key: string):
   return data === true;
 }
 
+async function accessMode(sb: AnySupabaseClient, workspaceId: string): Promise<"full" | "teaser"> {
+  const { data, error } = await sb.rpc("workspace_access_plans", { p_workspace_id: workspaceId });
+  if (error) throw new Error(`access plans: ${error.message}`);
+  return (data ?? []).some((p: { source?: string }) => p.source === "subscription") ? "full" : "teaser";
+}
+
+async function requireFullStudio(sb: AnySupabaseClient, workspaceId: string) {
+  if (await accessMode(sb, workspaceId) !== "full") {
+    const error = new Error("A Business Studio subscription is required for website scanning and AI profile tools.");
+    (error as Error & { code?: string }).code = "upgrade_required";
+    throw error;
+  }
+}
+
 function aiCredential(): AiCredential | null {
   const apiKey = optionalEnvVar("OPENAI_API_KEY");
   if (!apiKey) return null;
@@ -74,16 +88,30 @@ Deno.serve(async (req: Request) => {
   try {
     // -- Preview (read-only) -------------------------------------------------------
     if (action === "preview") {
-      const [{ content }, ents, templates] = await Promise.all([
+      const [{ content }, ents, templates, accessPlans] = await Promise.all([
         loadProfileContent(sb, workspaceId),
         entitlements(sb, workspaceId),
         sb.from("profile_templates").select("key, name, description, is_premium, config, sort_order").eq("is_active", true).order("sort_order"),
+        sb.rpc("workspace_access_plans", { p_workspace_id: workspaceId }),
       ]);
+      const hasSubscription = (accessPlans.data ?? []).some((p: { source?: string }) => p.source === "subscription");
+      const fullStudio = hasSubscription && !!ents["business_studio.access"]?.enabled;
+      const canExportPdf = !!ents["business_profile.pdf_export"]?.enabled;
+      const purchasedProfile = !fullStudio && canExportPdf;
+      const previewContent = (fullStudio || purchasedProfile) ? content : {
+        ...content,
+        about: content.about ? content.about.slice(0, 220) + (content.about.length > 220 ? "..." : "") : null,
+        mission: null, vision: null, values: [],
+        offerings: content.offerings.slice(0, 2).map((o) => ({ ...o, description: null, price: null })),
+        projects: [], team: [], certifications: [], identifiers: [], social: [],
+        contacts: [], locations: [],
+      };
       return json(req, {
         ok: true,
-        content,
+        content: previewContent,
         templates: templates.data ?? [],
-        canExportPdf: !!ents["business_profile.pdf_export"]?.enabled,
+        accessMode: fullStudio ? "full" : purchasedProfile ? "purchased" : "teaser",
+        canExportPdf,
         canUsePremium: !!ents["business_profile.premium_designs"]?.enabled,
       });
     }
@@ -92,6 +120,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Scan -------------------------------------------------------------------------
     if (action === "scan") {
+      await requireFullStudio(sb, workspaceId);
       let url: URL;
       try {
         url = normalizeWebsiteInput(typeof body.url === "string" ? body.url : "");
@@ -110,6 +139,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Existing profile text (AI, credit-metered) ------------------------------------
     if (action === "extract_text") {
+      await requireFullStudio(sb, workspaceId);
       const cred = aiCredential();
       if (!cred) return json(req, { error: "Reading an existing profile is not available right now" }, 503);
       const text = typeof body.text === "string" ? body.text.trim() : "";
@@ -124,6 +154,7 @@ Deno.serve(async (req: Request) => {
 
     // -- Draft profile narrative (AI, credit-metered) -------------------------------
     if (action === "draft_profile") {
+      await requireFullStudio(sb, workspaceId);
       const cred = aiCredential();
       if (!cred) return json(req, { error: "AI profile drafting is not available right now" }, 503);
       const [{ data: identity }, { data: offerings }] = await Promise.all([
@@ -152,26 +183,41 @@ Deno.serve(async (req: Request) => {
       });
       const existing = identity as Record<string, unknown>;
       const entries: Array<{ field: string; value: unknown }> = [];
+      if (result.draft.industry && !existing?.industry) entries.push({ field: "industry", value: result.draft.industry });
       for (const field of ["tagline", "short_description", "long_description", "mission", "vision"] as const) {
         const value = result.draft[field];
         if (value && !existing?.[field]) entries.push({ field, value });
       }
       if (result.draft.core_values.length && (!Array.isArray(existing?.core_values) || existing.core_values.length === 0)) entries.push({ field: "core_values", value: result.draft.core_values });
-      if (entries.length) {
-        await sb.from("business_fact_proposals").update({ status: "superseded", reviewed_at: new Date().toISOString() })
-          .eq("workspace_id", workspaceId).eq("origin", "ai_wording").eq("status", "pending");
-        await sb.from("business_fact_proposals").insert(entries.map(({ field, value }) => ({
+
+      const existingOfferingNames = new Set((offerings ?? []).map((o) => o.name.trim().toLowerCase()));
+      const offeringEntries = result.draft.offerings.filter((o) => !existingOfferingNames.has(o.name.trim().toLowerCase()));
+      const proposalRows = [
+        ...entries.map(({ field, value }) => ({
           workspace_id: workspaceId, origin: "ai_wording", target: "identity_field", field, proposed: { value },
           current_value: existing?.[field] ? { value: existing[field] } : null,
           evidence: "AI draft based on your verified and website-sourced business information - review before accepting",
           extraction_method: "ai_wording",
-        })));
+        })),
+        ...offeringEntries.map((o) => ({
+          workspace_id: workspaceId, origin: "ai_wording", target: "offering", field: null,
+          proposed: { kind: "service", name: o.name, description: o.description },
+          current_value: null,
+          evidence: "AI service suggestion derived from your verified and website-sourced business information - review before accepting",
+          extraction_method: "ai_wording",
+        })),
+      ];
+      if (proposalRows.length) {
+        await sb.from("business_fact_proposals").update({ status: "superseded", reviewed_at: new Date().toISOString() })
+          .eq("workspace_id", workspaceId).eq("origin", "ai_wording").eq("status", "pending");
+        await sb.from("business_fact_proposals").insert(proposalRows);
       }
-      return json(req, { ok: true, suggestions: entries.length });
+      return json(req, { ok: true, suggestions: proposalRows.length });
     }
 
     // -- Improve wording (AI, credit-metered) ----------------------------------------
     if (action === "improve_wording") {
+      await requireFullStudio(sb, workspaceId);
       const cred = aiCredential();
       if (!cred) return json(req, { error: "AI writing is not available right now" }, 503);
       const tone = typeof body.tone === "string" && TONES.has(body.tone) ? body.tone : "professional";
@@ -221,7 +267,10 @@ Deno.serve(async (req: Request) => {
       if (!docEnt?.enabled || (!docEnt.unlimited && (count ?? 0) >= Number(docEnt.limit_value ?? 0))) {
         return json(req, { error: "You've reached the number of saved documents on your plan. Delete one or upgrade.", code: "limit_reached" }, 402);
       }
-      const watermark = !ents["business_profile.pdf_export"]?.enabled;
+      if (!ents["business_profile.pdf_export"]?.enabled) {
+        return json(req, { error: "A Professional Profile purchase or subscription is required to generate the final PDF.", code: "upgrade_required" }, 402);
+      }
+      const watermark = false;
 
       const { content, logoPath } = await loadProfileContent(sb, workspaceId);
       const logo = await loadLogo(sb, logoPath);
@@ -251,6 +300,8 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Unknown action" }, 400);
   } catch (e) {
     console.error("business-studio failed", action, e instanceof Error ? e.message : e);
+    const code = (e as Error & { code?: string })?.code;
+    if (code === "upgrade_required") return json(req, { error: e instanceof Error ? e.message : "Upgrade required", code }, 402);
     return json(req, { error: "Something went wrong. Please try again." }, 500);
   }
 });

@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import QRCode from "qrcode";
-import { Copy, Download, ExternalLink, FileText, Loader2 } from "lucide-react";
+import { Copy, Download, ExternalLink, Eye, FileText, Loader2, MoreHorizontal, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
@@ -88,18 +89,18 @@ function HostedProfileEditor(props: {
             {!slugValid && <p className="text-xs text-destructive">3-60 lowercase letters, numbers and dashes.</p>}
           </div>
           <div className="space-y-1">
-            <Label htmlFor="hp-doc">Profile PDF visitors can download</Label>
+            <Label htmlFor="hp-doc">Profile document visitors can download</Label>
             <Select value={documentId} onValueChange={setDocumentId} disabled={!props.canEdit}>
               <SelectTrigger id="hp-doc"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
-                {props.docs.map((d) => <SelectItem key={d.id} value={d.id}>{d.title}</SelectItem>)}
+                {props.docs.map((d) => <SelectItem key={d.id} value={d.id}>{d.title} · {d.template_key.charAt(0).toUpperCase() + d.template_key.slice(1)} · {d.page_count} pages</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div className="flex items-center gap-2 sm:col-span-2">
             <Checkbox id="hp-enquiry" checked={showEnquiry} onCheckedChange={(v) => setShowEnquiry(!!v)} disabled={!props.canEdit} />
-            <Label htmlFor="hp-enquiry">Show "Contact us" / WhatsApp buttons</Label>
+            <Label htmlFor="hp-enquiry">Show Contact us / WhatsApp buttons</Label>
           </div>
         </div>
         {props.canEdit && (
@@ -111,8 +112,8 @@ function HostedProfileEditor(props: {
               </>
             ) : (
               <>
-                <Button onClick={() => save.mutate(true)} disabled={!slugValid || !props.entitled || save.isPending}>Publish my profile</Button>
-                <Button variant="outline" onClick={() => save.mutate(false)} disabled={!slugValid || save.isPending}>Save without publishing</Button>
+                <Button onClick={() => save.mutate(true)} disabled={!slugValid || !props.entitled || save.isPending}>Publish profile</Button>
+                <Button variant="outline" onClick={() => save.mutate(false)} disabled={!slugValid || save.isPending}>Save draft</Button>
               </>
             )}
           </div>
@@ -161,9 +162,21 @@ export default function Documents() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Documents</h1>
-        <p className="text-sm text-muted-foreground">Your saved company profiles. Each one keeps the details it was created with.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Documents</h1>
+          <p className="text-sm text-muted-foreground">Your generated business documents and published profile.</p>
+          {!docs.isLoading && (docs.data ?? []).length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span>{docs.data!.length} document{docs.data!.length === 1 ? "" : "s"}</span>
+              <span>·</span>
+              <span>{docs.data!.filter((d) => !d.watermarked).length} final</span>
+              <span>·</span>
+              <span>{docs.data!.filter((d) => d.watermarked).length} preview</span>
+            </div>
+          )}
+        </div>
+        <Button asChild><Link to="/app/business-studio"><Plus className="mr-1 h-4 w-4" /> Create document</Link></Button>
       </div>
       {docs.isLoading ? (
         <Loader2 className="h-5 w-5 animate-spin" />
@@ -178,17 +191,34 @@ export default function Documents() {
         <Card>
           <CardContent className="divide-y p-0">
             {docs.data!.map((d) => (
-              <div key={d.id} className="flex flex-wrap items-center justify-between gap-2 p-4">
-                <div>
-                  <p className="font-medium">{d.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(d.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "long", year: "numeric" })} · {d.template_key} design · {d.page_count} pages
-                    {d.watermarked && " · preview (watermarked)"}
+              <div key={d.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate font-medium">{d.title}</p>
+                    <Badge variant="secondary" className="capitalize">{d.template_key}</Badge>
+                    <Badge variant={d.watermarked ? "outline" : "default"}>{d.watermarked ? "Preview" : "Final PDF"}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Generated {new Date(d.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })} · {d.page_count} page{d.page_count === 1 ? "" : "s"}
                   </p>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => download(d)}>
-                  <Download className="mr-1 h-4 w-4" /> Download
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => download(d)}>
+                    <Eye className="mr-1 h-4 w-4" /> Preview
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => download(d)}>
+                    <Download className="mr-1 h-4 w-4" /> Download
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="icon" variant="ghost" aria-label={`More actions for ${d.title}`}><MoreHorizontal className="h-4 w-4" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => download(d)}>Open document</DropdownMenuItem>
+                      {!d.watermarked && <DropdownMenuItem onClick={() => navigator.clipboard.writeText(d.title).then(() => toast.success("Document name copied"))}>Copy document name</DropdownMenuItem>}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
             ))}
           </CardContent>

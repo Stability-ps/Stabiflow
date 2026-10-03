@@ -16,11 +16,9 @@ export type NavChild = {
 
 export type NavItem = { label: string; path: string; icon: LucideIcon; children?: NavChild[]; flag?: FeatureFlagKey };
 
-// The primary sections from the StabiFlow product brief. "Messages" is the
-// WhatsApp channel area with its own child navigation - the Inbox, Contacts and
-// Templates pages plus filtered links into the shared Automations and
-// Analytics modules and its own Settings view. Every other item is a
-// single page.
+// The primary sections from the StabiFlow product brief. Messages keeps its
+// own page-level tabs for Inbox, Contacts, Templates and Intake, so the global
+// sidebar does not duplicate those destinations.
 //
 // Launch navigation: items with a `flag` are advanced StabiFlow modules,
 // hidden unless the workspace's feature flag is on (grandfathered
@@ -31,9 +29,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Business Studio", path: "/app/business-studio", icon: Wand2, flag: "module.business_studio" },
   { label: "My Business", path: "/app/business", icon: Building2 },
   { label: "Documents", path: "/app/documents", icon: Files },
+  { label: "Creative Studio", path: "/app/creative-studio", icon: Palette, flag: "module.creative_studio" },
   { label: "Content", path: "/app/content", icon: FileText, flag: "module.content" },
   { label: "Campaigns", path: "/app/campaigns", icon: Megaphone, flag: "module.campaigns" },
-  { label: "Creative Studio", path: "/app/creative-studio", icon: Palette, flag: "module.creative_studio" },
   {
     // path is the section root (the index route redirects to /inbox). Using
     // the root - not a child path - is what lets the single sidebar item
@@ -42,14 +40,6 @@ export const NAV_ITEMS: NavItem[] = [
     path: "/app/whatsapp",
     icon: MessageCircle,
     flag: "module.whatsapp",
-    children: [
-      { label: "Inbox", to: "/app/whatsapp/inbox" },
-      { label: "Contacts", to: "/app/whatsapp/contacts" },
-      { label: "Templates", to: "/app/whatsapp/templates" },
-      { label: "Automations", to: "/app/automations?trigger=conversation", external: true, flag: "module.automations" },
-      { label: "Analytics", to: "/app/whatsapp/analytics" },
-      { label: "Settings", to: "/app/whatsapp/settings" },
-    ],
   },
   { label: "Leads", path: "/app/leads", icon: Users, flag: "module.leads" },
   { label: "Customers", path: "/app/customers", icon: Contact, flag: "module.customers" },
@@ -103,7 +93,7 @@ export type MobileNavItem = {
 
 // Order of the "More" sheet. Business Studio itself lives in the Business hub.
 const MORE_ORDER = [
-  "/app/documents", "/app/content", "/app/campaigns", "/app/creative-studio", "/app/customers", "/app/analytics",
+  "/app/documents", "/app/creative-studio", "/app/content", "/app/campaigns", "/app/customers", "/app/analytics",
   "/app/flow-ai", "/app/automations", "/app/integrations", "/app/billing", "/app/settings",
 ];
 

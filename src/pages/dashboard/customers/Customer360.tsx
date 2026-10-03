@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, Building2, FileText, Mail, Phone, User } from "lucide-react";
+import { ArrowLeft, Building2, FileText, Mail, MessageCircle, Phone, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +63,7 @@ export default function Customer360Page() {
   const { data, isLoading, error } = useCustomer360(canView ? currentWorkspaceId : null, customerId ?? null);
 
   const timeline = useMemo(
-    () => (data?.timeline ?? []).slice().sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime()),
+    () => (data?.timeline ?? []).slice().sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
     [data?.timeline],
   );
 
@@ -85,6 +85,9 @@ export default function Customer360Page() {
           <p className="text-sm text-muted-foreground">Customer since {new Date(id.customer_since).toLocaleDateString()}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
+          {id.phone && <Button asChild size="sm" variant="outline"><a href={`tel:${id.phone}`}><Phone className="mr-1.5 h-4 w-4" />Call</a></Button>}
+          {id.phone && <Button asChild size="sm" variant="outline"><a href={`https://wa.me/${id.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"><MessageCircle className="mr-1.5 h-4 w-4" />WhatsApp</a></Button>}
+          {id.email && <Button asChild size="sm" variant="outline"><a href={`mailto:${id.email}`}><Mail className="mr-1.5 h-4 w-4" />Email</a></Button>}
           <Badge variant="secondary" className="capitalize">{id.status}</Badge>
           {id.assigned_to_name && <Badge variant="outline">Owner: {id.assigned_to_name}</Badge>}
         </div>
@@ -134,7 +137,7 @@ export default function Customer360Page() {
         </Section>
       </div>
 
-      <Section title="Timeline" count={timeline.length}>
+      <Section title="Customer journey" count={timeline.length}>
         {timeline.length === 0 ? <p className="text-muted-foreground">Nothing recorded yet.</p> : (
           <ol className="space-y-1.5">
             {timeline.map((t, i) => (

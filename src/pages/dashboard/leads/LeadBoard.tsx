@@ -24,6 +24,8 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
 
   const activeStages = (stages || []).filter((s) => s.is_active).sort((a, b) => a.sort_order - b.sort_order);
   const boardLeads = leads.filter((l) => l.pipeline_id === selectedPipelineId && l.status === "active");
+  const totalValue = boardLeads.reduce((sum, lead) => sum + (Number(lead.estimated_value) || 0), 0);
+  const overdueCount = boardLeads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at).getTime() < Date.now()).length;
 
   const handleDrop = async (stageId: string) => {
     const leadId = dragLeadId;
@@ -48,13 +50,19 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b p-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b p-3">
         <Select value={selectedPipelineId || ""} onValueChange={onSelectPipeline}>
           <SelectTrigger className="w-56"><SelectValue placeholder="Select a pipeline" /></SelectTrigger>
           <SelectContent>
             {pipelines.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}{p.is_default ? " (default)" : ""}</SelectItem>)}
           </SelectContent>
         </Select>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full bg-muted px-2.5 py-1"><strong>{boardLeads.length}</strong> open</span>
+          <span className="rounded-full bg-muted px-2.5 py-1"><strong>{boardLeads.filter((lead) => lead.qualification_status === "qualified").length}</strong> qualified</span>
+          {overdueCount > 0 && <span className="rounded-full bg-destructive/10 px-2.5 py-1 text-destructive"><strong>{overdueCount}</strong> overdue</span>}
+          {totalValue > 0 && <span className="rounded-full bg-muted px-2.5 py-1"><strong>R{totalValue.toLocaleString("en-ZA", { maximumFractionDigits: 0 })}</strong> pipeline value</span>}
+        </div>
       </div>
       <div className="flex flex-1 gap-3 overflow-x-auto p-3">
         {activeStages.map((stage) => (
@@ -63,7 +71,7 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
             onDragOver={(e) => { e.preventDefault(); setDragOverStageId(stage.id); }}
             onDragLeave={() => setDragOverStageId((v) => (v === stage.id ? null : v))}
             onDrop={() => handleDrop(stage.id)}
-            className={`flex w-64 shrink-0 flex-col rounded-md border bg-muted/20 ${dragOverStageId === stage.id ? "ring-2 ring-primary" : ""}`}
+            className={`flex min-w-[240px] flex-1 basis-60 flex-col rounded-md border bg-muted/20 ${dragOverStageId === stage.id ? "ring-2 ring-primary" : ""}`}
           >
             <div className="flex items-center justify-between border-b p-2">
               <p className="text-sm font-medium">{stage.name}</p>
@@ -79,8 +87,17 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
                   onClick={() => onSelectLead(lead.id)}
                   className="cursor-pointer rounded-md border bg-background p-2 text-xs shadow-sm hover:bg-muted/50"
                 >
-                  <p className="font-medium">{lead.contact_name || lead.phone || lead.human_reference}</p>
-                  <p className="text-muted-foreground">{lead.human_reference}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium">{lead.contact_name || lead.phone || lead.human_reference}</p>
+                    {lead.estimated_value != null && Number(lead.estimated_value) > 0 && <span className="shrink-0 font-medium">R{Number(lead.estimated_value).toLocaleString("en-ZA", { maximumFractionDigits: 0 })}</span>}
+                  </div>
+                  {lead.company_name && <p className="mt-0.5 truncate text-muted-foreground">{lead.company_name}</p>}
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                    <Badge variant="outline" className="text-[10px]">{lead.source || "manual"}</Badge>
+                    {lead.qualification_status === "qualified" && <Badge variant="secondary" className="text-[10px]">Qualified</Badge>}
+                    {lead.next_follow_up_at && <Badge variant="outline" className={`text-[10px] ${new Date(lead.next_follow_up_at).getTime() < Date.now() ? "border-destructive/40 text-destructive" : ""}`}>{new Date(lead.next_follow_up_at).getTime() < Date.now() ? "Follow-up overdue" : `Follow up ${new Date(lead.next_follow_up_at).toLocaleDateString()}`}</Badge>}
+                    <span className="ml-auto text-[10px] text-muted-foreground">{lead.human_reference}</span>
+                  </div>
                 </div>
               ))}
             </div>

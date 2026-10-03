@@ -64,3 +64,15 @@ export function setContentSchedulerSettings(workspaceId: string, enabled: boolea
     auto_publish_enabled: enabled,
   });
 }
+
+
+export type AiCaptionSuggestion = { caption: string; hashtags: string[]; cta: string };
+
+export function generateContentCaption(input: {
+  workspace_id: string;
+  media_asset_id: string;
+  target_platform?: "facebook" | "instagram";
+  tone?: string;
+}) {
+  return invoke<{ ok: true; suggestion: AiCaptionSuggestion }>("content-ai-caption-preview", input);
+}

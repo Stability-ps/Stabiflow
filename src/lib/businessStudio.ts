@@ -61,7 +61,7 @@ export class BusinessStudioError extends Error {
 }
 
 async function invoke<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("business-studio", { body });
+  const { data, error } = await supabase.functions.invoke(import.meta.env.VITE_BUSINESS_STUDIO_FUNCTION || "business-studio", { body });
   if (error) {
     const payload = ((await readErrorPayloadFromContext(error)) ?? data) as { error?: string; code?: string } | null;
     throw new BusinessStudioError(payload?.error || error.message || "Request failed", payload?.code);
@@ -85,7 +85,7 @@ export const extractFromText = (workspaceId: string, text: string) => invoke<{ p
 export const improveWording = (workspaceId: string, tone: string) => invoke<{ suggestions: number; rejected: string[] }>({ action: "improve_wording", workspace_id: workspaceId, tone });
 export const draftProfile = (workspaceId: string) => invoke<{ suggestions: number }>({ action: "draft_profile", workspace_id: workspaceId });
 export const fetchPreview = (workspaceId: string) =>
-  invoke<{ content: ProfileContent; templates: ProfileTemplate[]; canExportPdf: boolean; canUsePremium: boolean }>({ action: "preview", workspace_id: workspaceId });
+  invoke<{ content: ProfileContent; templates: ProfileTemplate[]; accessMode: "teaser" | "purchased" | "full"; canExportPdf: boolean; canUsePremium: boolean }>({ action: "preview", workspace_id: workspaceId });
 export const generateDocument = (workspaceId: string, templateKey: string, title?: string) =>
   invoke<{ document: Pick<BusinessDocument, "id" | "title" | "template_key" | "watermarked" | "page_count" | "created_at">; url: string | null }>({
     action: "generate_document", workspace_id: workspaceId, template_key: templateKey, title,
@@ -292,3 +292,5 @@ export function textOn(hex: string): string {
   const l = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
   return l > 0.45 ? "#1a1a1f" : "#ffffff";
 }
+
+

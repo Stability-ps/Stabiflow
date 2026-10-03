@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { MessageCircle, Trophy, XCircle } from "lucide-react";
+import { Mail, MessageCircle, Phone, Trophy, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,8 +18,8 @@ import { QUALIFICATION_STATUSES, qualificationStatusLabel, validateQualification
 import { opportunityStatusLabel } from "@/lib/opportunityLifecycle";
 import { openOpportunityActionLabel, pluralizeLabel } from "@/lib/terminology";
 import {
-  addCrmNote, assignLead, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
-  moveLeadStage, reopenLead, reopenOpportunity, setLeadQualification, signLeadAttachment,
+  addCrmNote, assignLead, completeLeadFollowUp, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
+  moveLeadStage, reopenLead, reopenOpportunity, setLeadFollowUp, setLeadQualification, signLeadAttachment,
 } from "@/lib/leads";
 import { Paperclip } from "lucide-react";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
@@ -129,6 +129,8 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
   const [newOpportunityTitle, setNewOpportunityTitle] = useState("");
   const [customerSheetId, setCustomerSheetId] = useState<string | null>(null);
   const [showOpportunityForm, setShowOpportunityForm] = useState(!!autoOpenOpportunityForm);
+  const [followUpAt, setFollowUpAt] = useState("");
+  const [followUpNote, setFollowUpNote] = useState("");
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["lead", leadId] });
@@ -190,6 +192,35 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
       toast.success("Stage updated");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to move this lead");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleScheduleFollowUp = async () => {
+    if (!followUpAt) return;
+    setBusy(true);
+    try {
+      await setLeadFollowUp(workspaceId, leadId, new Date(followUpAt).toISOString(), followUpNote.trim() || undefined);
+      setFollowUpAt("");
+      setFollowUpNote("");
+      invalidate();
+      toast.success("Follow-up scheduled");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to schedule follow-up");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCompleteFollowUp = async () => {
+    setBusy(true);
+    try {
+      await completeLeadFollowUp(workspaceId, leadId);
+      invalidate();
+      toast.success("Follow-up completed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to complete follow-up");
     } finally {
       setBusy(false);
     }
@@ -305,7 +336,12 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
       </SheetHeader>
 
       <div className="mt-4 space-y-6">
-        <section className="space-y-1 text-sm">
+        <section className="space-y-2 text-sm">
+          <div className="flex flex-wrap gap-2">
+            {lead.phone && <Button asChild size="sm" variant="outline" className="h-8"><a href={`tel:${lead.phone}`}><Phone className="mr-1.5 h-3.5 w-3.5" />Call</a></Button>}
+            {lead.phone && <Button asChild size="sm" variant="outline" className="h-8"><a href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"><MessageCircle className="mr-1.5 h-3.5 w-3.5" />WhatsApp</a></Button>}
+            {lead.email && <Button asChild size="sm" variant="outline" className="h-8"><a href={`mailto:${lead.email}`}><Mail className="mr-1.5 h-3.5 w-3.5" />Email</a></Button>}
+          </div>
           {lead.phone && <p><span className="text-muted-foreground">Phone:</span> {lead.phone}</p>}
           {lead.email && <p><span className="text-muted-foreground">Email:</span> {lead.email}</p>}
           {lead.company_name && <p><span className="text-muted-foreground">Company:</span> {lead.company_name}</p>}
@@ -385,6 +421,29 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
             )}
             <Textarea placeholder="Qualification notes" defaultValue={lead.qualification_notes || ""} onChange={(e) => setQualificationNotes(e.target.value)} className="min-h-[60px] text-xs" />
             <Button size="sm" variant="outline" onClick={handleSaveQualification} disabled={busy}>Save qualification</Button>
+          </section>
+        )}
+
+        {canEdit && lead.status === "active" && (
+          <section className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Next follow-up</p>
+                {lead.next_follow_up_at && (
+                  <p className={`mt-0.5 text-sm font-medium ${new Date(lead.next_follow_up_at).getTime() < Date.now() ? "text-destructive" : ""}`}>
+                    {new Date(lead.next_follow_up_at).toLocaleString()}
+                    {new Date(lead.next_follow_up_at).getTime() < Date.now() ? " · Overdue" : ""}
+                  </p>
+                )}
+                {lead.follow_up_note && <p className="mt-0.5 text-xs text-muted-foreground">{lead.follow_up_note}</p>}
+              </div>
+              {lead.next_follow_up_at && <Button size="sm" variant="outline" onClick={handleCompleteFollowUp} disabled={busy}>Done</Button>}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+              <Input type="datetime-local" value={followUpAt} onChange={(e) => setFollowUpAt(e.target.value)} className="h-8 text-xs" />
+              <Input placeholder="What should happen next?" value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} maxLength={500} className="h-8 text-xs" />
+              <Button size="sm" onClick={handleScheduleFollowUp} disabled={busy || !followUpAt}>{lead.next_follow_up_at ? "Reschedule" : "Schedule"}</Button>
+            </div>
           </section>
         )}
 
@@ -473,7 +532,20 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
             <AlertDialogTitle>Mark this lead as lost?</AlertDialogTitle>
             <AlertDialogDescription>This lead won't appear in active pipeline views. You can reopen it later.</AlertDialogDescription>
           </AlertDialogHeader>
-          <Input placeholder="Reason (optional)" value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
+          <div className="space-y-2">
+            <Select value={lostReason} onValueChange={setLostReason}>
+              <SelectTrigger><SelectValue placeholder="Choose a reason (optional)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="No response">No response</SelectItem>
+                <SelectItem value="Price / budget">Price / budget</SelectItem>
+                <SelectItem value="Chose a competitor">Chose a competitor</SelectItem>
+                <SelectItem value="Not qualified">Not qualified</SelectItem>
+                <SelectItem value="Postponed">Postponed</SelectItem>
+                <SelectItem value="No longer interested">No longer interested</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Or type another reason" value={lostReason} onChange={(e) => setLostReason(e.target.value)} />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleMarkLost}>Mark lost</AlertDialogAction>

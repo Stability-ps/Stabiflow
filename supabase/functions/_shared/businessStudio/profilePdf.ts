@@ -251,6 +251,22 @@ export async function renderProfilePdf(c: ProfileContent, opts: RenderOptions): 
   const sections = profileSections(c);
   newPage(ctx);
 
+  // A concise contents page gives longer profiles a deliberate, premium
+  // structure while still adapting to businesses with fewer sections.
+  const sectionTitles = [
+    sections.includes("about") ? "About us" : null,
+    sections.includes("mission") ? "Mission, vision and values" : null,
+    sections.includes("offerings") ? (c.offerings.every((o) => o.kind === "product") ? "Our products" : "What we do") : null,
+    sections.includes("projects") ? "Selected projects" : null,
+    sections.includes("team") ? "Our team" : null,
+    sections.includes("credentials") ? "Credentials" : null,
+    "Contact us",
+  ].filter(Boolean) as string[];
+  heading(ctx, "Profile overview");
+  paragraph(ctx, "A snapshot of the information included in this company profile.", 11, ctx.fonts.body, ctx.muted, 16);
+  sectionTitles.forEach((title, index) => item(ctx, String(index + 1).padStart(2, "0") + "   " + title, null, null));
+  newPage(ctx);
+
   if (sections.includes("about")) {
     heading(ctx, "About us");
     if (c.shortDescription) paragraph(ctx, c.shortDescription, 12.5, ctx.fonts.bold, ctx.text, 10);
@@ -259,29 +275,35 @@ export async function renderProfilePdf(c: ProfileContent, opts: RenderOptions): 
     if (facts) paragraph(ctx, facts, 10, ctx.fonts.body, ctx.muted, 14);
   }
   if (sections.includes("mission")) {
+    if (ctx.y < A4[1] - 160) newPage(ctx);
     heading(ctx, "Mission, vision and values");
     if (c.mission) item(ctx, "Our mission", null, c.mission);
     if (c.vision) item(ctx, "Our vision", null, c.vision);
     if (c.values.length) item(ctx, "Our values", null, c.values.join("  -  "));
   }
   if (sections.includes("offerings")) {
+    newPage(ctx);
     heading(ctx, c.offerings.every((o) => o.kind === "product") ? "Our products" : "What we do");
     for (const o of c.offerings) item(ctx, o.name, o.price, o.description);
   }
   if (sections.includes("projects")) {
+    newPage(ctx);
     heading(ctx, "Selected projects");
     for (const p of c.projects) item(ctx, p.title, [p.client, p.location, p.year ? String(p.year) : null].filter(Boolean).join("  |  ") || null, p.description);
   }
   if (sections.includes("team")) {
+    newPage(ctx);
     heading(ctx, "Our team");
     for (const t of c.team) item(ctx, t.name, t.role, t.bio);
   }
   if (sections.includes("credentials")) {
+    if (ctx.y < A4[1] - 160) newPage(ctx);
     heading(ctx, "Credentials");
     for (const cert of c.certifications) item(ctx, cert.name, [cert.issuer, cert.expires ? `Valid until ${cert.expires}` : null].filter(Boolean).join("  |  ") || null, null);
     for (const idf of c.identifiers) item(ctx, idf.label, idf.value, null);
   }
 
+  newPage(ctx);
   heading(ctx, "Contact us");
   for (const k of c.contacts) paragraph(ctx, `${k.label ?? CONTACT_LABELS[k.kind] ?? k.kind}:  ${k.value}`, 11, ctx.fonts.body, ctx.text, 4);
   if (c.website) paragraph(ctx, `Website:  ${c.website}`, 11, ctx.fonts.body, ctx.text, 4);

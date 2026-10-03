@@ -88,6 +88,8 @@ export default function CreativeStudio() {
   const selectedAsset = mediaAssets?.find((asset) => asset.id === selectedAssetId) ?? null;
 
   const [advancedCopyOpen, setAdvancedCopyOpen] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
   const [variants, setVariants] = useState<CreativeVariant[] | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -159,11 +161,24 @@ export default function CreativeStudio() {
 
   const totalAds = conceptCount * Math.max(formats.length, 1);
 
+  function handleBrandSelect(profile: BrandProfile | null) {
+    if (profile?.id !== selectedBrand?.id) {
+      // Never carry brand-specific manual copy into a different company.
+      setCta("");
+      setHeadline("");
+      setSupportingText("");
+      setSelectedAssetId(null);
+      setAssetPurpose(null);
+      setReferencePreferences(DEFAULT_REFERENCE_PREFERENCES);
+    }
+    setSelectedBrand(profile);
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Creative Studio</h1>
-        <p className="text-sm text-muted-foreground">Fill everything in once, click Generate Ads, and get complete finished adverts.</p>
+        <p className="text-sm text-muted-foreground">Tell StabiFlow what you want to promote. Your brand profile handles the rest.</p>
       </div>
 
       {!canGenerate ? (
@@ -174,33 +189,35 @@ export default function CreativeStudio() {
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <History className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">Recent:</span>
-              {recentBatches.map((b) => (
+              {recentBatches.slice(0, 3).map((b) => (
                 <Button key={b.id} type="button" size="sm" variant="outline" className="h-7" onClick={() => setReopenBatchId(b.id)}>
                   {b.business_context.slice(0, 40)}
                   {b.business_context.length > 40 ? "…" : ""}
                 </Button>
               ))}
+              {recentBatches.length > 3 && <Button type="button" size="sm" variant="ghost" className="h-7 text-muted-foreground" onClick={() => navigate("/app/content")}>View history</Button>}
             </div>
           )}
 
           {currentWorkspaceId && user && (
+            {selectedBrand && <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm"><span className="font-medium">Active brand:</span> {selectedBrand.name}<span className="ml-2 text-xs text-muted-foreground">New adverts use this brand's saved identity and contact details.</span></div>}
             <BrandProfileSelector
               workspaceId={currentWorkspaceId}
               workspaceName={currentMembership?.workspace.name ?? ""}
               userId={user.id}
               selectedProfileId={selectedBrand?.id ?? null}
-              onSelect={setSelectedBrand}
+              onSelect={handleBrandSelect}
             />
           )}
 
           <Card>
-            <CardHeader><CardTitle className="text-base">What are you advertising?</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Create your advert</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label htmlFor="creative-product-service" className="mb-1 block text-sm font-medium">Product/service <span aria-hidden="true">*</span></label>
+                <label htmlFor="creative-product-service" className="mb-1 block text-sm font-medium">What do you want to create? <span aria-hidden="true">*</span></label>
                 <Textarea
                   id="creative-product-service"
-                  placeholder="e.g. A weekend baking course for beginners, hosted in Cape Town"
+                  placeholder="e.g. Create an advert promoting our SARS debt compromise service"
                   value={productService}
                   onChange={(e) => setProductService(e.target.value)}
                   rows={2}
@@ -208,12 +225,18 @@ export default function CreativeStudio() {
                   aria-describedby={missingBusinessContext ? "creative-product-service-help" : undefined}
                   aria-invalid={missingBusinessContext}
                 />
-                {missingBusinessContext && <p id="creative-product-service-help" className="mt-1.5 text-xs text-muted-foreground">Describe the product or service before generating ads.</p>}
+                {missingBusinessContext && <p id="creative-product-service-help" className="mt-1.5 text-xs text-muted-foreground">Tell StabiFlow what you want to promote before generating ads.</p>}
               </div>
               <div>
                 <label htmlFor="creative-offer" className="mb-1 block text-sm font-medium">Main offer/message (optional)</label>
                 <Textarea id="creative-offer" placeholder="e.g. 20% off for first-time bookings this month" value={offerMessage} onChange={(e) => setOfferMessage(e.target.value)} rows={2} maxLength={300} />
               </div>
+              <div className="rounded-lg border">
+                <Button type="button" variant="ghost" className="w-full justify-between px-4 py-5" onClick={() => setCustomizeOpen((v) => !v)}>
+                  <span className="text-sm font-medium">Customize <span className="font-normal text-muted-foreground">· audience, tone, copy, visual direction</span></span>
+                  {customizeOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </Button>
+                {customizeOpen && <div className="space-y-4 border-t p-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="creative-audience" className="mb-1 block text-sm font-medium">Target audience (optional)</label>
@@ -255,9 +278,12 @@ export default function CreativeStudio() {
                 />
               </div>
 
+                </div>}
+              </div>
+
               {mediaAssets && mediaAssets.length > 0 ? (
                 <div>
-                  <label className="mb-1 block text-sm font-medium">Reference / source image (optional)</label>
+                  <div className="mb-2 flex items-center justify-between gap-2"><label className="block text-sm font-medium">Reference image <span className="font-normal text-muted-foreground">(optional)</span></label><Button type="button" size="sm" variant="outline" onClick={() => setReferenceOpen((v) => !v)}>{selectedAsset ? "Change reference" : "Add reference"}</Button></div>
                   {selectedAsset && (
                     <div className="mb-3 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
                       <MediaPreview storagePath={selectedAsset.storage_path} alt={selectedAsset.title} className="h-20 w-20 shrink-0 rounded-md object-cover" />
@@ -271,7 +297,7 @@ export default function CreativeStudio() {
                       </Button>
                     </div>
                   )}
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+                  {referenceOpen && <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
                     {mediaAssets.slice(0, 8).map((asset) => (
                       <button
                         key={asset.id}
@@ -286,7 +312,7 @@ export default function CreativeStudio() {
                         <span className="block truncate px-1 py-1 text-xs">{asset.title}</span>
                       </button>
                     ))}
-                  </div>
+                  </div>}
 
                   {selectedAsset && (
                     <div className="mt-3 space-y-3 rounded-lg border p-3">
@@ -381,7 +407,7 @@ export default function CreativeStudio() {
                 </div>
               </div>
 
-              <div>
+              <div className="rounded-lg border p-3">
                 <Label className="mb-1 block text-sm font-medium">Contact details to show</Label>
                 <div className="flex flex-wrap gap-3">
                   {CONTACT_FIELD_OPTIONS.map((f) => (
@@ -394,6 +420,7 @@ export default function CreativeStudio() {
                     </label>
                   ))}
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">Uses the selected brand's saved contact details.</p>
               </div>
 
               <p className="text-xs text-muted-foreground">

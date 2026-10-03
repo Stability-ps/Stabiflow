@@ -133,6 +133,18 @@ export function moveLeadStage(workspaceId: string, leadId: string, pipelineId: s
   return runLeadsAction<{ ok: true }>(workspaceId, "move_stage", { lead_id: leadId, pipeline_id: pipelineId, pipeline_stage_id: pipelineStageId });
 }
 
+export function setLeadFollowUp(workspaceId: string, leadId: string, nextFollowUpAt: string, followUpNote?: string) {
+  return runLeadsAction<{ ok: true }>(workspaceId, "set_follow_up", {
+    lead_id: leadId,
+    next_follow_up_at: nextFollowUpAt,
+    follow_up_note: followUpNote,
+  });
+}
+
+export function completeLeadFollowUp(workspaceId: string, leadId: string) {
+  return runLeadsAction<{ ok: true }>(workspaceId, "complete_follow_up", { lead_id: leadId });
+}
+
 export function markLeadLost(workspaceId: string, leadId: string, lostReason?: string) {
   return runLeadsAction<{ ok: true }>(workspaceId, "mark_lead_lost", { lead_id: leadId, lost_reason: lostReason });
 }

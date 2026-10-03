@@ -9,6 +9,14 @@ import {
 } from "../_shared/contentAuth.ts";
 import { isActionType, isConditionOperator, isEventType } from "../_shared/automations/taxonomy.ts";
 
+
+async function hasAutomationSubscription(sb: AnySupabaseClient, workspaceId: string): Promise<boolean> {
+  const { data, error } = await sb.rpc("get_workspace_entitlements", { p_workspace_id: workspaceId });
+  if (error) return false;
+  const ent = ((data ?? []) as { entitlement_key: string; enabled: boolean }[]).find((row) => row.entitlement_key === "automation_runs");
+  return ent?.enabled === true;
+}
+
 const VALID_ACTIONS = new Set(["create", "update", "set_status", "delete"]);
 
 // Which permission the automation's creator must CURRENTLY hold for each
@@ -96,6 +104,7 @@ Deno.serve(async (req: Request) => {
 
   if (action === "create") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "automation.create"))) return json(req, { error: "Forbidden" }, 403);
+    if (!(await hasAutomationSubscription(serviceSb, workspaceId))) return json(req, { error: "Automations require an active subscription. Upgrade your plan to create automations.", code: "SUBSCRIPTION_REQUIRED" }, 402);
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const triggerEventType = body.trigger_event_type;
     if (!name) return json(req, { error: "name is required" }, 400);
@@ -121,6 +130,7 @@ Deno.serve(async (req: Request) => {
 
   if (action === "update") {
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "automation.edit"))) return json(req, { error: "Forbidden" }, 403);
+    if (!(await hasAutomationSubscription(serviceSb, workspaceId))) return json(req, { error: "Automations require an active subscription. Upgrade your plan to edit automations.", code: "SUBSCRIPTION_REQUIRED" }, 402);
     const automationId = body.automation_id;
     if (typeof automationId !== "string" || !automationId) return json(req, { error: "automation_id is required" }, 400);
     const { data: existing } = await serviceSb.from("automations").select("id").eq("id", automationId).eq("workspace_id", workspaceId).maybeSingle();
@@ -148,6 +158,7 @@ Deno.serve(async (req: Request) => {
     if (typeof automationId !== "string" || !automationId) return json(req, { error: "automation_id is required" }, 400);
     if (status !== "enabled" && status !== "disabled") return json(req, { error: "status must be 'enabled' or 'disabled'" }, 400);
     if (!(await hasWorkspacePermission(callerSb, workspaceId, "automation.enable"))) return json(req, { error: "Forbidden" }, 403);
+    if (status === "enabled" && !(await hasAutomationSubscription(serviceSb, workspaceId))) return json(req, { error: "Automations require an active subscription. Upgrade your plan to enable automations.", code: "SUBSCRIPTION_REQUIRED" }, 402);
 
     const { data: automation } = await serviceSb.from("automations").select("id, created_by").eq("id", automationId).eq("workspace_id", workspaceId).maybeSingle();
     if (!automation) return json(req, { error: "Automation not found" }, 404);

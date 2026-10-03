@@ -77,13 +77,16 @@ export type LeadRow = {
   updated_at: string;
   converted_at: string | null;
   lost_at: string | null;
+  next_follow_up_at: string | null;
+  follow_up_note: string | null;
+  follow_up_completed_at: string | null;
 };
 
 // The list projection deliberately omits `intake` (a potentially large
 // jsonb blob the list never renders); useLead() adds it back for the
 // detail view.
 const LEAD_LIST_COLUMNS =
-  "id, human_reference, contact_name, phone, email, company_name, source, source_detail, status, assigned_to, pipeline_id, pipeline_stage_id, qualification_status, qualification_notes, qualification_reason, estimated_value, summary, created_from_conversation_id, lost_reason, created_at, updated_at, converted_at, lost_at";
+  "id, human_reference, contact_name, phone, email, company_name, source, source_detail, status, assigned_to, pipeline_id, pipeline_stage_id, qualification_status, qualification_notes, qualification_reason, estimated_value, summary, created_from_conversation_id, lost_reason, created_at, updated_at, converted_at, lost_at, next_follow_up_at, follow_up_note, follow_up_completed_at";
 const LEAD_DETAIL_COLUMNS = `${LEAD_LIST_COLUMNS}, intake`;
 
 export function useLeads(workspaceId: string | null) {

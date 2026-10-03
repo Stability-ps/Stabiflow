@@ -32,7 +32,7 @@ const DESKTOP_SECTIONS: DesktopSection[] = [
   {
     key: "marketing",
     label: "Marketing",
-    paths: ["/app/content", "/app/campaigns", "/app/creative-studio"],
+    paths: ["/app/creative-studio", "/app/content", "/app/campaigns"],
   },
   {
     key: "customers",

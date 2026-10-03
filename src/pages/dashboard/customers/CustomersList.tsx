@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Contact } from "lucide-react";
+import { Contact, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/hooks/useAuth";
 import { roleHasPermission } from "@/lib/permissions";
@@ -26,7 +27,13 @@ export default function CustomersList() {
         <p className="text-sm text-muted-foreground">Everyone who became a customer, with their conversations, opportunities and revenue in one place.</p>
       </div>
 
-      <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name, phone, email or company..." className="max-w-sm" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <span className="rounded-full bg-muted px-2.5 py-1"><strong>{data?.length ?? 0}</strong> customers</span>
+          <span className="rounded-full bg-muted px-2.5 py-1"><strong>{data?.filter((customer) => customer.open_opportunities > 0).length ?? 0}</strong> with open opportunities</span>
+        </div>
+        <div className="relative w-full sm:w-80"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search customers" className="pl-8" /></div>
+      </div>
 
       {isLoading ? (
         <div className="h-64 animate-pulse rounded-lg bg-muted" />
@@ -50,7 +57,8 @@ export default function CustomersList() {
                 <tr key={c.id} className="cursor-pointer border-b last:border-b-0 hover:bg-muted/40" onClick={() => navigate(`/app/customers/${c.id}`)}>
                   <td className="px-3 py-2">
                     <span className="font-medium">{c.name}</span>
-                    {c.status !== "active" && <span className="ml-1.5 text-xs text-muted-foreground capitalize">({c.status})</span>}
+                    {c.status !== "active" && <Badge variant="outline" className="ml-1.5 text-[10px] capitalize">{c.status}</Badge>}
+                    {c.assigned_to_name && <p className="text-xs text-muted-foreground">Owner: {c.assigned_to_name}</p>}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{c.phone || c.email || "-"}</td>
                   <td className="px-3 py-2 text-muted-foreground">{c.company_name || "-"}</td>
