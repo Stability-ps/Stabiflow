@@ -25,5 +25,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/components/FeatureGate.tsx"]
+  "include": ["src/vite-env.d.ts"]
 }
