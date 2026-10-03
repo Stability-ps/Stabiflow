@@ -16,7 +16,7 @@ import { ProposalReview } from "@/components/business/ProposalReview";
 import { useAuth } from "@/hooks/useAuth";
 import {
   COUNTRY_IDENTIFIER_SCHEMES, computeCompleteness, fetchBusinessIdentity, identifierSchemeLabel, updateBusinessIdentity,
-  setBusinessSectionPreference, type BusinessIdentity, type BusinessIdentityBundle,
+  type BusinessIdentity, type BusinessIdentityBundle,
 } from "@/lib/businessIdentity";
 import type { BrandProfile } from "@/lib/brandProfiles";
 import { draftProfile, scanWebsite } from "@/lib/businessStudio";
@@ -100,12 +100,6 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
 
   const identity = bundle.identity;
-  const sectionNA = (section: string) => bundle.sectionPreferences.some((p) => p.section === section && p.status === "not_applicable");
-  async function toggleNA(section: string, makeNA: boolean) {
-    try { await setBusinessSectionPreference(currentWorkspaceId, section, makeNA ? "not_applicable" : "applicable", user?.id ?? null); refresh(); }
-    catch (e) { toast.error(e instanceof Error ? e.message : "Could not update section"); }
-  }
-  const naButton = (section: string, label: string) => canEdit ? <Button size="sm" variant="ghost" onClick={() => toggleNA(section, !sectionNA(section))}>{sectionNA(section) ? "Mark as applicable" : label}</Button> : null;
   useEffect(() => { setForm(toForm(identity)); }, [identity]);
   const provenance = (identity.field_provenance ?? {}) as Record<string, { source?: string }>;
   const set = (k: keyof IdentityForm) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -298,10 +292,10 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           </div>
         ))}
 
-        {sectionButton("contact", "Contact & locations", "Email, phone, WhatsApp and business locations", bundle.contacts.length > 0 && (bundle.locations.length > 0 || sectionNA("location")), (
+        {sectionButton("contact", "Contact & locations", "Email, phone, WhatsApp and business locations", bundle.contacts.length > 0 && bundle.locations.length > 0, (
           <div className="space-y-4">
             <FactListSection {...listProps} title="Contact details" table="business_contacts" rows={bundle.contacts as never} fields={contactFields} defaults={{ kind: "email", is_public: true }} summarize={(r) => `${String(r.kind)}: ${String(r.value)}${r.label ? ` (${String(r.label)})` : ""}${r.is_primary ? " · main" : ""}`} />
-            <div className="flex justify-end">{naButton("location", "No public/physical location")}</div><FactListSection {...listProps} title="Locations" table="business_locations" rows={bundle.locations as never} fields={[{ name: "label", label: "Label", placeholder: "e.g. Head office or Online" },{ name: "address_line1", label: "Address" },{ name: "address_line2", label: "Address line 2" },{ name: "city", label: "City" },{ name: "region", label: "Province / region" },{ name: "postal_code", label: "Postal code" },{ name: "is_primary", label: "Main location", type: "checkbox" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")} />
+            <FactListSection {...listProps} title="Locations" table="business_locations" rows={bundle.locations as never} fields={[{ name: "label", label: "Label", placeholder: "e.g. Head office or Online" },{ name: "address_line1", label: "Address" },{ name: "address_line2", label: "Address line 2" },{ name: "city", label: "City" },{ name: "region", label: "Province / region" },{ name: "postal_code", label: "Postal code" },{ name: "is_primary", label: "Main location", type: "checkbox" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")} />
           </div>
         ))}
 
@@ -309,17 +303,16 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           <FactListSection {...listProps} title="Services and products" description="Add at least three for a strong profile." table="business_offerings" rows={bundle.offerings as never} fields={[{ name: "kind", label: "Type", type: "select", required: true, options: [{ value: "service", label: "Service" }, { value: "product", label: "Product" }] },{ name: "name", label: "Name", required: true },{ name: "price_text", label: "Price (optional)", placeholder: "e.g. From R1 500" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_featured", label: "Feature this", type: "checkbox" }]} defaults={{ kind: "service" }} summarize={(r) => `${String(r.name)}${r.price_text ? ` · ${String(r.price_text)}` : ""}`} />
         ))}
 
-        {sectionButton("social", "Social media", "Links customers can use to find you", bundle.socialLinks.length > 0 || sectionNA("social"), (
-          <><div className="flex justify-end">{naButton("social", "We don't use social media")}</div><FactListSection {...listProps} title="Social media" table="business_social_links" rows={bundle.socialLinks as never} fields={[{ name: "platform", label: "Platform", type: "select", required: true, options: [{ value: "facebook", label: "Facebook" },{ value: "instagram", label: "Instagram" },{ value: "linkedin", label: "LinkedIn" },{ value: "x", label: "X" },{ value: "tiktok", label: "TikTok" },{ value: "youtube", label: "YouTube" },{ value: "other", label: "Other" }] },{ name: "url", label: "Link", type: "url", required: true, placeholder: "https://" }]} summarize={(r) => `${String(r.platform)}: ${String(r.url)}`} /></>
+        {sectionButton("social", "Social media", "Links customers can use to find you", bundle.socialLinks.length > 0, (
+          <FactListSection {...listProps} title="Social media" table="business_social_links" rows={bundle.socialLinks as never} fields={[{ name: "platform", label: "Platform", type: "select", required: true, options: [{ value: "facebook", label: "Facebook" },{ value: "instagram", label: "Instagram" },{ value: "linkedin", label: "LinkedIn" },{ value: "x", label: "X" },{ value: "tiktok", label: "TikTok" },{ value: "youtube", label: "YouTube" },{ value: "other", label: "Other" }] },{ name: "url", label: "Link", type: "url", required: true, placeholder: "https://" }]} summarize={(r) => `${String(r.platform)}: ${String(r.url)}`} />
         ))}
 
-        {sectionButton("team", "Team", "People behind your business", bundle.team.length > 0 || sectionNA("team"), (
-          <><div className="flex justify-end">{naButton("team", "Don't show team members")}</div><FactListSection {...listProps} title="Team" table="business_team_members" rows={bundle.team as never} fields={[{ name: "full_name", label: "Full name", required: true },{ name: "role_title", label: "Role" },{ name: "bio", label: "Short bio", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.full_name)}${r.role_title ? ` · ${String(r.role_title)}` : ""}`} /></>
+        {sectionButton("team", "Team", "People behind your business", bundle.team.length > 0, (
+          <FactListSection {...listProps} title="Team" table="business_team_members" rows={bundle.team as never} fields={[{ name: "full_name", label: "Full name", required: true },{ name: "role_title", label: "Role" },{ name: "bio", label: "Short bio", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.full_name)}${r.role_title ? ` · ${String(r.role_title)}` : ""}`} />
         ))}
 
-        {sectionButton("work", "Work & credentials", "Projects, certifications and registration numbers", bundle.projects.length > 0 || bundle.certifications.length > 0 || bundle.identifiers.length > 0 || sectionNA("projects") || sectionNA("credentials"), (
+        {sectionButton("work", "Work & credentials", "Projects, certifications and registration numbers", bundle.projects.length > 0 || bundle.certifications.length > 0 || bundle.identifiers.length > 0, (
           <div className="space-y-4">
-            <div className="flex flex-wrap justify-end gap-2">{naButton("projects", "No projects to showcase")}{naButton("credentials", "No certifications/registrations")}</div>
             <FactListSection {...listProps} title="Projects" table="business_projects" rows={bundle.projects as never} fields={[{ name: "title", label: "Project", required: true },{ name: "client_name", label: "Client" },{ name: "location", label: "Location" },{ name: "completed_year", label: "Year completed", type: "number" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.title)}${r.client_name ? ` for ${String(r.client_name)}` : ""}`} />
             <FactListSection {...listProps} title="Certifications and accreditations" table="business_certifications" rows={bundle.certifications as never} fields={[{ name: "name", label: "Name", required: true },{ name: "issuer", label: "Issued by" },{ name: "credential_id", label: "Certificate number" },{ name: "issued_on", label: "Issued on", type: "date" },{ name: "expires_on", label: "Expires on", type: "date" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => String(r.name)} />
             <FactListSection {...listProps} title="Registration numbers" description="Private unless you choose to show them." table="business_identifiers" rows={bundle.identifiers as never} sortable={false} fields={[{ name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },{ name: "value", label: "Number", required: true },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ country_code: identity.country_code, is_public: false }} summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`} />
