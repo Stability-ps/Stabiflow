@@ -9,7 +9,7 @@ function bundle(over: Partial<BusinessIdentityBundle> = {}, identity: Record<str
       founded_year: null, employee_count_range: null, brand_profile_id: null, field_provenance: {}, verification_status: "unverified",
       verified_at: null, verified_by: null, created_at: "", updated_at: "", ...identity,
     } as BusinessIdentityBundle["identity"],
-    contacts: [], locations: [], socialLinks: [], offerings: [], team: [], projects: [], certifications: [], identifiers: [], sectionPreferences: [],
+    contacts: [], locations: [], socialLinks: [], offerings: [], team: [], projects: [], certifications: [], identifiers: [],
     ...over,
   };
 }
