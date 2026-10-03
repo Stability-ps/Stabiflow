@@ -21,6 +21,7 @@ import { PermanentPublishError, TemporaryPublishError } from "./content-provider
 import { publishToFacebookPage } from "./content-providers/meta-facebook.ts";
 import { publishToInstagramAccount } from "./content-providers/meta-instagram.ts";
 import { publishToLinkedInCompanyPage } from "./content-providers/linkedin.ts";
+import { emitDomainEvent } from "./automations/emitDomainEvent.ts";
 
 // deno-lint-ignore no-explicit-any
 export type AnySupabaseClient = any;
@@ -245,6 +246,30 @@ export async function executePublish(sb: AnySupabaseClient, post: PublishablePos
       code: outcome.kind === "success" ? null : outcome.code,
     },
   });
+
+  // Taxonomy has no "retry scheduled" event - only a terminal outcome
+  // (published, or permanently failed after retries are exhausted) is a
+  // domain event; an in-progress retry is not yet a fact an automation
+  // should react to.
+  if (next.status === "published") {
+    await emitDomainEvent(sb, {
+      workspaceId: post.workspace_id,
+      eventType: "content.published",
+      entityType: "content_scheduled_post",
+      entityId: post.id,
+      payload: { entity_id: post.id, platform: post.target_platform, series_id: post.series_id },
+      dedupeKey: `content.published:${post.id}`,
+    });
+  } else if (next.status === "failed") {
+    await emitDomainEvent(sb, {
+      workspaceId: post.workspace_id,
+      eventType: "content.publish_failed",
+      entityType: "content_scheduled_post",
+      entityId: post.id,
+      payload: { entity_id: post.id, platform: post.target_platform, series_id: post.series_id, failure_code: next.failureCode },
+      dedupeKey: `content.publish_failed:${post.id}`,
+    });
+  }
 
   return { outcome, status: next.status };
 }

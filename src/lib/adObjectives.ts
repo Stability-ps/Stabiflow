@@ -63,6 +63,6 @@ export function getObjectiveOption(objective: string): ObjectiveOption | undefin
 
 export const DESTINATION_TYPE_LABELS: Record<DestinationType, string> = {
   website: "Website",
-  whatsapp: "WhatsApp (coming soon)",
+  whatsapp: "WhatsApp",
   page_profile: "Facebook Page / Instagram profile",
 };

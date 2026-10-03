@@ -56,6 +56,21 @@ async function workspacesWithAutoPublishEnabled(sb: ReturnType<typeof createServ
   return new Set((data || []).map((row: { workspace_id: string }) => row.workspace_id));
 }
 
+// A suspended/cancelled workspace's real Meta publish calls (a "costly
+// provider action" exactly like ad-campaigns-publish) must stop too - this
+// worker has no per-request caller session to run assertWorkspaceActive
+// against, so it batch-filters the same way auto-publish eligibility is
+// already batch-filtered above, rather than gating one call at a time.
+async function workspacesCurrentlyActive(sb: ReturnType<typeof createServiceClient>, workspaceIds: string[]): Promise<Set<string>> {
+  if (!workspaceIds.length) return new Set();
+  const { data } = await sb
+    .from("workspace_billing")
+    .select("workspace_id, status")
+    .in("workspace_id", Array.from(new Set(workspaceIds)))
+    .in("status", ["trial", "active"]);
+  return new Set((data || []).map((row: { workspace_id: string }) => row.workspace_id));
+}
+
 async function claimDuePosts(sb: ReturnType<typeof createServiceClient>, nowIso: string, staleCutoffIso: string, workerId: string): Promise<PublishablePost[]> {
   const { data: candidates, error } = await sb
     .from("content_scheduled_posts")
@@ -71,8 +86,12 @@ async function claimDuePosts(sb: ReturnType<typeof createServiceClient>, nowIso:
   // silently excluded, which an `!inner` join (Acapolite's original, where
   // campaign_id was NOT NULL) would have done.
   const eligibleBySeries = ((candidates || []) as CandidateRow[]).filter((c) => c.series_id === null || c.series?.status === "active");
-  const enabledWorkspaces = await workspacesWithAutoPublishEnabled(sb, eligibleBySeries.map((c) => c.workspace_id));
-  const eligible = eligibleBySeries.filter((c) => enabledWorkspaces.has(c.workspace_id)).slice(0, BATCH_LIMIT);
+  const candidateWorkspaceIds = eligibleBySeries.map((c) => c.workspace_id);
+  const [enabledWorkspaces, activeWorkspaces] = await Promise.all([
+    workspacesWithAutoPublishEnabled(sb, candidateWorkspaceIds),
+    workspacesCurrentlyActive(sb, candidateWorkspaceIds),
+  ]);
+  const eligible = eligibleBySeries.filter((c) => enabledWorkspaces.has(c.workspace_id) && activeWorkspaces.has(c.workspace_id)).slice(0, BATCH_LIMIT);
 
   const claimed: PublishablePost[] = [];
   for (const candidate of eligible) {

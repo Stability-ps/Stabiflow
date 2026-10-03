@@ -17,6 +17,8 @@
 import { updateObjectStatus } from "../_shared/ad-providers/metaMarketingApi.ts";
 import { sanitizeAdErrorForStorage } from "../_shared/ad-providers/metaAdsErrorClassifier.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
+import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -51,13 +53,23 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Forbidden" }, 403);
   }
 
+  const serviceSb = createServiceClient();
+
+  // Only RESUME is blocked for a suspended/cancelled workspace - pausing
+  // is a cost-reducing safety action and must stay available regardless
+  // of status; only resuming spend is the "costly provider mutation" the
+  // launch-completion status gate exists to prevent.
+  if (action === "resume") {
+    const statusGate = await assertWorkspaceActive(serviceSb, campaign.workspace_id);
+    if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
+  }
+
   if (!campaign.external_campaign_id || (campaign.status !== "active" && campaign.status !== "paused")) {
     return json(req, { error: `This campaign is not in a pausable/resumable state (current status: ${campaign.status}).` }, 409);
   }
   if (action === "pause" && campaign.status === "paused") return json(req, { error: "Campaign is already paused." }, 409);
   if (action === "resume" && campaign.status === "active") return json(req, { error: "Campaign is already active." }, 409);
 
-  const serviceSb = createServiceClient();
   const nowIso = new Date().toISOString();
 
   // Atomic claim identical in spirit to publish's claim: only proceed if
@@ -96,6 +108,19 @@ Deno.serve(async (req: Request) => {
       target_type: "ad_campaign",
       target_id: campaignId,
       metadata: {},
+    });
+
+    // Taxonomy (approved Phase J) has no campaign.resumed - a resume
+    // returns the campaign to the same "actively delivering at Meta"
+    // state that a fresh publish reaches, so it reuses campaign.published;
+    // a pause is the only state with its own distinct event type.
+    await emitDomainEvent(serviceSb, {
+      workspaceId: campaign.workspace_id,
+      eventType: action === "pause" ? "campaign.paused" : "campaign.published",
+      entityType: "ad_campaign",
+      entityId: campaignId,
+      payload: { entity_id: campaignId },
+      dedupeKey: `campaign.${action === "pause" ? "paused" : "published"}:${campaignId}:${nowIso}`,
     });
 
     return json(req, { ok: true, status: newStatus });

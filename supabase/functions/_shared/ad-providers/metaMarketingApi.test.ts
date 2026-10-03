@@ -72,6 +72,26 @@ Deno.test("buildCreateAdSetPayload: campaign_id references the parent campaign's
   assertEquals("end_time" in payload, false);
 });
 
+Deno.test("buildCreateAdSetPayload: start_time is included for a scheduled start", () => {
+  const payload = buildCreateAdSetPayload({
+    adAccountId: "act_123", campaignExternalId: "1", name: "Ad Set", status: "PAUSED",
+    optimizationGoal: "LINK_CLICKS", billingEvent: "LINK_CLICKS",
+    startTime: "2026-09-01T14:30:00Z", endTime: null,
+    targeting: {}, pagePlacements: {}, dailyBudgetMinorUnits: null, lifetimeBudgetMinorUnits: null,
+  });
+  assertEquals(payload.start_time, "2026-09-01T14:30:00Z");
+});
+
+Deno.test("START NOW: buildCreateAdSetPayload OMITS start_time when startTime is null (Meta begins delivery on activation)", () => {
+  const payload = buildCreateAdSetPayload({
+    adAccountId: "act_123", campaignExternalId: "1", name: "Ad Set", status: "PAUSED",
+    optimizationGoal: "LINK_CLICKS", billingEvent: "LINK_CLICKS",
+    startTime: null, endTime: null,
+    targeting: {}, pagePlacements: {}, dailyBudgetMinorUnits: null, lifetimeBudgetMinorUnits: null,
+  });
+  assertEquals("start_time" in payload, false);
+});
+
 Deno.test("buildCreateAdSetPayload: end_time is included only when set", () => {
   const payload = buildCreateAdSetPayload({
     adAccountId: "act_123",

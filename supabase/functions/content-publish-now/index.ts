@@ -27,6 +27,7 @@
 //    uses - no separate provider-calling logic.
 import { claimScheduledPost, executePublish, PUBLISHABLE_POST_COLUMNS } from "../_shared/contentPublishExecution.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -60,6 +61,9 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, existing.workspace_id, "content.publish"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+
+  const statusGate = await assertWorkspaceActive(callerSb, existing.workspace_id);
+  if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 
   if (existing.status !== "scheduled") {
     return json(req, {

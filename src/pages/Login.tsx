@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,13 +9,23 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 
+// Only ever a same-origin, single-leading-slash app path (e.g.
+// /accept-invitation?token=...) - never an absolute URL or "//host" -
+// so this can't be turned into an open redirect off a query param.
+function safeRedirectTarget(searchParams: URLSearchParams): string {
+  const redirect = searchParams.get("redirect");
+  if (redirect && redirect.startsWith("/") && !redirect.startsWith("//")) return redirect;
+  return "/app";
+}
+
 export default function Login() {
   const { user, loading } = useAuth();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to={safeRedirectTarget(searchParams)} replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

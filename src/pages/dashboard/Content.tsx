@@ -2,11 +2,11 @@ import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const CONTENT_TABS = [
-  { label: "Calendar", path: "/content/calendar" },
-  { label: "Scheduled", path: "/content/scheduled" },
-  { label: "Published", path: "/content/published" },
-  { label: "Drafts", path: "/content/drafts" },
-  { label: "Media Library", path: "/content/media-library" },
+  { label: "Media Library", path: "/app/content/media-library" },
+  { label: "Calendar", path: "/app/content/calendar" },
+  { label: "Scheduled", path: "/app/content/scheduled" },
+  { label: "Published", path: "/app/content/published" },
+  { label: "Drafts", path: "/app/content/drafts" },
 ];
 
 export default function Content() {
