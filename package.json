@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --version",
+    "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
