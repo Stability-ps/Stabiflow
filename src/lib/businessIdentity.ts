@@ -41,6 +41,7 @@ export type BusinessIdentityBundle = {
   projects: BusinessProject[];
   certifications: BusinessCertification[];
   identifiers: BusinessIdentifier[];
+  sectionPreferences: { section: string; status: string; reason: string | null }[];
 };
 
 export type FactSource = "user" | "website_scan" | "document_upload" | "ai_suggestion" | "backfill" | "operator" | "import";
@@ -79,7 +80,7 @@ export function identifierSchemeLabel(countryCode: string, scheme: string): stri
 }
 
 export async function fetchBusinessIdentity(workspaceId: string): Promise<BusinessIdentityBundle> {
-  const [identity, contacts, locations, socialLinks, offerings, team, projects, certifications, identifiers] = await Promise.all([
+  const [identity, contacts, locations, socialLinks, offerings, team, projects, certifications, identifiers, sectionPreferences] = await Promise.all([
     supabase.from("business_identities").select("*").eq("workspace_id", workspaceId).single(),
     supabase.from("business_contacts").select("*").eq("workspace_id", workspaceId).order("sort_order"),
     supabase.from("business_locations").select("*").eq("workspace_id", workspaceId).order("sort_order"),
@@ -89,8 +90,9 @@ export async function fetchBusinessIdentity(workspaceId: string): Promise<Busine
     supabase.from("business_projects").select("*").eq("workspace_id", workspaceId).order("sort_order"),
     supabase.from("business_certifications").select("*").eq("workspace_id", workspaceId).order("sort_order"),
     supabase.from("business_identifiers").select("*").eq("workspace_id", workspaceId).order("created_at"),
+    supabase.from("business_profile_section_preferences").select("section,status,reason").eq("workspace_id", workspaceId),
   ]);
-  const firstError = [identity, contacts, locations, socialLinks, offerings, team, projects, certifications, identifiers].find((r) => r.error)?.error;
+  const firstError = [identity, contacts, locations, socialLinks, offerings, team, projects, certifications, identifiers, sectionPreferences].find((r) => r.error)?.error;
   if (firstError) throw new Error(firstError.message);
 
   return {
@@ -103,6 +105,7 @@ export async function fetchBusinessIdentity(workspaceId: string): Promise<Busine
     projects: (projects.data ?? []) as BusinessProject[],
     certifications: (certifications.data ?? []) as BusinessCertification[],
     identifiers: (identifiers.data ?? []) as BusinessIdentifier[],
+    sectionPreferences: (sectionPreferences.data ?? []) as { section: string; status: string; reason: string | null }[],
   };
 }
 
@@ -163,6 +166,7 @@ export type CompletenessItem = { key: string; label: string; done: boolean; weig
 export function computeCompleteness(b: BusinessIdentityBundle): { score: number; items: CompletenessItem[] } {
   const i = b.identity;
   const has = (v: unknown) => (typeof v === "string" ? v.trim().length > 0 : v !== null && v !== undefined);
+  const notApplicable = (section: string) => b.sectionPreferences.some((p) => p.section === section && p.status === "not_applicable");
   const items: CompletenessItem[] = [
     { key: "name", label: "Business name", done: has(i.trading_name) || has(i.legal_name), weight: 10, section: "company" },
     { key: "legal_name", label: "Registered (legal) name", done: has(i.legal_name), weight: 4, section: "company" },
@@ -173,15 +177,20 @@ export function computeCompleteness(b: BusinessIdentityBundle): { score: number;
     { key: "mission", label: "Mission or vision", done: has(i.mission) || has(i.vision), weight: 4, section: "about" },
     { key: "values", label: "Core values", done: (i.core_values ?? []).length > 0, weight: 3, section: "about" },
     { key: "contact", label: "Email or phone", done: b.contacts.some((c) => c.kind === "email" || c.kind === "phone"), weight: 10, section: "contacts" },
-    { key: "location", label: "Location", done: b.locations.length > 0, weight: 6, section: "locations" },
+    { key: "location", label: "Location", done: b.locations.length > 0 || notApplicable("location"), weight: 6, section: "locations" },
     { key: "offerings", label: "At least 3 services or products", done: b.offerings.length >= 3, weight: 12, section: "offerings" },
     { key: "branding", label: "Logo and brand colours", done: !!i.brand_profile_id, weight: 8, section: "branding" },
-    { key: "social", label: "Social media links", done: b.socialLinks.length > 0, weight: 3, section: "social" },
-    { key: "team", label: "Team members", done: b.team.length > 0, weight: 4, section: "team" },
-    { key: "projects", label: "Projects or case studies", done: b.projects.length > 0, weight: 4, section: "projects" },
-    { key: "credentials", label: "Certifications or registration", done: b.certifications.length > 0 || b.identifiers.length > 0, weight: 6, section: "credentials" },
+    { key: "social", label: "Social media links", done: b.socialLinks.length > 0 || notApplicable("social"), weight: 3, section: "social" },
+    { key: "team", label: "Team members", done: b.team.length > 0 || notApplicable("team"), weight: 4, section: "team" },
+    { key: "projects", label: "Projects or case studies", done: b.projects.length > 0 || notApplicable("projects"), weight: 4, section: "projects" },
+    { key: "credentials", label: "Certifications or registration", done: b.certifications.length > 0 || b.identifiers.length > 0 || notApplicable("credentials"), weight: 6, section: "credentials" },
   ];
   const total = items.reduce((s, it) => s + it.weight, 0);
   const done = items.reduce((s, it) => s + (it.done ? it.weight : 0), 0);
   return { score: Math.round((done / total) * 100), items };
+}
+
+export async function setBusinessSectionPreference(workspaceId: string, section: string, status: "applicable" | "not_applicable", userId: string | null) {
+  const { error } = await supabase.from("business_profile_section_preferences").upsert({ workspace_id: workspaceId, section, status, updated_by: userId, updated_at: new Date().toISOString() } as never, { onConflict: "workspace_id,section" });
+  if (error) throw new Error(error.message);
 }
