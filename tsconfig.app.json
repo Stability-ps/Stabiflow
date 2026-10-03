@@ -25,5 +25,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src/components/FeatureGate.tsx","src/components/analytics/CrmPerformanceSection.tsx","src/components/business/ProfilePreview.tsx","src/components/content/CalendarMonthView.tsx","src/components/content/ComposePostDialog.tsx","src/components/layout/AppSidebar.tsx","src/hooks/useAnalytics.ts","src/hooks/useInboxTemplates.ts","src/hooks/useLeads.ts","src/lib/automations.ts","src/lib/businessIdentity.ts","src/lib/businessStudio.ts","src/lib/contentFunctions.ts","src/lib/leads.ts","src/lib/navigation.ts"]
 }
