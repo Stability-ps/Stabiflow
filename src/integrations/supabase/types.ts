@@ -2225,6 +2225,48 @@ export type Database = {
           },
         ]
       }
+      business_profile_section_preferences: {
+        Row: {
+          reason: string | null
+          section: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          reason?: string | null
+          section: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          reason?: string | null
+          section?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_profile_section_preferences_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_profile_section_preferences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "business_identities"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
       business_projects: {
         Row: {
           client_name: string | null
