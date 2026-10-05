@@ -36,6 +36,8 @@ type Props = {
   summarize: (row: Row) => string;
   canEdit: boolean;
   onChanged: () => void;
+  /** Called after a successful save/confirm so parent flows can advance once refreshed. */
+  onSaved?: () => void;
   defaults?: Record<string, unknown>;
   sortable?: boolean;
 };
@@ -64,7 +66,7 @@ function toDbValues(fields: FactField[], draft: Record<string, unknown>): Record
  * whether the customer has confirmed it; a user edit resets the source to
  * "Entered by you".
  */
-export function FactListSection({ title, description, table, workspaceId, userId, rows, fields, summarize, canEdit, onChanged, defaults, sortable = true }: Props) {
+export function FactListSection({ title, description, table, workspaceId, userId, rows, fields, summarize, canEdit, onChanged, onSaved, defaults, sortable = true }: Props) {
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
@@ -100,6 +102,7 @@ export function FactListSection({ title, description, table, workspaceId, userId
       }
       setEditingId(null);
       onChanged();
+      onSaved?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
@@ -121,6 +124,7 @@ export function FactListSection({ title, description, table, workspaceId, userId
     try {
       await confirmBusinessChild(table, id, userId);
       onChanged();
+      onSaved?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not confirm");
     }
