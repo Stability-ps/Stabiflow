@@ -70,10 +70,10 @@ export default function WhatsAppLayout() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="mx-auto max-w-[1600px] space-y-4">
+      <div className="flex items-start justify-between gap-3 rounded-3xl border border-emerald-100/80 bg-gradient-to-br from-white via-white to-emerald-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(155_45%_35%/0.24)] sm:p-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Messages</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Customer conversations</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Messages</h1>
           <p className="hidden text-sm text-muted-foreground sm:block">Conversations, contacts, templates and intake for your connected WhatsApp Business number.</p>
         </div>
         {canManageIntegration && (
@@ -97,7 +97,7 @@ export default function WhatsAppLayout() {
         </div>
       ) : null}
 
-      <nav aria-label="WhatsApp sections" className="flex gap-1 overflow-x-auto border-b">
+      <nav aria-label="WhatsApp sections" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}
@@ -106,10 +106,10 @@ export default function WhatsAppLayout() {
             title={tab.external ? `Open ${tab.label}, filtered to WhatsApp` : undefined}
             className={({ isActive }) =>
               cn(
-                "shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+                "shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-all",
                 isActive && !tab.external
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
               )
             }
           >
