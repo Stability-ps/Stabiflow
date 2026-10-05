@@ -21,7 +21,7 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <AppSidebar items={navItems} />
-      <div className="flex min-h-dvh w-full min-w-0 flex-col">
+      <div className="flex min-h-dvh w-full min-w-0 flex-col bg-gradient-to-br from-background via-background to-sky-50/30">
         <AppHeader />
         <PlatformNotice />
         <LegalReconsentBanner />
@@ -29,7 +29,7 @@ export function AppLayout() {
         {/* Phones: bottom padding clears the fixed bottom navigation
             (--bottom-nav-height is 0 from md up, so desktop is unchanged).
             overflow-x-clip (not auto) keeps position:sticky working. */}
-        <main className="flex-1 overflow-x-clip p-4 pb-[calc(var(--bottom-nav-height)+1.5rem)] sm:p-6 sm:pb-[calc(var(--bottom-nav-height)+1.5rem)] md:overflow-auto md:pb-6">
+        <main className="flex-1 overflow-x-clip p-4 pb-[calc(var(--bottom-nav-height)+1.5rem)] sm:p-6 sm:pb-[calc(var(--bottom-nav-height)+1.5rem)] md:overflow-auto md:px-7 md:py-7 md:pb-7">
           {/* Keyed by pathname so a crash on one route doesn't linger
               when navigating to another - the boundary remounts fresh. */}
           <ErrorBoundary key={location.pathname} label={location.pathname}>
