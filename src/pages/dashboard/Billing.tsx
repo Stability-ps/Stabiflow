@@ -169,7 +169,8 @@ export default function Billing() {
   const planCard = (plan: CatalogPlan, priceInterval: BillingInterval) => {
     const price = plan.prices.find((p) => p.billing_interval === priceInterval);
     if (!price) return null;
-    const isCurrent = !!sub && sub.plan?.code === plan.code && sub.status !== "cancelled";
+    const isCurrent = !!sub && sub.plan?.code === plan.code && sub.price?.billing_interval === priceInterval && sub.status !== "cancelled";
+    const samePlanDifferentInterval = !!sub && sub.plan?.code === plan.code && sub.price?.billing_interval !== priceInterval && sub.status !== "cancelled";
     const purchase = plan.plan_kind === "one_off"
       ? purchases.find((p) => p.plan?.code === plan.code)
       : undefined;
@@ -206,8 +207,8 @@ export default function Billing() {
               <p className="text-center text-xs text-muted-foreground">Bought {formatDate(purchase.paid_at)}</p>
             </div>
           ) : isCurrent ? (
-            <Button disabled variant="outline">
-              Current plan
+            <Button disabled variant="outline" className="w-full border-emerald-200 bg-emerald-50 text-emerald-800 opacity-100">
+              <Check className="mr-2 h-4 w-4" /> Current plan
             </Button>
           ) : (
             <Button
@@ -219,7 +220,9 @@ export default function Billing() {
               {checkout.isPending && checkout.variables === price.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {price.purchasable
                 ? plan.plan_kind === "subscription"
-                  ? `Upgrade to ${plan.name}`
+                  ? samePlanDifferentInterval
+                    ? `Switch to ${priceInterval === "year" ? "annual" : "monthly"}`
+                    : `Upgrade to ${plan.name}`
                   : plan.marketing.cta ?? "Choose"
                 : "Coming soon"}
             </Button>
@@ -362,8 +365,11 @@ export default function Billing() {
 
       {oneOff.length > 0 && (
         <section className="space-y-3">
-          <h2 className="text-lg font-semibold">Once-off</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{oneOff.map((p) => planCard(p, "once"))}</div>
+          <div>
+            <h2 className="text-lg font-semibold">{sub && highestPurchase ? "Previous purchase" : "Once-off"}</h2>
+            {sub && highestPurchase && <p className="text-sm text-muted-foreground">Your one-off purchase remains available alongside your active subscription.</p>}
+          </div>
+          <div className="grid max-w-xl gap-4">{oneOff.map((p) => planCard(p, "once"))}</div>
         </section>
       )}
 
@@ -379,7 +385,7 @@ export default function Billing() {
               ))}
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{recurring.map((p) => planCard(p, interval))}</div>
+          <div className="grid gap-4 sm:grid-cols-2">{recurring.map((p) => planCard(p, interval))}</div>
         </section>
       )}
 
