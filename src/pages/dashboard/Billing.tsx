@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, CreditCard, Loader2 } from "lucide-react";
+import { Check, ChevronDown, CreditCard, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,6 +58,7 @@ export default function Billing() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [interval, setInterval] = useState<Exclude<BillingInterval, "once">>("month");
   const [verifying, setVerifying] = useState(false);
+  const [previousPurchasesOpen, setPreviousPurchasesOpen] = useState(false);
   const verifiedRef = useRef<string | null>(null);
 
   const catalog = useQuery({ queryKey: ["billing-catalog"], queryFn: fetchCatalog, staleTime: 5 * 60_000 });
@@ -364,13 +365,30 @@ export default function Billing() {
       {!canManage && <p className="text-sm text-muted-foreground">Only the workspace owner can buy or change plans.</p>}
 
       {oneOff.length > 0 && (
-        <section className="space-y-3">
-          <div>
-            <h2 className="text-lg font-semibold">{sub && highestPurchase ? "Previous purchase" : "Once-off"}</h2>
-            {sub && highestPurchase && <p className="text-sm text-muted-foreground">Your one-off purchase remains available alongside your active subscription.</p>}
-          </div>
-          <div className="grid max-w-xl gap-4">{oneOff.map((p) => planCard(p, "once"))}</div>
-        </section>
+        <Card className="overflow-hidden">
+          <button
+            type="button"
+            className="flex min-h-16 w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+            onClick={() => setPreviousPurchasesOpen((open) => !open)}
+            aria-expanded={previousPurchasesOpen}
+            aria-controls="previous-purchases-content"
+          >
+            <div className="min-w-0">
+              <p className="font-semibold">Previous purchases</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                {highestPurchase
+                  ? `${purchases.length} once-off purchase${purchases.length === 1 ? "" : "s"} · click to view`
+                  : "View once-off products"}
+              </p>
+            </div>
+            <ChevronDown className={`h-5 w-5 shrink-0 text-muted-foreground transition-transform ${previousPurchasesOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+          </button>
+          {previousPurchasesOpen && (
+            <CardContent id="previous-purchases-content" className="border-t bg-muted/10 p-4 sm:p-5">
+              <div className="grid max-w-xl gap-4">{oneOff.map((p) => planCard(p, "once"))}</div>
+            </CardContent>
+          )}
+        </Card>
       )}
 
       {recurring.length > 0 && (
