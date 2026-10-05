@@ -112,6 +112,14 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
     if (next) openAndFocusSection(next);
     else setOpenSection(null);
   };
+  const sectionForCompleteness = (section?: string) =>
+    section === "company" ? "company" : section === "about" ? "about" : section === "branding" ? "brand"
+      : section === "contacts" || section === "locations" ? "contact" : section === "offerings" ? "services"
+        : section === "social" ? "social" : section === "team" ? "team" : "work";
+  const continueSetup = () => {
+    const next = missing[0]?.section;
+    if (next) openAndFocusSection(sectionForCompleteness(next));
+  };
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
@@ -270,7 +278,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full bg-primary transition-all" style={{ width: `${completeness.score}%` }} />
           </div>
-          {missing.length > 0 && <Button size="sm" onClick={() => { const next = missing[0]?.section; setOpenSection(next === "company" ? "company" : next === "about" ? "about" : next === "branding" ? "brand" : next === "contacts" || next === "locations" ? "contact" : next === "offerings" ? "services" : next === "social" ? "social" : next === "team" ? "team" : "work"); }}>Continue setup</Button>}
+          {missing.length > 0 && <Button size="sm" onClick={continueSetup}>Continue setup</Button>}
         </CardContent>
       </Card>
 
