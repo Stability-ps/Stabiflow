@@ -229,12 +229,9 @@ html {
     box-shadow: inset 3px 0 0 hsl(var(--primary)), 0 1px 2px hsl(215 25% 20% / 0.04);
   }
 
-  [data-sidebar="menu-button"]:hover {
-    transform: translateX(1px);
-  }
 
   [data-sidebar="menu-button"] svg {
-    transition: transform 180ms ease, color 180ms ease;
+    transition: color 180ms ease;
   }
 
   [data-sidebar="menu-button"]:hover svg {
