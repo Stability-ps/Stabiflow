@@ -117,9 +117,10 @@ export default function BusinessStudio() {
   const oneOffPrice = oneOff?.prices.find((p) => p.billing_interval === "once");
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Business Studio</h1>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.28)] sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Profile builder</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Business Studio</h1>
         <p className="text-sm text-muted-foreground">Turn your website into a professional company profile. You check every fact before it's used.</p>
       </div>
 
