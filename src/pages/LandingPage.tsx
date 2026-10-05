@@ -141,10 +141,10 @@ export default function LandingPage() {
       <main>
         <section className="relative overflow-hidden">
           <div className="absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.10),_transparent_55%)]" />
-          <div className="mx-auto grid max-w-7xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:px-8 lg:py-24">
+          <div className="mx-auto grid max-w-7xl gap-10 px-4 pb-16 pt-10 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:px-8 lg:pb-20 lg:pt-14">
             <div className="space-y-8">
               <div className="inline-flex items-center rounded-full border border-border bg-card/70 px-3 py-1 text-xs font-medium text-muted-foreground shadow-sm">
-                StabiFlow is a SaaS platform provided by Acapolite Consulting (Pty) Ltd.
+                Marketing, sales, support and automation — in one connected workspace.
               </div>
 
               <div className="space-y-5">
@@ -171,7 +171,7 @@ export default function LandingPage() {
 
               <div className="flex items-center gap-3 text-sm text-muted-foreground">
                 <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span>StabiFlow is a SaaS platform provided by Acapolite Consulting (Pty) Ltd.</span>
+                <span>Secure by design. Customer-controlled integrations. Built for real business operations.</span>
               </div>
             </div>
 
@@ -353,14 +353,14 @@ export default function LandingPage() {
 
         <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
           <div className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">Provider</p>
-            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">StabiFlow is developed and operated by Acapolite Consulting (Pty) Ltd.</h2>
+            <p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">StabiFlow</p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">One platform for the way your business actually works.</h2>
             <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
-              StabiFlow is developed and operated by Acapolite Consulting (Pty) Ltd. Acapolite Consulting provides business and technology services and operates StabiFlow as a SaaS platform for businesses that need a single workspace for advertising, communications, customer management and automation. StabiFlow is based in South Africa.
+              StabiFlow brings marketing, customer conversations, leads, content, automation and analytics into one connected workspace, with billing, access and subscriptions managed directly inside StabiFlow.
             </p>
             <div className="mt-6 flex items-center gap-2 text-sm text-muted-foreground">
               <Building2 className="h-4 w-4" />
-              <span>Acapolite Consulting (Pty) Ltd · South Africa</span>
+              <span>StabiFlow · South Africa</span>
             </div>
           </div>
         </section>
