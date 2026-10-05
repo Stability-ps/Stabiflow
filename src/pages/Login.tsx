@@ -24,6 +24,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const confirmed = searchParams.get("confirmed") === "1";
 
   if (!loading && user) return <Navigate to={safeRedirectTarget(searchParams)} replace />;
 
@@ -35,6 +36,10 @@ export default function Login() {
     if (error) toast.error(error.message);
   };
 
+  const signupHref = searchParams.get("redirect")
+    ? `/signup?redirect=${encodeURIComponent(searchParams.get("redirect")!)}`
+    : "/signup";
+
   return (
     <AuthLayout>
       <Card className="w-full max-w-sm">
@@ -42,6 +47,11 @@ export default function Login() {
           <CardTitle className="text-xl">Sign in</CardTitle>
         </CardHeader>
         <CardContent>
+          {confirmed && (
+            <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Email confirmed successfully. You can now sign in.
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
@@ -59,7 +69,16 @@ export default function Login() {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Don't have an account? <Link to="/signup" className="text-foreground underline">Create one</Link>
+            Don't have an account?{" "}
+            <Link
+              to={signupHref}
+              onClick={() => {
+                if (email.trim()) sessionStorage.setItem("stabiflow.authEmail", email.trim());
+              }}
+              className="text-foreground underline"
+            >
+              Create one
+            </Link>
           </p>
         </CardContent>
       </Card>
