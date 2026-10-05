@@ -5,13 +5,14 @@ import { AccountTab } from "@/pages/dashboard/settings/AccountTab";
 
 export default function Settings() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-[0_18px_60px_-46px_hsl(215_30%_30%/0.3)] sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace control</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Workspace profile, members and roles, and your account.</p>
       </div>
       <Tabs defaultValue="workspace">
-        <TabsList>
+        <TabsList className="rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
           <TabsTrigger value="workspace">Workspace</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
