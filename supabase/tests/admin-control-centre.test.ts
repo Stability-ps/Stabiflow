@@ -140,6 +140,15 @@ describe("admin read models", () => {
     expect(data.revenue.by_currency).toEqual(expect.any(Array));
   });
 
+  it("admin_overview counts enabled automations as active", async () => {
+    const before = (await admin.rpc("admin_overview", { p_from: from, p_to: to })).data.product.automations_active;
+    const ins = await admin.from("automations").insert({ workspace_id: tenant.workspaceId, name: "Admin count check", status: "enabled", trigger_event_type: "lead.created", created_by: tenant.userId }).select("id").single();
+    expect(ins.error).toBeNull();
+    const after = (await admin.rpc("admin_overview", { p_from: from, p_to: to })).data.product.automations_active;
+    expect(after).toBe(before + 1);
+    await admin.from("automations").delete().eq("id", ins.data!.id);
+  });
+
   it("admin_overview rejects an inverted range", async () => {
     const { error } = await admin.rpc("admin_overview", { p_from: to, p_to: from });
     expect(error?.message).toMatch(/Invalid date range/);
