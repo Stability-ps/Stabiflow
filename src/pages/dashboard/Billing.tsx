@@ -164,6 +164,9 @@ export default function Billing() {
   const plans = (catalog.data ?? []).filter((p) => p.plan_kind !== "free");
   const oneOff = plans.filter((p) => p.plan_kind === "one_off");
   const recurring = plans.filter((p) => p.plan_kind === "subscription");
+  const availableRecurring = sub
+    ? recurring.filter((p) => (p.tier_rank ?? 0) > (sub.plan?.tier_rank ?? 0))
+    : recurring;
   const currentLabel = sub?.plan?.name ?? highestPurchase?.plan?.name ?? "Free";
   const currentIsPaid = !!sub || !!highestPurchase;
 
@@ -235,8 +238,8 @@ export default function Billing() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-sky-50 via-cyan-50 to-violet-50 p-5 sm:p-6">
-        <h1 className="text-2xl font-semibold tracking-tight">Billing & plans</h1>
+      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-sky-50/65 to-violet-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.3)] sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace subscription</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Billing & plans</h1>
         <p className="mt-1 text-sm text-slate-600">Choose the plan that fits your business. Payments are processed securely by Paystack.</p>
       </div>
 
@@ -365,7 +368,7 @@ export default function Billing() {
       {!canManage && <p className="text-sm text-muted-foreground">Only the workspace owner can buy or change plans.</p>}
 
       {oneOff.length > 0 && (
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border-border/60 bg-card/90 shadow-[0_14px_44px_-36px_hsl(213_45%_30%/0.3)]">
           <button
             type="button"
             className="flex min-h-16 w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
@@ -391,10 +394,10 @@ export default function Billing() {
         </Card>
       )}
 
-      {recurring.length > 0 && (
+      {availableRecurring.length > 0 && (
         <section className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">Subscriptions</h2>
+            <div><h2 className="text-lg font-semibold">{sub ? "Upgrade your plan" : "Available plans"}</h2><p className="text-sm text-muted-foreground">{sub ? "Choose a higher plan when your business needs more capacity." : "Choose the subscription that fits your business."}</p></div>
             <div className="inline-flex rounded-full border bg-muted/40 p-1" role="group" aria-label="Billing interval">
               {(["month", "year"] as const).map((i) => (
                 <Button key={i} size="sm" className="rounded-full" variant={interval === i ? "default" : "ghost"} onClick={() => setInterval(i)} aria-pressed={interval === i}>
@@ -403,7 +406,7 @@ export default function Billing() {
               ))}
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">{recurring.map((p) => planCard(p, interval))}</div>
+          <div className="grid gap-4 sm:grid-cols-2">{availableRecurring.map((p) => planCard(p, interval))}</div>
         </section>
       )}
 
