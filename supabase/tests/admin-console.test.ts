@@ -80,6 +80,11 @@ describe("admin-console authorization", () => {
     expect(search.body.users).toEqual([]);
     expect(search.body.workspaces).toEqual([]);
     expect((await call("admin-console", tok, { action: "export", dataset: "users" })).status).toBe(403);
+    const activity = await call("admin-console", tok, { action: "activity", limit: 50 });
+    expect(activity.status).toBe(200);
+    expect(activity.body.rows.every((r: { workspace_name: string | null; workspace_id: string | null }) => r.workspace_name === null && r.workspace_id === null)).toBe(true);
+    const attention = await call("admin-console", tok, { action: "attention" });
+    expect(attention.body.alerts.every((a: { workspace: unknown }) => a.workspace === null)).toBe(true);
   });
 
   it("support can look a business up but cannot suspend it or manage staff", async () => {

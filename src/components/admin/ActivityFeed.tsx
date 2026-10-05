@@ -5,7 +5,7 @@ import { humanize, timeAgo } from "@/lib/adminFormat";
 
 const KINDS: Record<string, { icon: LucideIcon; text: (r: ActivityRow) => string }> = {
   user_signed_up: { icon: UserPlus, text: (r) => (r.label ? `${r.label} signed up` : "New user signed up") },
-  workspace_created: { icon: Building2, text: (r) => `Business created: ${r.label}` },
+  workspace_created: { icon: Building2, text: (r) => (r.label ? `Business created: ${r.label}` : "New business created") },
   payment_succeeded: { icon: CircleDollarSign, text: (r) => `Payment received · ${r.label}` },
   payment_failed: { icon: XCircle, text: (r) => `Payment failed · ${r.label}` },
   payment_reversed: { icon: XCircle, text: (r) => `Payment reversed · ${r.label}` },

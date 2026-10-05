@@ -199,7 +199,12 @@ async function handle(req: Request, caller: AdminCaller, action: string, body: R
 
     case "attention": {
       const signals = await rpc<AttentionSignals>(caller, "admin_attention_signals");
-      return json(req, { ok: true, alerts: buildAlerts(signals), generatedAt: new Date().toISOString() });
+      let alerts = buildAlerts(signals);
+      // Roles without the business directory see the problem, not the customer.
+      if (!can(caller.role, "businesses.read")) {
+        alerts = alerts.map((a) => (a.workspace ? { ...a, workspace: null, href: a.href.startsWith("/admin/businesses/") ? "/admin/attention" : a.href } : a));
+      }
+      return json(req, { ok: true, alerts, generatedAt: new Date().toISOString() });
     }
 
     case "activity": {
@@ -207,7 +212,15 @@ async function handle(req: Request, caller: AdminCaller, action: string, body: R
       const rows = await rpc<Row[]>(caller, "admin_activity_feed", { p_limit: limit });
       // Customer names are personal data: only roles with users.read see them.
       const showPeople = can(caller.role, "users.read");
-      return json(req, { ok: true, rows: rows.map((r) => (r.kind === "user_signed_up" && !showPeople ? { ...r, label: "", user_id: null } : r)) });
+      const showBusinesses = can(caller.role, "businesses.read");
+      return json(req, {
+        ok: true,
+        rows: rows.map((r) => {
+          let out = r.kind === "user_signed_up" && !showPeople ? { ...r, label: "", user_id: null } : r;
+          if (!showBusinesses) out = { ...out, workspace_id: null, workspace_name: null, label: out.kind === "workspace_created" ? "" : out.label };
+          return out;
+        }),
+      });
     }
 
     case "search": {
