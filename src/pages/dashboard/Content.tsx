@@ -11,20 +11,21 @@ const CONTENT_TABS = [
 
 export default function Content() {
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Content</h1>
+    <div className="mx-auto max-w-[1500px] space-y-6">
+      <div className="rounded-3xl border border-fuchsia-100/80 bg-gradient-to-br from-white via-white to-fuchsia-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(300_50%_40%/0.25)] sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Content workspace</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Content</h1>
         <p className="text-muted-foreground">Calendar, scheduled posts, drafts, and your Media Library.</p>
       </div>
-      <nav className="flex gap-1 border-b">
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
         {CONTENT_TABS.map((tab) => (
           <NavLink
             key={tab.path}
             to={tab.path}
             className={({ isActive }) =>
               cn(
-                "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-                isActive ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                "shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
               )
             }
           >
