@@ -4580,6 +4580,9 @@ export type Database = {
           intake: Json
           lost_at: string | null
           lost_reason: string | null
+          next_follow_up_at: string | null
+          follow_up_note: string | null
+          follow_up_completed_at: string | null
           phone: string | null
           phone_normalized: string | null
           pipeline_id: string | null
@@ -4609,6 +4612,9 @@ export type Database = {
           intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
+          next_follow_up_at?: string | null
+          follow_up_note?: string | null
+          follow_up_completed_at?: string | null
           phone?: string | null
           phone_normalized?: string | null
           pipeline_id?: string | null
@@ -4638,6 +4644,9 @@ export type Database = {
           intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
+          next_follow_up_at?: string | null
+          follow_up_note?: string | null
+          follow_up_completed_at?: string | null
           phone?: string | null
           phone_normalized?: string | null
           pipeline_id?: string | null
