@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -19,7 +19,7 @@ import {
   setBusinessSectionPreference, type BusinessIdentity, type BusinessIdentityBundle,
 } from "@/lib/businessIdentity";
 import type { BrandProfile } from "@/lib/brandProfiles";
-import { draftProfile, scanWebsite } from "@/lib/businessStudio";
+import { BusinessStudioError, draftProfile, scanWebsite } from "@/lib/businessStudio";
 
 const EMPLOYEE_RANGES = ["1", "2-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
@@ -95,6 +95,23 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const [drafting, setDrafting] = useState(false);
   const [selectedBrand, setSelectedBrand] = useState<BrandProfile | null>(null);
   const [openSection, setOpenSection] = useState<string | null>("company");
+  const [aiUpgradeRequired, setAiUpgradeRequired] = useState(false);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const sectionOrder = ["company", "about", "brand", "contact", "services", "social", "team", "work"] as const;
+  const openAndFocusSection = (id: string) => {
+    setOpenSection(id);
+    window.setTimeout(() => {
+      const el = sectionRefs.current[id];
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      el?.querySelector<HTMLElement>("input:not([disabled]), textarea:not([disabled]), button:not([disabled])")?.focus({ preventScroll: true });
+    }, 120);
+  };
+  const advanceFrom = (id: string) => {
+    const index = sectionOrder.indexOf(id as typeof sectionOrder[number]);
+    const next = index >= 0 ? sectionOrder[index + 1] : undefined;
+    if (next) openAndFocusSection(next);
+    else setOpenSection(null);
+  };
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
@@ -130,13 +147,18 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         toast.info("Your website and business details are already covered. There are no new suggestions to review.");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not complete your profile with AI");
+      if (e instanceof BusinessStudioError && e.code === "upgrade_required") {
+        setAiUpgradeRequired(true);
+        toast.info("AI profile completion is available on paid plans. Upgrade to use AI.");
+      } else {
+        toast.error(e instanceof Error ? e.message : "Could not complete your profile with AI");
+      }
     } finally {
       setDrafting(false);
     }
   }
 
-  async function saveIdentity() {
+  async function saveIdentity(nextSection?: string) {
     const year = form.founded_year.trim() ? Number(form.founded_year) : null;
     if (year !== null && (!Number.isInteger(year) || year < 1800 || year > 2100)) {
       toast.error("Founded year must be a year between 1800 and 2100");
@@ -162,6 +184,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
       setForm(toForm(updated));
       toast.success("Business details saved");
       refresh();
+      if (nextSection) openAndFocusSection(nextSection);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save");
     } finally {
@@ -175,6 +198,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
       await updateBusinessIdentity(identity, { brand_profile_id: selectedBrand.id });
       toast.success("Brand linked to your business profile");
       refresh();
+      advanceFrom("brand");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not link brand");
     }
@@ -211,7 +235,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const sectionButton = (id: string, title: string, description: string, complete: boolean, content: ReactNode) => {
     const open = openSection === id;
     return (
-      <Card className="overflow-hidden border-border/70 shadow-sm">
+      <div ref={(el) => { sectionRefs.current[id] = el; }} className="scroll-mt-24"><Card className="overflow-hidden border-border/70 shadow-sm">
         <button type="button" className="flex w-full items-center gap-3 p-5 text-left" onClick={() => setOpenSection(open ? null : id)} aria-expanded={open}>
           {complete ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /> : <div className="h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />}
           <div className="min-w-0 flex-1">
@@ -222,7 +246,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </button>
         {open && <CardContent className="border-t bg-muted/5 pt-5">{content}</CardContent>}
-      </Card>
+      </Card></div>
     );
   };
 
@@ -254,14 +278,20 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
         <CardHeader className="border-b bg-muted/15 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
           <div>
             <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4" /> Complete with AI</CardTitle>
-            <CardDescription className="mt-1">StabiFlow scans your website for industry, contact details, locations, services, social links and other supported facts, then drafts the About wording. Review everything before it is added.</CardDescription>
+            <CardDescription className="mt-1">{identity.website
+              ? "StabiFlow can scan your website and use the business information you have entered to prepare profile suggestions. Review everything before it is added."
+              : "No website? No problem. AI can draft your profile from the business information you provide in StabiFlow. Add your business name, industry and what you offer first for reliable results."}</CardDescription>
           </div>
-          {canEdit && <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting}>
+          {canEdit && (aiUpgradeRequired
+            ? <Button className="mt-3 shrink-0 sm:mt-0" asChild><a href="/app/billing">Upgrade to use AI</a></Button>
+            : <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting}>
             {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Complete with AI
-          </Button>}
+          </Button>)}
         </CardHeader>
         <CardContent className="pt-5">
-          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
+          <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText={identity.website
+            ? "No suggestions need your review right now. Complete with AI to scan your website and use your saved business details to prepare missing profile information."
+            : "No suggestions need your review right now. Add business details manually, or use AI on a paid plan to draft wording from the information you provide."} />
         </CardContent>
       </Card>
 
@@ -271,11 +301,11 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
             {text("Trading name", "trading_name")}
             {text("Registered (legal) name", "legal_name", { placeholder: "e.g. Acme (Pty) Ltd" })}
             {text("Industry", "industry")}
-            {text("Website", "website", { type: "url", placeholder: "https://" })}
+            {text("Website (optional)", "website", { type: "url", placeholder: "https://" })}
             {text("Year founded", "founded_year", { type: "number" })}
             <div className="space-y-1"><Label htmlFor="bi-employees">Team size</Label><Select value={form.employee_count_range} onValueChange={(v) => setForm((f) => ({ ...f, employee_count_range: v }))} disabled={!canEdit}><SelectTrigger id="bi-employees"><SelectValue placeholder="Choose..." /></SelectTrigger><SelectContent>{EMPLOYEE_RANGES.map((r) => <SelectItem key={r} value={r}>{r} {r === "1" ? "person" : "people"}</SelectItem>)}</SelectContent></Select></div>
             {text("Country (2-letter code)", "country_code")}
-            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={saveIdentity} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save company</Button></div>}
+            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={() => saveIdentity("about")} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save company</Button></div>}
           </div>
         ))}
 
@@ -287,7 +317,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
             {area("Mission", "mission")}
             {area("Vision", "vision")}
             <div className="sm:col-span-2">{text("Core values (comma separated)", "core_values")}</div>
-            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={saveIdentity} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save about</Button></div>}
+            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={() => saveIdentity("brand")} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save about</Button></div>}
           </div>
         ))}
 
@@ -301,29 +331,29 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
 
         {sectionButton("contact", "Contact & locations", "Email, phone, WhatsApp and business locations", bundle.contacts.length > 0 && (bundle.locations.length > 0 || sectionNA("location")), (
           <div className="space-y-4">
-            <FactListSection {...listProps} title="Contact details" table="business_contacts" rows={bundle.contacts as never} fields={contactFields} defaults={{ kind: "email", is_public: true }} summarize={(r) => `${String(r.kind)}: ${String(r.value)}${r.label ? ` (${String(r.label)})` : ""}${r.is_primary ? " · main" : ""}`} />
-            <div className="flex justify-end">{naButton("location", "No public/physical location")}</div><FactListSection {...listProps} title="Locations" table="business_locations" rows={bundle.locations as never} fields={[{ name: "label", label: "Label", placeholder: "e.g. Head office or Online" },{ name: "address_line1", label: "Address" },{ name: "address_line2", label: "Address line 2" },{ name: "city", label: "City" },{ name: "region", label: "Province / region" },{ name: "postal_code", label: "Postal code" },{ name: "is_primary", label: "Main location", type: "checkbox" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")} />
+            <FactListSection {...listProps} onSaved={() => advanceFrom("contact")} title="Contact details" table="business_contacts" rows={bundle.contacts as never} fields={contactFields} defaults={{ kind: "email", is_public: true }} summarize={(r) => `${String(r.kind)}: ${String(r.value)}${r.label ? ` (${String(r.label)})` : ""}${r.is_primary ? " · main" : ""}`} />
+            <div className="flex justify-end">{naButton("location", "No public/physical location")}</div><FactListSection {...listProps} onSaved={() => advanceFrom("contact")} title="Locations" table="business_locations" rows={bundle.locations as never} fields={[{ name: "label", label: "Label", placeholder: "e.g. Head office or Online" },{ name: "address_line1", label: "Address" },{ name: "address_line2", label: "Address line 2" },{ name: "city", label: "City" },{ name: "region", label: "Province / region" },{ name: "postal_code", label: "Postal code" },{ name: "is_primary", label: "Main location", type: "checkbox" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => [r.label, r.address_line1, r.city, r.region].filter(Boolean).join(", ")} />
           </div>
         ))}
 
         {sectionButton("services", "Services & products", "What your business offers", bundle.offerings.length >= 3, (
-          <FactListSection {...listProps} title="Services and products" description="Add at least three for a strong profile." table="business_offerings" rows={bundle.offerings as never} fields={[{ name: "kind", label: "Type", type: "select", required: true, options: [{ value: "service", label: "Service" }, { value: "product", label: "Product" }] },{ name: "name", label: "Name", required: true },{ name: "price_text", label: "Price (optional)", placeholder: "e.g. From R1 500" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_featured", label: "Feature this", type: "checkbox" }]} defaults={{ kind: "service" }} summarize={(r) => `${String(r.name)}${r.price_text ? ` · ${String(r.price_text)}` : ""}`} />
+          <FactListSection {...listProps} onSaved={() => advanceFrom("services")} title="Services and products" description="Add at least three for a strong profile." table="business_offerings" rows={bundle.offerings as never} fields={[{ name: "kind", label: "Type", type: "select", required: true, options: [{ value: "service", label: "Service" }, { value: "product", label: "Product" }] },{ name: "name", label: "Name", required: true },{ name: "price_text", label: "Price (optional)", placeholder: "e.g. From R1 500" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_featured", label: "Feature this", type: "checkbox" }]} defaults={{ kind: "service" }} summarize={(r) => `${String(r.name)}${r.price_text ? ` · ${String(r.price_text)}` : ""}`} />
         ))}
 
         {sectionButton("social", "Social media", "Links customers can use to find you", bundle.socialLinks.length > 0 || sectionNA("social"), (
-          <><div className="flex justify-end">{naButton("social", "We don't use social media")}</div><FactListSection {...listProps} title="Social media" table="business_social_links" rows={bundle.socialLinks as never} fields={[{ name: "platform", label: "Platform", type: "select", required: true, options: [{ value: "facebook", label: "Facebook" },{ value: "instagram", label: "Instagram" },{ value: "linkedin", label: "LinkedIn" },{ value: "x", label: "X" },{ value: "tiktok", label: "TikTok" },{ value: "youtube", label: "YouTube" },{ value: "other", label: "Other" }] },{ name: "url", label: "Link", type: "url", required: true, placeholder: "https://" }]} summarize={(r) => `${String(r.platform)}: ${String(r.url)}`} /></>
+          <><div className="flex justify-end">{naButton("social", "We don't use social media")}</div><FactListSection {...listProps} onSaved={() => advanceFrom("social")} title="Social media" table="business_social_links" rows={bundle.socialLinks as never} fields={[{ name: "platform", label: "Platform", type: "select", required: true, options: [{ value: "facebook", label: "Facebook" },{ value: "instagram", label: "Instagram" },{ value: "linkedin", label: "LinkedIn" },{ value: "x", label: "X" },{ value: "tiktok", label: "TikTok" },{ value: "youtube", label: "YouTube" },{ value: "other", label: "Other" }] },{ name: "url", label: "Link", type: "url", required: true, placeholder: "https://" }]} summarize={(r) => `${String(r.platform)}: ${String(r.url)}`} /></>
         ))}
 
         {sectionButton("team", "Team", "People behind your business", bundle.team.length > 0 || sectionNA("team"), (
-          <><div className="flex justify-end">{naButton("team", "Don't show team members")}</div><FactListSection {...listProps} title="Team" table="business_team_members" rows={bundle.team as never} fields={[{ name: "full_name", label: "Full name", required: true },{ name: "role_title", label: "Role" },{ name: "bio", label: "Short bio", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.full_name)}${r.role_title ? ` · ${String(r.role_title)}` : ""}`} /></>
+          <><div className="flex justify-end">{naButton("team", "Don't show team members")}</div><FactListSection {...listProps} onSaved={() => advanceFrom("team")} title="Team" table="business_team_members" rows={bundle.team as never} fields={[{ name: "full_name", label: "Full name", required: true },{ name: "role_title", label: "Role" },{ name: "bio", label: "Short bio", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.full_name)}${r.role_title ? ` · ${String(r.role_title)}` : ""}`} /></>
         ))}
 
         {sectionButton("work", "Work & credentials", "Projects, certifications and registration numbers", bundle.projects.length > 0 || bundle.certifications.length > 0 || bundle.identifiers.length > 0 || sectionNA("projects") || sectionNA("credentials"), (
           <div className="space-y-4">
             <div className="flex flex-wrap justify-end gap-2">{naButton("projects", "No projects to showcase")}{naButton("credentials", "No certifications/registrations")}</div>
-            <FactListSection {...listProps} title="Projects" table="business_projects" rows={bundle.projects as never} fields={[{ name: "title", label: "Project", required: true },{ name: "client_name", label: "Client" },{ name: "location", label: "Location" },{ name: "completed_year", label: "Year completed", type: "number" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.title)}${r.client_name ? ` for ${String(r.client_name)}` : ""}`} />
-            <FactListSection {...listProps} title="Certifications and accreditations" table="business_certifications" rows={bundle.certifications as never} fields={[{ name: "name", label: "Name", required: true },{ name: "issuer", label: "Issued by" },{ name: "credential_id", label: "Certificate number" },{ name: "issued_on", label: "Issued on", type: "date" },{ name: "expires_on", label: "Expires on", type: "date" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => String(r.name)} />
-            <FactListSection {...listProps} title="Registration numbers" description="Private unless you choose to show them." table="business_identifiers" rows={bundle.identifiers as never} sortable={false} fields={[{ name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },{ name: "value", label: "Number", required: true },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ country_code: identity.country_code, is_public: false }} summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`} />
+            <FactListSection {...listProps} onSaved={() => advanceFrom("work")} title="Projects" table="business_projects" rows={bundle.projects as never} fields={[{ name: "title", label: "Project", required: true },{ name: "client_name", label: "Client" },{ name: "location", label: "Location" },{ name: "completed_year", label: "Year completed", type: "number" },{ name: "description", label: "Description", type: "textarea" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => `${String(r.title)}${r.client_name ? ` for ${String(r.client_name)}` : ""}`} />
+            <FactListSection {...listProps} onSaved={() => advanceFrom("work")} title="Certifications and accreditations" table="business_certifications" rows={bundle.certifications as never} fields={[{ name: "name", label: "Name", required: true },{ name: "issuer", label: "Issued by" },{ name: "credential_id", label: "Certificate number" },{ name: "issued_on", label: "Issued on", type: "date" },{ name: "expires_on", label: "Expires on", type: "date" },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ is_public: true }} summarize={(r) => String(r.name)} />
+            <FactListSection {...listProps} onSaved={() => advanceFrom("work")} title="Registration numbers" description="Private unless you choose to show them." table="business_identifiers" rows={bundle.identifiers as never} sortable={false} fields={[{ name: "scheme", label: "Type", type: "select", required: true, options: (COUNTRY_IDENTIFIER_SCHEMES[identity.country_code] ?? []).map((s) => ({ value: s.scheme, label: s.label })) },{ name: "value", label: "Number", required: true },{ name: "is_public", label: "Show on my public profile", type: "checkbox" }]} defaults={{ country_code: identity.country_code, is_public: false }} summarize={(r) => `${identifierSchemeLabel(String(r.country_code), String(r.scheme))}: ${String(r.value)}`} />
           </div>
         ))}
       </div>
