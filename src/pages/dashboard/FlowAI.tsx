@@ -64,8 +64,8 @@ export default function FlowAI() {
   const handleStarterPrompt = (prompt: string) => sendMessage(prompt);
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] gap-4">
-      <aside className="w-64 shrink-0 space-y-2 overflow-y-auto border-r pr-3">
+    <div className="mx-auto flex h-[calc(100vh-8rem)] w-full max-w-[1500px] gap-4 overflow-hidden rounded-3xl border border-violet-100/80 bg-card/85 p-3 shadow-[0_18px_60px_-42px_hsl(260_60%_40%/0.28)] backdrop-blur-sm sm:p-4">
+      <aside className="w-64 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-border/60 bg-muted/20 p-3">
         <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => setSelectedConversationId(null)}>
           <Plus className="h-4 w-4" /> New conversation
         </Button>
@@ -75,8 +75,8 @@ export default function FlowAI() {
               key={c.id}
               onClick={() => setSelectedConversationId(c.id)}
               className={cn(
-                "w-full truncate rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted",
-                c.id === selectedConversationId && "bg-muted font-medium",
+                "w-full truncate rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-background",
+                c.id === selectedConversationId && "bg-background font-medium shadow-sm",
               )}
             >
               {c.title}
@@ -86,7 +86,7 @@ export default function FlowAI() {
         </div>
       </aside>
 
-      <div className="flex flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col rounded-2xl bg-background/55 p-2 sm:p-4">
         <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto pb-4">
           {!selectedConversationId && (messagesQuery.data ?? []).length === 0 && !streamingText && (
             <div className="space-y-4">
@@ -108,7 +108,7 @@ export default function FlowAI() {
             .filter((m) => m.role === "user" || m.role === "assistant")
             .filter((m) => m.content)
             .map((m) => (
-              <div key={m.id} className={cn("max-w-2xl rounded-lg px-4 py-2 text-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
+              <div key={m.id} className={cn("max-w-2xl rounded-2xl px-4 py-3 text-sm shadow-sm", m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "bg-muted")}>
                 <p className="whitespace-pre-wrap">{m.content}</p>
               </div>
             ))}
@@ -121,7 +121,7 @@ export default function FlowAI() {
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
-        <div className="flex items-end gap-2 border-t pt-3">
+        <div className="flex items-end gap-2 rounded-2xl border border-border/70 bg-card/90 p-2 shadow-sm">
           <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
