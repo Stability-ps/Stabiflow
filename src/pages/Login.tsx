@@ -35,6 +35,10 @@ export default function Login() {
     if (error) toast.error(error.message);
   };
 
+  const signupHref = searchParams.get("redirect")
+    ? `/signup?redirect=${encodeURIComponent(searchParams.get("redirect")!)}`
+    : "/signup";
+
   return (
     <AuthLayout>
       <Card className="w-full max-w-sm">
@@ -59,7 +63,16 @@ export default function Login() {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Don't have an account? <Link to="/signup" className="text-foreground underline">Create one</Link>
+            Don't have an account?{" "}
+            <Link
+              to={signupHref}
+              onClick={() => {
+                if (email.trim()) sessionStorage.setItem("stabiflow.authEmail", email.trim());
+              }}
+              className="text-foreground underline"
+            >
+              Create one
+            </Link>
           </p>
         </CardContent>
       </Card>
