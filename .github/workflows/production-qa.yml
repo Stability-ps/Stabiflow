@@ -1,0 +1,72 @@
+name: StabiFlow Production QA
+
+on:
+  workflow_dispatch:
+  deployment_status:
+  schedule:
+    - cron: "30 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-qa
+  cancel-in-progress: true
+
+jobs:
+  production-qa:
+    if: ${{ github.event_name != 'deployment_status' || github.event.deployment_status.state == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STABIFLOW_BASE_URL: https://app.stabiflow.com
+      STABIFLOW_QA_EMAIL: ${{ secrets.STABIFLOW_QA_EMAIL }}
+      STABIFLOW_QA_PASSWORD: ${{ secrets.STABIFLOW_QA_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: qa/package.json
+
+      - name: Install QA dependencies
+        working-directory: qa
+        run: npm install --no-audit --no-fund
+
+      - name: Install Playwright browser
+        working-directory: qa
+        run: npx playwright install --with-deps chromium
+
+      - name: Wait for production to respond
+        shell: bash
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error --max-time 10 "$STABIFLOW_BASE_URL" >/dev/null; then
+              echo "Production is reachable."
+              exit 0
+            fi
+            echo "Waiting for production... attempt $attempt/30"
+            sleep 10
+          done
+          echo "Production did not become reachable in time."
+          exit 1
+
+      - name: Run production QA
+        working-directory: qa
+        run: npm test
+
+      - name: Upload QA report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stabiflow-production-qa-${{ github.run_id }}
+          path: |
+            qa/playwright-report
+            qa/test-results
+          if-no-files-found: ignore
+          retention-days: 14
