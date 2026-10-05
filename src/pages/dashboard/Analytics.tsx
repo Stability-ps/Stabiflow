@@ -97,11 +97,11 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-[1500px] space-y-6">
       {fromWhatsApp && <WhatsAppContextBanner label="Viewing WhatsApp conversion analytics." />}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-cyan-100/80 bg-gradient-to-br from-white via-white to-cyan-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(190_70%_40%/0.3)] sm:p-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Analytics</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance intelligence</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Analytics</h1>
           <p className="text-sm text-muted-foreground">Spend, conversations, leads, customers, revenue, and cost-per-outcome, all the way through the funnel.</p>
         </div>
         <AnalyticsControls
@@ -111,7 +111,7 @@ export default function Analytics() {
         />
       </div>
 
-      <nav className="flex gap-1 border-b" aria-label="Analytics views">
+      <nav className="flex w-fit gap-1 rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm" aria-label="Analytics views">
         {(canSeeRevenue ? ([["overview", "Overview"], ["revenue", "Revenue"]] as const) : ([["overview", "Overview"]] as const)).map(([key, label]) => (
           <button
             key={key}
@@ -119,8 +119,8 @@ export default function Analytics() {
             onClick={() => setView(key)}
             aria-current={view === key ? "page" : undefined}
             className={cn(
-              "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              view === key ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+              "rounded-lg px-3 py-2 text-sm font-medium transition-all",
+              view === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
             )}
           >
             {label}
