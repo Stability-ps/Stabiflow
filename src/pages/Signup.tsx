@@ -44,7 +44,10 @@ export default function Signup() {
       // current versions + clock) as soon as a session exists - whether
       // that's immediately (email confirmation off) or after the user
       // clicks the confirmation link (email confirmation on).
-      options: { data: { full_name: fullName, legal_acceptance_requested: true } },
+      options: {
+        data: { full_name: fullName, legal_acceptance_requested: true },
+        emailRedirectTo: `${window.location.origin}/login?confirmed=1`,
+      },
     });
     setSubmitting(false);
     if (error) {
@@ -57,7 +60,11 @@ export default function Signup() {
   const handleResend = async () => {
     if (!email) return;
     setResending(true);
-    const { error } = await supabase.auth.resend({ type: "signup", email });
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/login?confirmed=1` },
+    });
     setResending(false);
     if (error) {
       toast.error(error.message);
