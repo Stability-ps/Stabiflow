@@ -9,6 +9,8 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   define: {
+    __APP_COMMIT__: JSON.stringify("test"),
+    __APP_ENV__: JSON.stringify("test"),
     "import.meta.env.VITE_SUPABASE_URL": JSON.stringify("https://test.supabase.co"),
     "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify("test-anon-key"),
   },

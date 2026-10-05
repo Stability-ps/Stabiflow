@@ -4,12 +4,14 @@
 // per-workspace commercial state + entitlement overrides, system status,
 // and the admin audit log.
 //
-// Same authorization model as operator-workspaces: the ONLY gate is
-// profiles.is_platform_operator, re-checked via the service-role client on
-// every call. Every mutation validates input first (adminValidation.ts)
+// Authorization: the caller's staff role in platform_admin_roles (read with
+// the service-role client on every call) must hold the permission mapped to
+// the action in OPERATOR_ADMIN_ACTIONS (_shared/admin/permissions.ts). Every mutation validates input first (adminValidation.ts)
 // and writes a before/after row to platform_admin_audit. Secrets are
 // reported as configured/missing only - no value ever leaves this function.
-import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { permits, resolveAdminCaller } from "../_shared/admin/authorize.ts";
+import { OPERATOR_ADMIN_ACTIONS } from "../_shared/admin/permissions.ts";
 import {
   isUuid, reasonOf, secretStatus, validateFlagUpdate, validateOverride, validatePlan, validatePlanEntitlement, validatePrice, validatePriceUpdate,
   validateLegalDraft, validateSettingUpdate,
@@ -47,13 +49,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return json(req, {}, 200);
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
-  const token = bearerToken(req);
-  if (!token) return json(req, { error: "Forbidden" }, 403);
-  const actorId = await getCallerUserId(createCallerClient(token));
-  if (!actorId) return json(req, { error: "Forbidden" }, 403);
-  const sb = createServiceClient();
-  const { data: prof } = await sb.from("profiles").select("is_platform_operator").eq("id", actorId).maybeSingle();
-  if (prof?.is_platform_operator !== true) return json(req, { error: "Forbidden" }, 403);
+  const auth = await resolveAdminCaller(req);
+  if (!auth.ok) return json(req, { error: "Forbidden" }, 403);
+  const actorId = auth.caller.userId;
+  const sb = auth.caller.sb;
 
   let body: Record<string, unknown>;
   try {
@@ -62,6 +61,8 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Invalid JSON body" }, 400);
   }
   const action = typeof body.action === "string" ? body.action : "";
+  if (!OPERATOR_ADMIN_ACTIONS[action]) return json(req, { error: "Unknown action" }, 400);
+  if (!permits(auth.caller, OPERATOR_ADMIN_ACTIONS[action])) return json(req, { error: "Your role does not allow this" }, 403);
 
   try {
     switch (action) {
@@ -368,6 +369,9 @@ Deno.serve(async (req: Request) => {
         if (!v.ok) return json(req, { error: v.error }, 400);
         const { data: before } = await sb.from("platform_settings").select("*").eq("key", v.value.key).maybeSingle();
         if (!before) return json(req, { error: "Unknown setting" }, 404);
+        // Public copy is content.manage; operational settings (billing.* etc.)
+        // need settings.manage.
+        if (!before.is_public && !permits(auth.caller, "settings.manage")) return json(req, { error: "Your role does not allow this" }, 403);
         const { data, error } = await sb.from("platform_settings").update({ value: v.value.value, updated_by: actorId }).eq("key", v.value.key).select("*").single();
         if (error) return json(req, { error: "Could not save setting" }, 400);
         await audit(sb, { operator: actorId, action: "update_setting", targetType: "platform_setting", targetId: v.value.key, before: before.value, after: data.value });

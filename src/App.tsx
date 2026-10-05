@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import { Compass } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
@@ -56,7 +57,10 @@ import Customer360Page from "@/pages/dashboard/customers/Customer360";
 import Privacy from "@/pages/legal/Privacy";
 import Terms from "@/pages/legal/Terms";
 import DataDeletion from "@/pages/legal/DataDeletion";
-import Operator from "@/pages/operator/Operator";
+
+// Admin is a separate operational surface, loaded only when /admin is opened
+// so customers never download it.
+const AdminRoutes = lazy(() => import("@/pages/admin/AdminRoutes"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,6 +88,16 @@ export function AppRoutes() {
         }
       />
       <Route path="/accept-invitation" element={<AcceptInvitation />} />
+      <Route
+        path="/admin/*"
+        element={
+          <RequireAuth>
+            <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-background"><p className="text-sm text-muted-foreground">Loading admin...</p></div>}>
+              <AdminRoutes />
+            </Suspense>
+          </RequireAuth>
+        }
+      />
       <Route path="/b/:slug" element={<PublicProfile />} />
       {/* Admin-published versions take over from the in-code pages once
           the owner publishes one (Admin -> Pages & legal). */}
@@ -146,7 +160,7 @@ export function AppRoutes() {
         <Route path="/app/automations" element={<FeatureGate flag="module.automations"><Automations /></FeatureGate>} />
         <Route path="/app/integrations" element={<FeatureGate flag="module.integrations"><Integrations /></FeatureGate>} />
         <Route path="/app/settings" element={<Settings />} />
-        <Route path="/app/operator" element={<Operator />} />
+        <Route path="/app/operator" element={<Navigate to="/admin" replace />} />
         {/* A stale/invalid authenticated link (e.g. an old campaign route
             missing the /app prefix) must stay inside the authenticated
             shell - never fall through to the public catch-all below,

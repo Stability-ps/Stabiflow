@@ -46,6 +46,9 @@
     --sidebar-accent-foreground: 222 47% 11%;
     --sidebar-border: 214 32% 89%;
     --sidebar-ring: 213 82% 52%;
+
+    /* Admin chart accent: #2a7de1, validated against the light card surface. */
+    --admin-chart: 213 75% 52%;
   }
 
   .dark {
@@ -86,6 +89,9 @@
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217 33% 18%;
     --sidebar-ring: 213 27% 84%;
+
+    /* #3b8ae6, validated against the dark card surface. */
+    --admin-chart: 213 77% 57%;
   }
 }
 

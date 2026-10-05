@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { operatorAdmin, type AdminSetting } from "@/lib/operatorAdmin";
+import { useAdmin } from "@/hooks/useAdmin";
 
 function SettingEditor({ setting, onChanged }: { setting: AdminSetting; onChanged: () => void }) {
+  // Internal (operational) settings need settings.manage; public copy only content.manage.
+  const { can } = useAdmin();
+  const readOnly = !setting.is_public && !can("settings.manage");
   const [draft, setDraft] = useState(JSON.stringify(setting.value, null, 2));
   const save = useMutation({
     mutationFn: () => {
@@ -36,10 +40,14 @@ function SettingEditor({ setting, onChanged }: { setting: AdminSetting; onChange
         {setting.description && <p className="text-xs text-muted-foreground">{setting.description}</p>}
       </CardHeader>
       <CardContent className="space-y-2">
-        <Textarea className="font-mono text-xs" rows={Math.min(12, draft.split("\n").length + 1)} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={`Value for ${setting.key}`} />
-        <Button size="sm" onClick={() => save.mutate()} disabled={!dirty || save.isPending}>
-          Save
-        </Button>
+        <Textarea className="font-mono text-xs" rows={Math.min(12, draft.split("\n").length + 1)} value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={`Value for ${setting.key}`} readOnly={readOnly} />
+        {readOnly ? (
+          <p className="text-xs text-muted-foreground">Read-only: operational settings can be changed by an Admin or the Owner.</p>
+        ) : (
+          <Button size="sm" onClick={() => save.mutate()} disabled={!dirty || save.isPending}>
+            Save
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

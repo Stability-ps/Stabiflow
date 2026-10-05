@@ -10,17 +10,19 @@
 // operator-bypass policy by design - see the migration's comment). There
 // is no client-reachable way to set this flag on your own profile.
 //
+// 2026-10 Admin Control Centre: the gate is now the caller's staff role in
+// platform_admin_roles plus a per-action permission (OPERATOR_WORKSPACES_ACTIONS
+// in _shared/admin/permissions.ts) - e.g. Support can look a business up but
+// only Owner/Admin can suspend it.
+//
 // One action dispatcher (same "one endpoint, one action field, real audit
 // trail" shape as inbox-actions/leads-actions), not a REST-per-verb
 // surface, matching this codebase's established convention.
-import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, json } from "../_shared/contentAuth.ts";
+import { createServiceClient, json } from "../_shared/contentAuth.ts";
+import { permits, resolveAdminCaller } from "../_shared/admin/authorize.ts";
+import { OPERATOR_WORKSPACES_ACTIONS } from "../_shared/admin/permissions.ts";
 
-const VALID_ACTIONS = new Set(["search_workspaces", "get_workspace", "suspend_workspace", "unsuspend_workspace"]);
-
-async function requireOperator(serviceSb: ReturnType<typeof createServiceClient>, userId: string): Promise<boolean> {
-  const { data } = await serviceSb.from("profiles").select("is_platform_operator").eq("id", userId).maybeSingle();
-  return data?.is_platform_operator === true;
-}
+const VALID_ACTIONS = new Set(Object.keys(OPERATOR_WORKSPACES_ACTIONS));
 
 async function logOperatorAction(serviceSb: ReturnType<typeof createServiceClient>, operatorUserId: string, workspaceId: string, action: string, reason: string) {
   await serviceSb.from("platform_operator_actions").insert({ operator_user_id: operatorUserId, workspace_id: workspaceId, action, reason });
@@ -31,16 +33,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
-  const token = bearerToken(req);
-  if (!token) return json(req, { error: "Forbidden" }, 403);
-  const callerSb = createCallerClient(token);
-  const actorId = await getCallerUserId(callerSb);
-  if (!actorId) return json(req, { error: "Forbidden" }, 403);
-
-  const serviceSb = createServiceClient();
-  if (!(await requireOperator(serviceSb, actorId))) {
-    return json(req, { error: "Forbidden" }, 403);
-  }
+  const auth = await resolveAdminCaller(req);
+  if (!auth.ok) return json(req, { error: "Forbidden" }, 403);
+  const actorId = auth.caller.userId;
+  const serviceSb = auth.caller.sb;
 
   let body: { action?: unknown; query?: unknown; workspace_id?: unknown; reason?: unknown };
   try {
@@ -51,6 +47,7 @@ Deno.serve(async (req: Request) => {
 
   const action = body.action;
   if (typeof action !== "string" || !VALID_ACTIONS.has(action)) return json(req, { error: "Unknown action" }, 400);
+  if (!permits(auth.caller, OPERATOR_WORKSPACES_ACTIONS[action])) return json(req, { error: "Your role does not allow this" }, 403);
 
   if (action === "search_workspaces") {
     // Strip characters meaningful to PostgREST's own filter grammar
