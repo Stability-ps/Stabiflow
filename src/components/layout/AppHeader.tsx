@@ -41,8 +41,8 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 border-b bg-background/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="flex h-14 items-center gap-1 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] md:gap-3 md:px-4">
+    <header className="sticky top-0 z-30 shrink-0 border-b border-border/70 bg-background/85 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_hsl(214_32%_91%/0.45)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/72">
+      <div className="flex h-[3.75rem] items-center gap-1 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] md:gap-3 md:px-4">
         {/* Desktop/tablet: sidebar toggle + workspace dropdown (unchanged). */}
         <SidebarTrigger className="hidden md:inline-flex" />
         {/* Phone: contextual back (or brand mark) + page title, with the
