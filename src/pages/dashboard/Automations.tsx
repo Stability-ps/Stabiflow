@@ -114,15 +114,15 @@ export default function Automations() {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="mx-auto flex w-full max-w-[1440px] flex-col">
       {fromWhatsApp && (
         <div className="mb-4">
           <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />
         </div>
       )}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-5 flex flex-col gap-4 rounded-3xl border border-violet-100/80 bg-gradient-to-br from-white via-white to-violet-50/60 p-5 shadow-[0_18px_60px_-44px_hsl(260_60%_45%/0.3)] sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Automations</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workflow engine</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Automations</h1>
           <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
         </div>
         {canCreate && (
@@ -169,7 +169,7 @@ export default function Automations() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-[0_16px_50px_-40px_hsl(260_45%_30%/0.3)]">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
               <tr>
