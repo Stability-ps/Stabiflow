@@ -11,7 +11,7 @@
 // supabase/functions/operator-workspaces/index.ts and
 // supabase/functions/_shared/workspaceStatus.ts.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, resetAdminRolesWithFixtureOwner, SUPABASE_URL, type TestTenant } from "./helpers";
 
 const OPERATOR_URL = `${SUPABASE_URL}/functions/v1/operator-workspaces`;
 const FLOW_AI_URL = `${SUPABASE_URL}/functions/v1/flow-ai-chat`;
@@ -31,12 +31,14 @@ describe("Platform operator authorization + workspace suspension (release blocke
     workspace = await createTestTenant("operator-suspend");
     otherWorkspace = await createTestTenant("operator-suspend-other");
 
+    await resetAdminRolesWithFixtureOwner();
     operatorUser = await createTestUser("operator-flag-holder");
-    // No self-service way exists to set is_platform_operator - the only
-    // writer is a direct service-role update, exactly as documented in
-    // the migration/edge function comments. Legitimate here because this
-    // is a disposable test identity, not a real account.
-    await admin.from("profiles").update({ is_platform_operator: true }).eq("id", operatorUser.userId);
+    // No self-service way exists to grant a staff role - the only writer
+    // is a direct service-role insert into platform_admin_roles (or the
+    // Owner via admin-console). Legitimate here because this is a
+    // disposable test identity, not a real account. "admin" holds
+    // businesses.manage, so it may suspend.
+    await admin.from("platform_admin_roles").upsert({ user_id: operatorUser.userId, role: "admin" });
 
     nonOperatorUser = await createTestUser("operator-non-operator");
   });
@@ -44,7 +46,7 @@ describe("Platform operator authorization + workspace suspension (release blocke
   afterAll(async () => {
     await cleanupTenant(workspace);
     await cleanupTenant(otherWorkspace);
-    await admin.from("profiles").update({ is_platform_operator: false }).eq("id", operatorUser.userId);
+    await admin.from("platform_admin_roles").delete().eq("user_id", operatorUser.userId);
     await cleanupTenant({ userId: operatorUser.userId });
     await cleanupTenant({ userId: nonOperatorUser.userId });
   });

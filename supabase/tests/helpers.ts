@@ -164,3 +164,26 @@ export async function seedMembership(workspaceId: string, userId: string, role: 
 export async function cleanupTenant(tenant: { userId: string; workspaceId?: string }) {
   if (tenant.workspaceId) await admin.from("workspaces").delete().eq("id", tenant.workspaceId);
 }
+
+const FIXTURE_OWNER_EMAIL = "stabiflow-test-fixture-owner@stabiflow-test.local";
+
+/** A permanent, non-pooled Owner for the local test DB. platform_admin_roles
+ * never allows removing the last owner, so without this a pooled identity
+ * granted "owner" by one suite could never be cleaned up and would leak
+ * operator access into every other suite. Also strips staff roles from all
+ * pooled identities so each suite starts from "nobody is staff". */
+export async function resetAdminRolesWithFixtureOwner(): Promise<string> {
+  const { data: existing } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  let ownerId = existing?.users.find((u) => u.email === FIXTURE_OWNER_EMAIL)?.id;
+  if (!ownerId) {
+    const { data, error } = await admin.auth.admin.createUser({ email: FIXTURE_OWNER_EMAIL, password: POOL_PASSWORD, email_confirm: true });
+    if (error || !data.user) throw new Error(`Failed to create fixture owner: ${error?.message}`);
+    ownerId = data.user.id;
+  }
+  const { error } = await admin.from("platform_admin_roles").upsert({ user_id: ownerId, role: "owner" });
+  if (error) throw new Error(`Failed to grant fixture owner: ${error.message}`);
+  const pool = await ensurePool();
+  const del = await admin.from("platform_admin_roles").delete().in("user_id", pool.map((p) => p.userId));
+  if (del.error) throw new Error(`Failed to reset pooled staff roles: ${del.error.message}`);
+  return ownerId;
+}
