@@ -16,11 +16,16 @@ export default function Signup() {
   const redirectParam = searchParams.get("redirect");
   const loginHref = redirectParam ? `/login?redirect=${encodeURIComponent(redirectParam)}` : "/login";
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => {
+    const saved = sessionStorage.getItem("stabiflow.authEmail") ?? "";
+    sessionStorage.removeItem("stabiflow.authEmail");
+    return saved;
+  });
   const [password, setPassword] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [resending, setResending] = useState(false);
 
   if (!loading && user) return <Navigate to={sessionStorage.getItem("stabiflow.pendingCheckout") ? "/app/billing" : "/app"} replace />;
 
@@ -49,15 +54,39 @@ export default function Signup() {
     setSubmitted(true);
   };
 
+  const handleResend = async () => {
+    if (!email) return;
+    setResending(true);
+    const { error } = await supabase.auth.resend({ type: "signup", email });
+    setResending(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("Confirmation email resent. Please check your inbox and spam folder.");
+  };
+
   if (submitted) {
     return (
       <AuthLayout>
         <Card className="w-full max-w-sm">
           <CardHeader><CardTitle className="text-xl">Check your email</CardTitle></CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground">
               We sent a confirmation link to <strong>{email}</strong>. Confirm your address, then{" "}
-              <Link to={loginHref} className="text-foreground underline">sign in</Link>.
+              <Link
+                to={loginHref}
+                onClick={() => sessionStorage.setItem("stabiflow.authEmail", email)}
+                className="text-foreground underline"
+              >
+                sign in
+              </Link>.
+            </p>
+            <Button type="button" variant="outline" className="w-full" onClick={handleResend} disabled={resending}>
+              {resending ? "Resending..." : "Resend confirmation email"}
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              Didn't receive it? Check your spam or junk folder, or resend the email above.
             </p>
           </CardContent>
         </Card>
@@ -99,7 +128,16 @@ export default function Signup() {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Already have an account? <Link to={loginHref} className="text-foreground underline">Sign in</Link>
+            Already have an account?{" "}
+            <Link
+              to={loginHref}
+              onClick={() => {
+                if (email.trim()) sessionStorage.setItem("stabiflow.authEmail", email.trim());
+              }}
+              className="text-foreground underline"
+            >
+              Sign in
+            </Link>
           </p>
         </CardContent>
       </Card>
