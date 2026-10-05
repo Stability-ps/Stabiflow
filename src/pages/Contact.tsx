@@ -27,7 +27,7 @@ export default function ContactPage() {
           <div className="space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-medium text-muted-foreground">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-              StabiFlow is provided by Acapolite Consulting (Pty) Ltd.
+              Official StabiFlow support
             </div>
 
             <div className="space-y-4">
@@ -55,8 +55,8 @@ export default function ContactPage() {
                   <MapPin className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Provider</p>
-                  <p className="mt-1 text-lg font-medium text-foreground">Acapolite Consulting (Pty) Ltd</p>
+                  <p className="text-sm text-muted-foreground">Platform</p>
+                  <p className="mt-1 text-lg font-medium text-foreground">StabiFlow</p>
                   <p className="text-sm text-muted-foreground">South Africa</p>
                 </div>
               </div>
