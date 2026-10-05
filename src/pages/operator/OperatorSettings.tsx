@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { operatorAdmin, type AdminSetting } from "@/lib/operatorAdmin";
 import { useAdmin } from "@/hooks/useAdmin";
@@ -194,7 +193,7 @@ function NoticeEditor({ setting, onChanged }: { setting: AdminSetting; onChanged
             <p className="text-sm font-medium">Show notice</p>
             <p className="text-xs text-muted-foreground">Customers will only see the banner while this is enabled.</p>
           </div>
-          <Switch checked={draft.enabled} onCheckedChange={(enabled) => setDraft((d) => ({ ...d, enabled }))} aria-label="Enable platform notice" />
+          <button type="button" role="switch" aria-checked={draft.enabled} onClick={() => setDraft((d) => ({ ...d, enabled: !d.enabled }))} className={`relative h-6 w-11 rounded-full border transition-colors ${draft.enabled ? "bg-primary" : "bg-muted"}`} aria-label="Enable platform notice"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-transform ${draft.enabled ? "left-5" : "left-0.5"}`} /></button>
         </div>
         <div className="grid gap-4 md:grid-cols-[180px_1fr]">
           <div className="space-y-2">
