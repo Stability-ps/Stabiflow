@@ -164,8 +164,9 @@ export default function Billing() {
   const plans = (catalog.data ?? []).filter((p) => p.plan_kind !== "free");
   const oneOff = plans.filter((p) => p.plan_kind === "one_off");
   const recurring = plans.filter((p) => p.plan_kind === "subscription");
-  const availableRecurring = sub
-    ? recurring.filter((p) => (p.tier_rank ?? 0) > (sub.plan?.tier_rank ?? 0))
+  const currentSubscriptionPlan = sub?.plan?.code ? recurring.find((p) => p.code === sub.plan?.code) ?? null : null;
+  const availableRecurring = sub && currentSubscriptionPlan
+    ? recurring.filter((p) => (p.tier_rank ?? 0) > (currentSubscriptionPlan.tier_rank ?? 0))
     : recurring;
   const currentLabel = sub?.plan?.name ?? highestPurchase?.plan?.name ?? "Free";
   const currentIsPaid = !!sub || !!highestPurchase;
