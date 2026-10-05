@@ -60,7 +60,7 @@ function ConnectedIntegrationCard({ provider, integration, resourceCounts, onMan
   // losing existing Page/number selections.
   const needsReconnect = status.tone === "error";
   return (
-    <Card>
+    <Card className="border-border/60 bg-card/90 shadow-[0_14px_44px_-36px_hsl(235_45%_30%/0.3)]">
       <CardHeader className="flex flex-row items-start justify-between space-y-0">
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -224,9 +224,10 @@ export default function Integrations() {
   const hasAnyConnection = !!metaIntegration || !!whatsappIntegration;
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Integrations</h1>
+    <div className="mx-auto max-w-[1400px] space-y-8">
+      <div className="rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-white via-white to-indigo-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(235_55%_45%/0.25)] sm:p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Connected ecosystem</p>
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Integrations</h1>
         <p className="text-sm text-muted-foreground">Connect Meta and WhatsApp Business to this workspace.</p>
       </div>
 
