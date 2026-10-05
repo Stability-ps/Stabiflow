@@ -1,6 +1,8 @@
-import { LogOut, Settings, User as UserIcon } from "lucide-react";
+import { LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useQuery } from "@tanstack/react-query";
+import { adminConsole, AdminApiError, type AdminMe } from "@/lib/adminApi";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +20,14 @@ function initials(name: string | null | undefined, email: string | null | undefi
 export function UserMenu() {
   const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const adminMe = useQuery({
+    queryKey: ["admin-me"],
+    queryFn: () => adminConsole<AdminMe>("me"),
+    enabled: !!user,
+    retry: (count, err) => !(err instanceof AdminApiError && (err.status === 401 || err.status === 403)) && count < 1,
+    staleTime: 60_000,
+  });
+  const canOpenAdmin = !!adminMe.data;
 
   return (
     <DropdownMenu>
@@ -42,6 +52,15 @@ export function UserMenu() {
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
+        {canOpenAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/admin")}>
+              <Shield className="mr-2 h-4 w-4" />
+              Admin console
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => signOut()}>
           <LogOut className="mr-2 h-4 w-4" />
