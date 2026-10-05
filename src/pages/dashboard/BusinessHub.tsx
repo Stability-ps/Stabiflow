@@ -66,9 +66,12 @@ export default function BusinessHub() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-2xl space-y-5">
-      <div>
-        <h1 className="truncate text-xl font-semibold tracking-tight">{name}</h1>
+    <div className="mx-auto w-full max-w-3xl space-y-6">
+      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-44px_hsl(213_82%_45%/0.4)]">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-sky-200/25 blur-3xl" />
+        <div className="relative">
+        <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business workspace</p>
+        <h1 className="truncate text-2xl font-semibold tracking-tight">{name}</h1>
         {!completeness ? (
           <div className="mt-2 h-1.5 animate-pulse rounded-full bg-muted motion-reduce:animate-none" role="status" aria-label="Loading" />
         ) : (
@@ -82,6 +85,7 @@ export default function BusinessHub() {
             </span>
           </Link>
         )}
+        </div>
       </div>
 
       {pendingCount > 0 ? (
@@ -107,12 +111,12 @@ export default function BusinessHub() {
       {groups.filter((g) => g.links.length > 0).map((g) => (
         <section key={g.title} aria-labelledby={`hub-${g.title}`}>
           <h2 id={`hub-${g.title}`} className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</h2>
-          <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+          <ul className="divide-y overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-[0_12px_40px_-34px_hsl(213_45%_30%/0.32)] backdrop-blur-sm">
             {g.links.map((l) => {
               const st = status(l.section);
               return (
                 <li key={`${l.label}-${l.to}`}>
-                  <Link to={l.to} className="flex min-h-14 items-center gap-3 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-accent">
+                  <Link to={l.to} className="group flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-accent">
                     <l.icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">{l.label}</span>
