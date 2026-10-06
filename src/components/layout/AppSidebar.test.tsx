@@ -66,11 +66,9 @@ describe("AppSidebar active state", () => {
     expect(screen.getByRole("link", { name: "Messages Templates" })).toBeInTheDocument();
   });
 
-  it("links the Messages sub-nav Automations into the shared module with a Messages filter, and Analytics to the Messages-owned page", () => {
+  it("keeps Automations out of the Customers > Messages submenu while retaining Messages Analytics", () => {
     renderSidebar("/app/whatsapp/inbox");
-    expect(screen.getByRole("link", { name: "Messages Automations" })).toHaveAttribute("href", "/app/automations?trigger=conversation");
-    // Phase 11: Messages Analytics is now its own operational page inside
-    // the Messages section, not a filtered link into global Analytics.
+    expect(screen.queryByRole("link", { name: "Messages Automations" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Messages Analytics" })).toHaveAttribute("href", "/app/whatsapp/analytics");
   });
 });
