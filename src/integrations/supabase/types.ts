@@ -7,30 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -719,7 +699,7 @@ export type Database = {
           output_tokens?: number
           provider?: string
           status: string
-          total_tokens?: never
+          total_tokens?: number | null
           user_id?: string | null
           workspace_id: string
         }
@@ -735,7 +715,7 @@ export type Database = {
           output_tokens?: number
           provider?: string
           status?: string
-          total_tokens?: never
+          total_tokens?: number | null
           user_id?: string | null
           workspace_id?: string
         }
@@ -1275,6 +1255,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "billing_customers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_email_deliveries: {
+        Row: {
+          created_at: string
+          event_key: string
+          id: string
+          provider: string
+          provider_message_id: string | null
+          recipient_email: string
+          sent_at: string | null
+          status: string
+          template_key: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_key: string
+          id?: string
+          provider?: string
+          provider_message_id?: string | null
+          recipient_email: string
+          sent_at?: string | null
+          status?: string
+          template_key: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          event_key?: string
+          id?: string
+          provider?: string
+          provider_message_id?: string | null
+          recipient_email?: string
+          sent_at?: string | null
+          status?: string
+          template_key?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_email_deliveries_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -2262,8 +2289,8 @@ export type Database = {
             foreignKeyName: "business_profile_section_preferences_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
-            referencedRelation: "business_identities"
-            referencedColumns: ["workspace_id"]
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -3587,7 +3614,7 @@ export type Database = {
           name: string
           opportunity_id?: string | null
           phone?: string | null
-          phone_normalized?: never
+          phone_normalized?: string | null
           status?: string
           workspace_id: string
         }
@@ -3603,7 +3630,7 @@ export type Database = {
           name?: string
           opportunity_id?: string | null
           phone?: string | null
-          phone_normalized?: never
+          phone_normalized?: string | null
           status?: string
           workspace_id?: string
         }
@@ -4575,14 +4602,14 @@ export type Database = {
           created_from_conversation_id: string | null
           email: string | null
           estimated_value: number | null
+          follow_up_completed_at: string | null
+          follow_up_note: string | null
           human_reference: string
           id: string
           intake: Json
           lost_at: string | null
           lost_reason: string | null
           next_follow_up_at: string | null
-          follow_up_note: string | null
-          follow_up_completed_at: string | null
           phone: string | null
           phone_normalized: string | null
           pipeline_id: string | null
@@ -4607,14 +4634,14 @@ export type Database = {
           created_from_conversation_id?: string | null
           email?: string | null
           estimated_value?: number | null
+          follow_up_completed_at?: string | null
+          follow_up_note?: string | null
           human_reference: string
           id?: string
           intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
           next_follow_up_at?: string | null
-          follow_up_note?: string | null
-          follow_up_completed_at?: string | null
           phone?: string | null
           phone_normalized?: string | null
           pipeline_id?: string | null
@@ -4639,14 +4666,14 @@ export type Database = {
           created_from_conversation_id?: string | null
           email?: string | null
           estimated_value?: number | null
+          follow_up_completed_at?: string | null
+          follow_up_note?: string | null
           human_reference?: string
           id?: string
           intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
           next_follow_up_at?: string | null
-          follow_up_note?: string | null
-          follow_up_completed_at?: string | null
           phone?: string | null
           phone_normalized?: string | null
           pipeline_id?: string | null
@@ -5186,6 +5213,45 @@ export type Database = {
           },
         ]
       }
+      platform_admin_roles: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          role: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          role: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          role?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_admin_roles_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_admin_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_deletion_log: {
         Row: {
           cleanup_status: Json
@@ -5675,6 +5741,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      whatsapp_template_library: {
+        Row: {
+          body: string
+          category: string
+          created_at: string
+          id: string
+          industry: string
+          is_active: boolean
+          language: string
+          name: string
+          sort_order: number
+          template_key: string
+          updated_at: string
+          use_case: string
+          variables: Json
+        }
+        Insert: {
+          body: string
+          category: string
+          created_at?: string
+          id?: string
+          industry: string
+          is_active?: boolean
+          language?: string
+          name: string
+          sort_order?: number
+          template_key: string
+          updated_at?: string
+          use_case: string
+          variables?: Json
+        }
+        Update: {
+          body?: string
+          category?: string
+          created_at?: string
+          id?: string
+          industry?: string
+          is_active?: boolean
+          language?: string
+          name?: string
+          sort_order?: number
+          template_key?: string
+          updated_at?: string
+          use_case?: string
+          variables?: Json
+        }
+        Relationships: []
       }
       workspace_activity_log: {
         Row: {
@@ -6529,12 +6643,12 @@ export type Database = {
           currency: string
           default_ad_cta: string | null
           feature_flags: Json
+          handoff_keywords: string[]
           handoff_sla_enabled: boolean
           handoff_sla_minutes: number
           id: string
           industry: string | null
           logo_path: string | null
-          handoff_keywords: string[]
           match_customer_language: boolean
           outside_hours_auto_reply_enabled: boolean
           outside_hours_auto_reply_message: string | null
@@ -6560,12 +6674,12 @@ export type Database = {
           currency?: string
           default_ad_cta?: string | null
           feature_flags?: Json
+          handoff_keywords?: string[]
           handoff_sla_enabled?: boolean
           handoff_sla_minutes?: number
           id?: string
           industry?: string | null
           logo_path?: string | null
-          handoff_keywords?: string[]
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
@@ -6591,12 +6705,12 @@ export type Database = {
           currency?: string
           default_ad_cta?: string | null
           feature_flags?: Json
+          handoff_keywords?: string[]
           handoff_sla_enabled?: boolean
           handoff_sla_minutes?: number
           id?: string
           industry?: string | null
           logo_path?: string | null
-          handoff_keywords?: string[]
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
@@ -6857,6 +6971,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _admin_like: { Args: { p_q: string }; Returns: string }
+      _admin_workspace_is_paying: {
+        Args: { p_workspace_id: string }
+        Returns: boolean
+      }
       _workspace_access_plans: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -6883,7 +7002,7 @@ export type Database = {
         Returns: string
       }
       accept_current_legal_terms: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           accepted_at: string
           document_type: string
@@ -6893,6 +7012,36 @@ export type Database = {
       accept_workspace_invitation: {
         Args: { p_token: string }
         Returns: string
+      }
+      admin_activity_feed: { Args: { p_limit?: number }; Returns: Json }
+      admin_attention_signals: { Args: never; Returns: Json }
+      admin_find_user_by_email: { Args: { p_email: string }; Returns: string }
+      admin_overview: { Args: { p_from: string; p_to: string }; Returns: Json }
+      admin_revenue: { Args: { p_from: string; p_to: string }; Returns: Json }
+      admin_search: { Args: { p_q: string }; Returns: Json }
+      admin_staff: { Args: never; Returns: Json }
+      admin_user_detail: { Args: { p_user_id: string }; Returns: Json }
+      admin_users_page: {
+        Args: {
+          p_filter: string
+          p_limit: number
+          p_offset: number
+          p_search: string
+        }
+        Returns: Json
+      }
+      admin_workspace_detail: {
+        Args: { p_workspace_id: string }
+        Returns: Json
+      }
+      admin_workspaces_page: {
+        Args: {
+          p_filter: string
+          p_limit: number
+          p_offset: number
+          p_search: string
+        }
+        Returns: Json
       }
       ai_list_campaigns: {
         Args: { p_limit?: number; p_status?: string; p_workspace_id: string }
@@ -7127,8 +7276,9 @@ export type Database = {
         Args: { p_name: string; p_slug: string }
         Returns: string
       }
+      cron_function_url: { Args: { p_function: string }; Returns: string }
       current_legal_versions: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           current_version: string
           document_type: string
@@ -7479,10 +7629,7 @@ export type Database = {
         Args: { p_slug: string }
         Returns: boolean
       }
-      is_platform_operator: {
-        Args: Record<PropertyKey, never>
-        Returns: boolean
-      }
+      is_platform_operator: { Args: never; Returns: boolean }
       is_workspace_member: {
         Args: { p_workspace_id: string }
         Returns: boolean
@@ -7492,7 +7639,7 @@ export type Database = {
         Returns: boolean
       }
       legal_acceptance_stats: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           acceptances: number
           document_type: string
@@ -7500,10 +7647,8 @@ export type Database = {
           last_accepted_at: string
         }[]
       }
-      my_legal_acceptance_status: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      my_admin_role: { Args: never; Returns: string }
+      my_legal_acceptance_status: { Args: never; Returns: string }
       next_lead_reference: { Args: { p_workspace_id: string }; Returns: string }
       normalize_phone_number: { Args: { p_raw: string }; Returns: string }
       platform_setting_int: {
@@ -7514,10 +7659,7 @@ export type Database = {
         Args: { p_document_id: string; p_operator_id: string }
         Returns: string
       }
-      reaccept_current_legal_terms: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      reaccept_current_legal_terms: { Args: never; Returns: string }
       reject_business_fact_proposal: {
         Args: { p_proposal_id: string }
         Returns: string
@@ -7530,9 +7672,10 @@ export type Database = {
         Args: { p_integration_id: string; p_secret: string }
         Returns: undefined
       }
-      show_limit: { Args: Record<PropertyKey, never>; Returns: number }
+      show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      sla_sweep: { Args: Record<PropertyKey, never>; Returns: Json }
+      sla_sweep: { Args: never; Returns: Json }
+      valid_handoff_keywords: { Args: { p: string[] }; Returns: boolean }
       workspace_access_plans: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -7541,6 +7684,10 @@ export type Database = {
           source: string
           tier_rank: number
         }[]
+      }
+      workspace_ai_token_cap: {
+        Args: { p_feature: string; p_workspace_id: string }
+        Returns: number
       }
       workspace_assets_path_workspace_id: {
         Args: { p_name: string }
@@ -7664,12 +7811,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7693,11 +7840,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7718,11 +7865,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7743,11 +7890,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7760,11 +7907,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -7774,9 +7921,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       ad_budget_type: ["daily", "lifetime"],
