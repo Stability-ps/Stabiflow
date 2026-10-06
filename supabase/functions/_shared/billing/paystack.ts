@@ -112,6 +112,13 @@ export type VerifiedTransaction = {
   plan?: { plan_code?: string } | string | null;
 };
 
+/** Paystack answers "Transaction reference not found" for a checkout the
+ * customer never opened. That is a definite "not paid", not a transient
+ * failure - reconciliation treats it like an unpaid checkout. */
+export function isUnknownReferenceError(err: unknown): boolean {
+  return err instanceof Error && /transaction reference not found/i.test(err.message);
+}
+
 /** In mock mode, `mockExpected` describes the charge the checkout asked for. */
 export async function verifyTransaction(
   cfg: PaystackConfig,

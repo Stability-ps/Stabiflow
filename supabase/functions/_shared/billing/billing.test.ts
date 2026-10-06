@@ -175,3 +175,10 @@ Deno.test("unknown events are ignored, not failed", async () => {
   const r = await processPaystackEvent(f.client, cfg, { event: "transfer.success", data: {} }, "webhook");
   assertEquals(r.status, "ignored");
 });
+
+Deno.test("an unknown Paystack reference is a definite 'not paid', other failures are not", async () => {
+  const { isUnknownReferenceError } = await import("./paystack.ts");
+  assertEquals(isUnknownReferenceError(new Error("Paystack /transaction/verify/sf_1 failed: Transaction reference not found.")), true);
+  assertEquals(isUnknownReferenceError(new Error("Paystack /transaction/verify/sf_1 failed: 503 Service Unavailable")), false);
+  assertEquals(isUnknownReferenceError("Transaction reference not found"), false);
+});
