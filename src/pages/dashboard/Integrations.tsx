@@ -14,6 +14,7 @@ import { useAllFacebookPages, useAllInstagramAccounts, useAllMetaAdAccounts, use
 import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
 import { MetaManagePanel } from "./integrations/MetaManagePanel";
 import { WhatsAppManagePanel } from "./integrations/WhatsAppManagePanel";
+import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
 const ERROR_MESSAGES: Record<string, string> = {
   access_denied: "You cancelled the connection - nothing was connected.",
@@ -229,6 +230,7 @@ export default function Integrations() {
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Connected ecosystem</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Integrations</h1>
         <p className="text-sm text-muted-foreground">Connect Meta and WhatsApp Business to this workspace.</p>
+        <GuideHelpLink chapter="integrations" className="mt-1" />
       </div>
 
       {hasAnyConnection ? (

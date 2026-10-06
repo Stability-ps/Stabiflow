@@ -61,6 +61,8 @@ import DataDeletion from "@/pages/legal/DataDeletion";
 // Admin is a separate operational surface, loaded only when /admin is opened
 // so customers never download it.
 const AdminRoutes = lazy(() => import("@/pages/admin/AdminRoutes"));
+// The guide's chapters are a large amount of text; load them only when opened.
+const Guide = lazy(() => import("@/pages/dashboard/Guide"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -160,6 +162,16 @@ export function AppRoutes() {
         <Route path="/app/automations" element={<FeatureGate flag="module.automations"><Automations /></FeatureGate>} />
         <Route path="/app/integrations" element={<FeatureGate flag="module.integrations"><Integrations /></FeatureGate>} />
         <Route path="/app/settings" element={<Settings />} />
+        {/* The StabiFlow Guide is available to every workspace member,
+            whatever their plan - chapters explain availability instead. */}
+        <Route
+          path="/app/guide/*"
+          element={
+            <Suspense fallback={<div className="flex justify-center py-16" role="status" aria-label="Loading guide"><p className="text-sm text-muted-foreground">Loading guide...</p></div>}>
+              <Guide />
+            </Suspense>
+          }
+        />
         <Route path="/app/operator" element={<Navigate to="/admin" replace />} />
         {/* A stale/invalid authenticated link (e.g. an old campaign route
             missing the /app prefix) must stay inside the authenticated

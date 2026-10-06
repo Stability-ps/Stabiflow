@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, ChevronLeft } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Bell, ChevronDown, ChevronLeft, CircleHelp } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { MobileWorkspaceSheet } from "@/components/layout/MobileWorkspaceSheet";
-import { mobilePageMeta } from "@/lib/navigation";
+import { GUIDE_PATH, mobilePageMeta } from "@/lib/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useAutomations";
 import { markNotificationRead } from "@/lib/automations";
@@ -71,6 +71,9 @@ export function AppHeader() {
         </div>
         <div className="hidden flex-1 md:block" />
         <div className="hidden md:block"><WorkspaceSwitcher /></div>
+        <Button asChild variant="ghost" size="icon" className="hidden md:inline-flex" aria-label="Help & guide" title="Help & guide">
+          <Link to={GUIDE_PATH}><CircleHelp className="h-5 w-5" /></Link>
+        </Button>
         <DropdownMenu onOpenChange={handleOpenChange}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Notifications" className="relative shrink-0 text-muted-foreground">

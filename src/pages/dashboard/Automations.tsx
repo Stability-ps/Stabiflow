@@ -16,6 +16,7 @@ import { setAutomationStatus, deleteAutomation, EVENT_TYPE_LABELS } from "@/lib/
 import { fetchEntitlements } from "@/lib/billing";
 import { AutomationBuilderDialog, type AutomationTemplate } from "@/pages/dashboard/automations/AutomationBuilderDialog";
 import { AutomationRunsSheet } from "@/pages/dashboard/automations/AutomationRunsSheet";
+import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
 const STATUS_LABEL: Record<AutomationRow["status"], string> = { draft: "Draft", enabled: "Enabled", disabled: "Disabled" };
 
@@ -124,6 +125,7 @@ export default function Automations() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workflow engine</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Automations</h1>
           <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
+          <GuideHelpLink chapter="automations" className="mt-1" />
         </div>
         {canCreate && (
           <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>

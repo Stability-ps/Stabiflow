@@ -12,6 +12,7 @@ import { useWhatsAppTemplateFavorites } from "@/hooks/useWhatsAppTemplateFavorit
 import { filterWhatsAppTemplates, whatsappTemplateBody } from "@/pages/dashboard/whatsapp/templateFilters";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
 import { toast } from "sonner";
+import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
 function statusTone(status: string): "default" | "secondary" | "outline" | "destructive" {
   const s = status.toUpperCase();
@@ -112,6 +113,7 @@ export default function WhatsAppTemplates() {
         <div>
           <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold">{(library || []).length.toLocaleString()} ready-to-customise templates</p><Badge variant="secondary" className="gap-1 font-normal"><Sparkles className="h-3 w-3" />{libraryIndustries.length} industries</Badge></div>
           <p className="mt-1 text-sm text-muted-foreground">Find a starting point, preview it, copy it and customise it before submitting the final template to Meta for approval.</p>
+          <GuideHelpLink chapter="messages" section="library" label="How library templates get approved" className="mt-1" />
         </div>
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <div className="grid gap-2 lg:grid-cols-[minmax(320px,1fr)_220px_180px_auto]">
@@ -228,6 +230,7 @@ export default function WhatsAppTemplates() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">Browse the templates synced from your Meta WhatsApp Business account.</p>
+          <GuideHelpLink chapter="messages" section="meta-templates" className="mt-1" />
         </div>
         <Button asChild variant="outline" size="sm"><Link to="/app/whatsapp/settings">Refresh from Meta</Link></Button>
       </div>

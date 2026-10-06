@@ -256,3 +256,54 @@ html {
     backdrop-filter: blur(12px);
   }
 }
+
+/* StabiFlow Guide: <main> only needs overflow:auto for other pages; on the
+   guide it would stop the chapter column and chapter selector sticking. */
+@media (min-width: 768px) {
+  main:has(.guide-root) {
+    overflow: visible;
+  }
+}
+
+/* StabiFlow Guide - print / "book" mode. Only pages that render the guide
+   use these classes, so printing any other page is unaffected. */
+@media print {
+  body:has(.guide-root),
+  body:has(.guide-book) {
+    background: #fff !important;
+  }
+  body:has(.guide-root) .peer[data-side],
+  body:has(.guide-book) .peer[data-side],
+  body:has(.guide-root) header.sticky,
+  body:has(.guide-book) header.sticky,
+  body:has(.guide-root) .mobile-bottom-nav,
+  body:has(.guide-book) .mobile-bottom-nav,
+  .guide-no-print {
+    display: none !important;
+  }
+  body:has(.guide-root) main,
+  body:has(.guide-book) main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .guide-book-chapter {
+    break-before: page;
+  }
+  .guide-figure,
+  .guide-avoid-break,
+  .guide-faq,
+  .guide-book h2,
+  .guide-book h3 {
+    break-inside: avoid;
+  }
+  .guide-book h2,
+  .guide-book h3,
+  .guide-section h2 {
+    break-after: avoid;
+  }
+  .guide-figure img {
+    max-height: 18cm;
+    width: auto;
+    max-width: 100%;
+  }
+}
