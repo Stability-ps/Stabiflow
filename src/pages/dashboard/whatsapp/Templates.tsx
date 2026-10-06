@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Copy, FileText, Library, Search, X } from "lucide-react";
+import { CheckCircle2, Copy, FileText, Library, Search, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,12 +32,14 @@ export default function WhatsAppTemplates() {
   const [category, setCategory] = useState("ALL");
   const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(1);
+  const [selectedLibraryTemplateId, setSelectedLibraryTemplateId] = useState<string | null>(null);
 
   const libraryIndustries = useMemo(
     () => Array.from(new Set((library || []).map((t) => t.industry)).values()).sort(),
     [library],
   );
   const [industry, setIndustry] = useState("ALL");
+  const selectedLibraryTemplate = useMemo(() => (library || []).find((t) => t.id === selectedLibraryTemplateId) || null, [library, selectedLibraryTemplateId]);
   const filteredLibrary = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return (library || []).filter((t) => {
@@ -98,8 +100,8 @@ export default function WhatsAppTemplates() {
           <Button size="sm" variant="default" className="gap-1.5"><Library className="h-4 w-4" />StabiFlow Library</Button>
         </div>
         <div>
-          <p className="text-sm font-semibold">{(library || []).length.toLocaleString()} ready-to-customise templates</p>
-          <p className="mt-1 text-sm text-muted-foreground">Use these as starting points. Customise the wording and submit the final template to Meta for approval before sending it as a WhatsApp template.</p>
+          <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold">{(library || []).length.toLocaleString()} ready-to-customise templates</p><Badge variant="secondary" className="gap-1 font-normal"><Sparkles className="h-3 w-3" />{libraryIndustries.length} industries</Badge></div>
+          <p className="mt-1 text-sm text-muted-foreground">Find a starting point, preview it, copy it and customise it before submitting the final template to Meta for approval.</p>
         </div>
         <div className="rounded-xl border bg-card p-3 shadow-sm">
           <div className="grid gap-2 lg:grid-cols-[minmax(320px,1fr)_220px_180px_auto]">
@@ -121,9 +123,10 @@ export default function WhatsAppTemplates() {
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-2">Template</th><th className="px-4 py-2">Industry</th><th className="px-4 py-2">Category</th><th className="px-4 py-2">Message</th><th className="px-4 py-2"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>{libraryVisible.map((t) => <tr key={t.id} className="border-b last:border-b-0"><td className="px-4 py-3 font-medium">{t.name}</td><td className="px-4 py-3 text-muted-foreground">{t.industry}</td><td className="px-4 py-3"><Badge variant="outline">{t.category}</Badge></td><td className="max-w-xl px-4 py-3 text-muted-foreground"><span className="line-clamp-2">{t.body}</span></td><td className="px-4 py-3 text-right"><Button variant="ghost" size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(t.body); toast.success("Template copied"); }}><Copy className="h-4 w-4" />Copy</Button></td></tr>)}</tbody>
+            <tbody>{libraryVisible.map((t) => <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30"><td className="px-4 py-3 font-medium"><button type="button" className="text-left hover:underline" onClick={() => setSelectedLibraryTemplateId(t.id)}>{t.name}</button></td><td className="px-4 py-3 text-muted-foreground">{t.industry}</td><td className="px-4 py-3"><Badge variant="outline">{t.category}</Badge></td><td className="max-w-xl px-4 py-3 text-muted-foreground"><span className="line-clamp-2">{t.body}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="sm" onClick={() => setSelectedLibraryTemplateId(t.id)}>Preview</Button><Button variant="ghost" size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(t.body); toast.success("Template copied"); }}><Copy className="h-4 w-4" />Copy</Button></div></td></tr>)}</tbody>
           </table>
         </div>
+        {selectedLibraryTemplate && <div className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{selectedLibraryTemplate.name}</p><Badge variant="outline">{selectedLibraryTemplate.category}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{selectedLibraryTemplate.industry} · {selectedLibraryTemplate.use_case.replaceAll("_", " ")}</p></div><Button variant="ghost" size="icon" onClick={() => setSelectedLibraryTemplateId(null)} aria-label="Close preview"><X className="h-4 w-4" /></Button></div><div className="mt-4 rounded-lg border bg-muted/20 p-4 text-sm leading-6">{selectedLibraryTemplate.body}</div><div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{Array.isArray(selectedLibraryTemplate.variables) ? selectedLibraryTemplate.variables.length : 0} variables · Meta approval required before template sending</p><Button size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(selectedLibraryTemplate.body); toast.success("Template copied — customise it before Meta submission"); }}><Copy className="h-4 w-4" />Use this template</Button></div></div>}
         {libraryPageCount > 1 && <div className="flex justify-end gap-2"><Button variant="outline" size="sm" disabled={librarySafePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button><Button variant="outline" size="sm" disabled={librarySafePage >= libraryPageCount} onClick={() => setPage((p) => Math.min(libraryPageCount, p + 1))}>Next</Button></div>}
       </div>
     );
