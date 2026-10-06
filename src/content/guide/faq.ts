@@ -18,6 +18,7 @@ export const faq: GuideChapter = {
       { q: "What is StabiFlow?", a: "One workspace for running your business: your business profile, WhatsApp conversations, leads and customers, content and campaigns, automations and analytics - all connected." },
       { q: "Where should I start?", a: "Start with Business Studio and My Business so your business details are correct, then connect your channels in Integrations, then use Messages and Leads. The Getting started chapter has a full checklist." },
       { q: "Do I need a website to use StabiFlow?", a: "No. In Business Studio choose Start from scratch and enter your details yourself." },
+      { q: "Why can't I scan my website on the Free plan?", a: "Website scanning, reading an existing profile and AI wording are included with the Business and Growth plans. On Free you can enter your details yourself and preview your profile." },
       { q: "Is there a setup checklist?", a: "Yes. Home shows \"Finish setting up StabiFlow\" with your progress and next steps. It ticks items off automatically." },
     ]),
     group("account", "Account", [

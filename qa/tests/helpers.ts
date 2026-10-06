@@ -25,21 +25,27 @@ export async function signIn(page: Page) {
   await page.waitForURL(/\/app(?:\/|$)/, { timeout: 20_000 });
 }
 
+// A plan-gated module either renders, or shows StabiFlow's friendly lock -
+// both are correct for a given workspace. The QA account can be on any plan.
+const LOCKED = "Not available on your workspace yet|Automations are a Growth feature|Unlock Automations";
+const orLocked = (re: RegExp) => new RegExp(`${re.source}|${LOCKED}`, "i");
+
 export const authenticatedRoutes = [
-  ["/app", /Workspace overview|Dashboard/i],
+  ["/app", /Workspace overview|Dashboard|Welcome to StabiFlow/i],
   ["/app/business-hub", /Business workspace|Business/i],
   ["/app/business-studio", /Business Studio/i],
+  ["/app/guide", /What is StabiFlow\?/i],
   ["/app/documents", /Documents/i],
-  ["/app/creative-studio", /Creative Studio/i],
-  ["/app/content/media-library", /Content/i],
-  ["/app/campaigns", /Campaigns/i],
-  ["/app/whatsapp/inbox", /Messages/i],
-  ["/app/leads", /Leads/i],
-  ["/app/customers", /Customers/i],
-  ["/app/automations", /Automations|Unlock Automations/i],
-  ["/app/analytics", /Analytics/i],
-  ["/app/flow-ai", /Flow AI/i],
-  ["/app/integrations", /Integrations/i],
+  ["/app/creative-studio", orLocked(/Creative Studio/)],
+  ["/app/content/media-library", orLocked(/Content/)],
+  ["/app/campaigns", orLocked(/Campaigns/)],
+  ["/app/whatsapp/inbox", orLocked(/Messages/)],
+  ["/app/leads", orLocked(/Leads/)],
+  ["/app/customers", orLocked(/Customers/)],
+  ["/app/automations", orLocked(/Automations/)],
+  ["/app/analytics", orLocked(/Analytics/)],
+  ["/app/flow-ai", orLocked(/Flow AI/)],
+  ["/app/integrations", orLocked(/Integrations/)],
   ["/app/billing", /Billing & plans/i],
   ["/app/settings", /Settings/i],
 ] as const;

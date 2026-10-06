@@ -114,7 +114,7 @@ export const welcome: GuideChapter = {
       blocks: [
         { type: "p", text: "What you see in the menu depends on your plan. Areas that are not part of your plan are hidden from navigation rather than shown broken. If you open one through a link, StabiFlow explains that it isn't available yet and points you to Billing & plans." },
         { type: "table", head: ["Plan", "What it adds"], rows: [
-          ["Free", "My Business, Documents and a protected Business Studio preview of your company profile."],
+          ["Free", "My Business, Documents and a protected Business Studio preview of your company profile. Website scanning and AI tools aren't included."],
           ["Professional Profile (once-off)", "A clean, unwatermarked company profile PDF and premium profile designs. No recurring allowance."],
           ["Business", "Everything above plus Leads, Customers, Content and a hosted public business profile."],
           ["Growth", "Everything in Business plus Messages (WhatsApp), Campaigns, Creative Studio, Analytics, Flow AI, Automations and Integrations, with higher usage limits and more team members."],
