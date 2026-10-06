@@ -226,6 +226,24 @@ export async function dispatchAction(opts: {
         conversation_id: conversationId(config, opts.event), tag: config.tag,
       }, opts.automationContext);
 
+    case "assign_conversation":
+      return callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "assign",
+        conversation_id: conversationId(config, opts.event), staff_id: config.staff_id,
+      }, opts.automationContext);
+
+    case "pause_conversation_ai":
+      return callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "pause_ai",
+        conversation_id: conversationId(config, opts.event),
+      }, opts.automationContext);
+
+    case "resume_conversation_ai":
+      return callDispatcher("inbox-actions", opts.accessToken, {
+        workspace_id: opts.workspaceId, action: "return_to_ai",
+        conversation_id: conversationId(config, opts.event),
+      }, opts.automationContext);
+
     default:
       return { status: "failed", error: `Unknown action_type: ${opts.actionType}` };
   }

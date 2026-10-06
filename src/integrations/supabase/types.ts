@@ -6534,6 +6534,7 @@ export type Database = {
           id: string
           industry: string | null
           logo_path: string | null
+          handoff_keywords: string[]
           match_customer_language: boolean
           outside_hours_auto_reply_enabled: boolean
           outside_hours_auto_reply_message: string | null
@@ -6564,6 +6565,7 @@ export type Database = {
           id?: string
           industry?: string | null
           logo_path?: string | null
+          handoff_keywords?: string[]
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
@@ -6594,6 +6596,7 @@ export type Database = {
           id?: string
           industry?: string | null
           logo_path?: string | null
+          handoff_keywords?: string[]
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null

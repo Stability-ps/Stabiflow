@@ -22,6 +22,7 @@ export const EVENT_TYPES = [
   "conversation.document_received", "conversation.ai_limit_reached",
   "conversation.idle_timeout", "conversation.priority_changed",
   "message.delivery_failed",
+  "conversation.agent_took_over", "conversation.ai_paused", "conversation.ai_resumed", "conversation.closed",
   "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout", "lead.follow_up_scheduled", "lead.follow_up_completed",
   "opportunity.created", "opportunity.stage_changed", "opportunity.won", "opportunity.lost",
   "customer.created", "revenue.recorded",
@@ -38,6 +39,7 @@ export const ACTION_TYPES = [
   "create_internal_note", "create_notification", "request_flow_ai_analysis",
   "set_conversation_priority", "set_conversation_handoff",
   "send_whatsapp_template", "request_document", "add_tag",
+  "assign_conversation", "pause_conversation_ai", "resume_conversation_ai",
 ] as const;
 export type AutomationActionType = (typeof ACTION_TYPES)[number];
 
@@ -47,7 +49,7 @@ export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
 export const EVENT_TYPE_LABELS: Record<AutomationEventType, string> = {
   "conversation.started": "A WhatsApp conversation starts",
   "message.received": "A WhatsApp message is received",
-  "conversation.human_takeover": "Staff takes over a conversation from AI",
+  "conversation.human_takeover": "A conversation is handed to a human (customer, AI or team asked)",
   "conversation.intake_completed": "A conversation's intake is completed",
   "conversation.handoff_sla_overdue": "A human handoff is overdue (SLA breached)",
   "conversation.document_received": "A customer sends a document or image",
@@ -55,6 +57,10 @@ export const EVENT_TYPE_LABELS: Record<AutomationEventType, string> = {
   "conversation.idle_timeout": "A conversation has gone quiet for a while",
   "conversation.priority_changed": "A conversation's priority changes",
   "message.delivery_failed": "An outbound WhatsApp message could not be delivered",
+  "conversation.agent_took_over": "A team member takes over a conversation",
+  "conversation.ai_paused": "AI is paused on a conversation",
+  "conversation.ai_resumed": "A conversation is returned to AI / automation",
+  "conversation.closed": "A conversation is closed",
   "lead.created": "A lead is created",
   "lead.qualified": "A lead is marked qualified",
   "lead.stage_changed": "A lead moves pipeline stage",
@@ -90,6 +96,9 @@ export const ACTION_TYPE_LABELS: Record<AutomationActionType, string> = {
   send_whatsapp_template: "Send a WhatsApp template",
   request_document: "Ask the customer for a document",
   add_tag: "Add a tag to the conversation",
+  assign_conversation: "Assign the conversation to a team member",
+  pause_conversation_ai: "Pause AI on the conversation",
+  resume_conversation_ai: "Return the conversation to AI",
 };
 
 export type AutomationConditionInput = { field: string; operator: ConditionOperator; value: unknown };

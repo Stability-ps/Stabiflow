@@ -10,6 +10,9 @@ export type WorkspaceAiSettings = {
    * AI pass that adapts it to the customer's language / style. Presentation
    * only - the original semantic reply stays authoritative. Defaults OFF. */
   match_customer_language: boolean;
+  /** Extra phrases that hand a conversation to a human, on top of the
+   * built-in detection ("speak to a person", "call me", ...). */
+  handoff_keywords: string[];
 };
 
 /** Reads the workspace AI config from workspace_settings (member-readable).
@@ -22,7 +25,7 @@ export function useWorkspaceAiSettings(workspaceId: string | null) {
     queryFn: async (): Promise<WorkspaceAiSettings> => {
       const { data, error } = await supabase
         .from("workspace_settings")
-        .select("ai_multimodal_enabled, ai_voice_transcription_enabled, match_customer_language")
+        .select("ai_multimodal_enabled, ai_voice_transcription_enabled, match_customer_language, handoff_keywords")
         .eq("workspace_id", workspaceId as string)
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -30,6 +33,7 @@ export function useWorkspaceAiSettings(workspaceId: string | null) {
         ai_multimodal_enabled: data?.ai_multimodal_enabled ?? false,
         ai_voice_transcription_enabled: data?.ai_voice_transcription_enabled ?? false,
         match_customer_language: data?.match_customer_language ?? false,
+        handoff_keywords: data?.handoff_keywords ?? [],
       };
     },
     enabled: !!workspaceId,
@@ -39,7 +43,7 @@ export function useWorkspaceAiSettings(workspaceId: string | null) {
 /** Admin-only update (RLS: has_workspace_role(workspace_id, 'admin')). */
 export async function updateWorkspaceAiSettings(
   workspaceId: string,
-  input: Partial<Pick<WorkspaceAiSettings, "ai_multimodal_enabled" | "ai_voice_transcription_enabled" | "match_customer_language">>,
+  input: Partial<Pick<WorkspaceAiSettings, "ai_multimodal_enabled" | "ai_voice_transcription_enabled" | "match_customer_language" | "handoff_keywords">>,
 ) {
   const { error } = await supabase
     .from("workspace_settings")

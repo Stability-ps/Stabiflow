@@ -20,7 +20,10 @@ import { parseWhatsAppWebhookEvents } from "../_shared/integration-providers/wha
 import { createServiceClient, envVar } from "../_shared/contentAuth.ts";
 import { applyStatusUpdate, incomingStatuses } from "../_shared/inbox/whatsappStatus.ts";
 import { normalizePhone, parseInboundMessageEvents, type InboundMessageEvent } from "../_shared/inbox/webhookMessageParser.ts";
-import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
+import { cleanReply, containsFalseActionClaim, containsInventedPersonalIdentity, isSimpleGreeting, matchesHandoffKeyword, requestsHumanHandoff } from "../_shared/inbox/replyGuardrails.ts";
+import { aiMayReply } from "../_shared/inbox/handoverState.ts";
+import { resolveInboxAiBudget } from "../_shared/inbox/inboxAiBudgetResolve.ts";
+import { AGENT_ASSIST_FEATURE } from "../_shared/inbox/agentAssist.ts";
 import { generateAIReply, generateStructuredReply, mergeExtracted, missingFields, type AiUsage, type ConversationHistoryMessage } from "../_shared/inbox/aiReplyEngine.ts";
 import {
   AI_MEDIA_MAX_BYTES,
@@ -31,16 +34,8 @@ import {
   type AiMediaStatus,
   type MediaInputPart,
 } from "../_shared/inbox/multimodalMedia.ts";
-import { estimateCost, getPlatformTokenUsageSince, getWorkspaceFeaturesTokenUsageSince } from "../_shared/flowAi/usage.ts";
-import {
-  decideInboxAiBudget,
-  INBOX_AI_FEATURE,
-  INBOX_AI_CAP_KEY,
-  resolveInboxAiCap,
-  utcDayStartIso,
-  utcMonthStartIso,
-  type InboxAiBudgetDecision,
-} from "../_shared/inbox/inboxAiBudget.ts";
+import { estimateCost } from "../_shared/flowAi/usage.ts";
+import { INBOX_AI_FEATURE, utcMonthStartIso } from "../_shared/inbox/inboxAiBudget.ts";
 import {
   attemptTranscription,
   INBOX_VOICE_FEATURE,
@@ -70,6 +65,35 @@ function text(body: string, status = 200) {
 }
 
 type NumberRow = { id: string; workspace_id: string; integration_id: string; phone_number_id: string; intake_schema_id: string | null };
+
+// Acapolite-derived handover, made observable: every path that hands a
+// conversation to a human (customer asked, AI asked, workspace keyword,
+// suspended workspace, closed messaging window) goes through here. The
+// state change is conditional on an actual transition, so the
+// conversation.human_takeover event fires exactly once per handover even
+// under webhook retries. The DB trigger create_inbox_conversation_alerts
+// raises the team alert on the same transition.
+async function requestHandoff(sb: AnySupabaseClient, workspaceId: string, conversationId: string, by: "customer" | "ai" | "keyword" | "system", reason: string) {
+  const at = new Date().toISOString();
+  const { data } = await sb.from("inbox_conversations")
+    .update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: at })
+    .eq("id", conversationId)
+    .or("status.neq.human_handoff,ai_enabled.eq.true")
+    .select("id");
+  if (!data?.length) return;
+  // Timeline entry (no user actor: the customer, AI or system asked).
+  await sb.from("workspace_activity_log").insert({
+    workspace_id: workspaceId, actor_user_id: null, action: "inbox_conversation_handoff_requested",
+    target_type: "inbox_conversation", target_id: conversationId, metadata: { by, reason },
+  }).then(() => {}, () => {});
+  await emitDomainEvent(sb, {
+    workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
+    payload: { entity_id: conversationId, conversation_id: conversationId, by, reason },
+    dedupeKey: `conversation.human_takeover:${conversationId}:${at}`,
+  });
+}
+
+const HANDOFF_ACK = "Of course - I'll hand this chat over to the team so someone can assist you.";
 
 async function resolveCredential(sb: AnySupabaseClient, numberRow: NumberRow): Promise<WhatsAppSendCredential | null> {
   const { data: integration } = await sb.from("workspace_integrations").select("id,status").eq("id", numberRow.integration_id).maybeSingle();
@@ -107,7 +131,7 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
   // computing window state it won't act on either way).
   const statusGate = await assertWorkspaceActive(sb, workspaceId);
   if (!statusGate.allowed) {
-    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversationId);
+    await requestHandoff(sb, workspaceId, conversationId, "system", "workspace_suspended");
     await sb.from("inbox_messages").insert({
       workspace_id: workspaceId,
       conversation_id: conversationId,
@@ -128,7 +152,7 @@ async function storeOutbound(sb: AnySupabaseClient, cred: WhatsAppSendCredential
     // AI would have said directly in the message thread with a status
     // that unambiguously means "never sent" - visible exactly where staff
     // are already looking, never a silent drop.
-    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversationId);
+    await requestHandoff(sb, workspaceId, conversationId, "system", "messaging_window_closed");
     await sb.from("inbox_messages").insert({
       workspace_id: workspaceId,
       conversation_id: conversationId,
@@ -319,41 +343,10 @@ async function pauseConversationForAiLimit(
   });
 }
 
-// Phase 7 + 10: the one per-workspace monthly Inbox AI budget decision.
-// `features` is the set of ai_usage_events.feature values that count toward
-// the SAME allowance - Inbox AI replies AND (Phase 10) voice-note
-// transcription, so transcription never gets a second uncapped budget.
-async function resolveInboxAiBudget(
-  sb: AnySupabaseClient,
-  workspaceId: string,
-  features: string[],
-): Promise<InboxAiBudgetDecision> {
-  // Canonical plan-aware cap; keep the legacy resolver only as a
-  // deployment fallback if the database migration is not available yet.
-  const { data: planCap, error: planCapError } = await sb.rpc("workspace_ai_token_cap", {
-    p_workspace_id: workspaceId,
-    p_feature: "whatsapp_inbox_ai",
-  });
-  let inboxCap: number;
-  if (!planCapError && Number(planCap) > 0) {
-    inboxCap = Number(planCap);
-  } else {
-    const { data: billingRow } = await sb.from("workspace_billing").select("limits").eq("workspace_id", workspaceId).maybeSingle();
-    inboxCap = resolveInboxAiCap(
-      (billingRow?.limits as Record<string, unknown> | null)?.[INBOX_AI_CAP_KEY],
-      Deno.env.get("FLOW_AI_DEFAULT_WORKSPACE_MONTHLY_TOKEN_LIMIT"),
-    );
-  }
-  const inboxUsed = await getWorkspaceFeaturesTokenUsageSince(sb, workspaceId, features, utcMonthStartIso(new Date()));
-  const platformCeilingRaw = Number(Deno.env.get("FLOW_AI_PLATFORM_DAILY_TOKEN_CEILING")?.trim());
-  const platformCeiling = Number.isFinite(platformCeilingRaw) && platformCeilingRaw > 0 ? platformCeilingRaw : null;
-  const platformUsed = platformCeiling !== null ? await getPlatformTokenUsageSince(sb, utcDayStartIso(new Date())) : null;
-  return decideInboxAiBudget({ workspaceUsed: inboxUsed, workspaceCap: inboxCap, platformUsed, platformCeiling });
-}
-
 // Phase 13: the reply-localization pass draws on the SAME per-workspace
 // monthly Inbox AI allowance - it is not a second budget.
-const INBOX_AI_BUDGET_FEATURES = [INBOX_AI_FEATURE, INBOX_VOICE_FEATURE, LOCALIZATION_FEATURE];
+// Agent assist (staff-only drafts) draws on the same allowance too.
+const INBOX_AI_BUDGET_FEATURES = [INBOX_AI_FEATURE, INBOX_VOICE_FEATURE, LOCALIZATION_FEATURE, AGENT_ASSIST_FEATURE];
 
 const LOCALIZATION_TIMEOUT_MS = 8000;
 
@@ -455,7 +448,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   const { data: conversation, error: conversationError } = await sb
     .from("inbox_conversations")
     .upsert(patch, { onConflict: "whatsapp_number_id,wa_id" })
-    .select("id,workspace_id,status,ai_enabled,lead_id,intake_payload,intake_missing_fields,intake_schema_id,intake_completed_at")
+    .select("id,workspace_id,status,ai_enabled,assigned_staff_id,inbox_status,lead_id,intake_payload,intake_missing_fields,intake_schema_id,intake_completed_at")
     .single();
   if (conversationError || !conversation) {
     console.error("whatsapp-webhook: conversation upsert failed", conversationError?.message);
@@ -632,12 +625,13 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   // customer never gets "we're closed" immediately followed by an AI
   // "how can I help you?".
   let outsideHoursHandled = false;
+  const { data: wsSettings } = await sb
+    .from("workspace_settings")
+    .select("business_hours_enabled, outside_hours_auto_reply_enabled, outside_hours_auto_reply_message, handoff_keywords")
+    .eq("workspace_id", numberRow.workspace_id)
+    .maybeSingle();
   if (cred && inboundMessage?.id) {
-    const { data: bh } = await sb
-      .from("workspace_settings")
-      .select("business_hours_enabled, outside_hours_auto_reply_enabled, outside_hours_auto_reply_message")
-      .eq("workspace_id", numberRow.workspace_id)
-      .maybeSingle();
+    const bh = wsSettings;
     if (bh?.business_hours_enabled === true && bh?.outside_hours_auto_reply_enabled === true) {
       const ackText = (bh.outside_hours_auto_reply_message ?? "").trim();
       const { data: periodKey } = await sb.rpc("workspace_closed_period_key", {
@@ -661,8 +655,16 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   }
 
   if (!cred) return; // no connected/working credential - leave for staff, cannot auto-reply
-  if (outsideHoursHandled) return; // Phase 12: closed + outside-hours acknowledgement contract -> no normal AI reply this turn
-  if (!conversation.ai_enabled || conversation.status === "human_handoff") return; // human control is active - AI stays silent
+  if (outsideHoursHandled) {
+    // Phase 12: closed + outside-hours acknowledgement -> no normal AI reply
+    // this turn. A request for a person is still recorded, so the team sees
+    // it as "Needs human" when they open.
+    if (event.kind === "text" && aiMayReply(conversation) && (requestsHumanHandoff(event.text) || matchesHandoffKeyword(event.text, wsSettings?.handoff_keywords))) {
+      await requestHandoff(sb, numberRow.workspace_id, conversation.id, "customer", "customer_asked_for_human_after_hours");
+    }
+    return;
+  }
+  if (!aiMayReply(conversation)) return; // human control / paused / closed - AI stays silent
   if (event.kind === "unsupported") {
     await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Please send that as text, an image, or a PDF and I'll help you from there.", "system");
     return;
@@ -689,10 +691,9 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     return;
   }
 
-  const nowIso2 = new Date().toISOString();
-  if (isTextLikeTurn && requestsHumanHandoff(inboundTurnText)) {
-    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: nowIso2 }).eq("id", conversation.id);
-    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+  if (isTextLikeTurn && (requestsHumanHandoff(inboundTurnText) || matchesHandoffKeyword(inboundTurnText, wsSettings?.handoff_keywords))) {
+    await requestHandoff(sb, numberRow.workspace_id, conversation.id, requestsHumanHandoff(inboundTurnText) ? "customer" : "keyword", "customer_asked_for_human");
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, HANDOFF_ACK, "system");
     return;
   }
 
@@ -810,8 +811,8 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     await recordInboxAiUsage(sb, numberRow.workspace_id, openaiModel, sr.usage, Date.now() - startedAt, "success");
 
     if (sr.human_handoff_requested) {
-      await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversation.id);
-      await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+      await requestHandoff(sb, numberRow.workspace_id, conversation.id, "ai", "ai_requested");
+      await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, HANDOFF_ACK, "system");
       return;
     }
 
@@ -879,8 +880,8 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
   await recordInboxAiUsage(sb, numberRow.workspace_id, openaiModel, ai.usage, Date.now() - legacyStartedAt, "success");
 
   if (ai.human_handoff_requested) {
-    await sb.from("inbox_conversations").update({ status: "human_handoff", ai_enabled: false, human_handoff_requested_at: new Date().toISOString() }).eq("id", conversation.id);
-    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, "Of course - I'll hand this chat over to the team so someone can assist you.", "system");
+    await requestHandoff(sb, numberRow.workspace_id, conversation.id, "ai", "ai_requested");
+    await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, HANDOFF_ACK, "system");
     return;
   }
 

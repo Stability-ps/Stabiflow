@@ -10,6 +10,9 @@ import { inboxStatusLabel, priorityLabel } from "@/lib/inboxPresentation";
 import type { InboxConversationRow, InboxConversationFilters } from "@/hooks/useInboxConversations";
 import { EMPTY_INBOX_FILTERS } from "@/hooks/useInboxConversations";
 import { computeSlaState, type SlaSettings } from "@/lib/slaState";
+import { HandoverBadge } from "@/components/whatsapp/HandoverBadge";
+import { activeQuickView, QUICK_VIEWS } from "@/lib/inboxQuickViews";
+import { useAuth } from "@/hooks/useAuth";
 
 type StaffOption = { id: string; name: string };
 
@@ -81,6 +84,9 @@ export function ConversationList({
   onLoadMore: () => void;
 }) {
   const [panelOpen, setPanelOpen] = useState(false);
+  const { user } = useAuth();
+  const me = user?.id ?? null;
+  const view = activeQuickView(filters, me);
   const set = (patch: Partial<InboxConversationFilters>) => onFiltersChange({ ...filters, ...patch });
   const staffName = (id: string | null) => staffOptions.find((s) => s.id === id)?.name ?? "Member";
 
@@ -117,11 +123,11 @@ export function ConversationList({
           </Button>
         </div>
 
-        <div className="flex gap-1 overflow-x-auto pb-0.5">
-          <Button type="button" size="sm" variant={!filters.unreadOnly && !filters.assignment && !filters.handling ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ unreadOnly: false, assignment: null, assignedStaffId: null, handling: null })}>All</Button>
-          <Button type="button" size="sm" variant={filters.unreadOnly ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ unreadOnly: !filters.unreadOnly })}>Unread</Button>
-          <Button type="button" size="sm" variant={filters.assignment === "unassigned" ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ assignment: filters.assignment === "unassigned" ? null : "unassigned", assignedStaffId: null })}>Unassigned</Button>
-          <Button type="button" size="sm" variant={filters.handling === "human_attention" ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ handling: filters.handling === "human_attention" ? null : "human_attention" })}>Needs reply</Button>
+        <div className="flex flex-wrap gap-1 pb-0.5" role="group" aria-label="Inbox views">
+          {QUICK_VIEWS.filter((v) => v.key !== "mine" || me).map((v) => (
+            <Button key={v.key} type="button" size="sm" title={v.title} aria-pressed={view === v.key} variant={view === v.key ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set(v.patch(me))}>{v.label}</Button>
+          ))}
+          <Button type="button" size="sm" aria-pressed={filters.unreadOnly} variant={filters.unreadOnly ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ unreadOnly: !filters.unreadOnly })}>Unread</Button>
         </div>
 
         {panelOpen && (
@@ -235,7 +241,8 @@ export function ConversationList({
                       <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(c.last_inbound_at || c.updated_at)}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
-                      <Badge variant="secondary" className={statusTone(c.inbox_status)}>{inboxStatusLabel(c.inbox_status)}</Badge>
+                      <HandoverBadge conversation={c} assigneeName={c.assigned_staff_name} />
+                      {c.inbox_status === "waiting_client" && <Badge variant="secondary" className={statusTone(c.inbox_status)}>{inboxStatusLabel(c.inbox_status)}</Badge>}
                       {c.priority_level !== "normal" && <Badge variant="secondary" className={priorityTone(c.priority_level)}>{priorityLabel(c.priority_level)}</Badge>}
                       {computeSlaState(c, slaSettings).phase === "overdue" && (
                         <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">Overdue</Badge>
