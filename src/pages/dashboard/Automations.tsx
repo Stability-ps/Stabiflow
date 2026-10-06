@@ -80,7 +80,7 @@ export default function Automations() {
       <EmptyState
         icon={Workflow}
         title="Unlock Automations"
-        description="Automations are included with a StabiFlow subscription. Upgrade to Business for 500 runs per month or Growth for 2,000 runs per month."
+        description="Automations are included with the Growth plan, with 2,000 runs per month. Upgrade to Growth to start automating."
         action={<Button size="sm" asChild><a href="/app/billing">View plans</a></Button>}
       />
     );
