@@ -379,9 +379,6 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return json(req, {}, 200);
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
-  const auth = await resolveAdminCaller(req);
-  if (!auth.ok) return json(req, { error: auth.error }, auth.status);
-
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -389,6 +386,16 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Invalid JSON body" }, 400);
   }
   const action = typeof body.action === "string" ? body.action : "";
+
+  const auth = await resolveAdminCaller(req);
+  if (!auth.ok) {
+    // The customer app asks "me" on every page to decide whether to show the
+    // Admin console link. For a signed-in customer that is a normal "no", not
+    // an error - answering 200 keeps every customer's console free of 403s.
+    // Every other action (and signed-out callers) keep their 401/403.
+    if (action === "me" && auth.status === 403) return json(req, { ok: true, admin: false }, 200);
+    return json(req, { error: auth.error }, auth.status);
+  }
   if (!permits(auth.caller, ADMIN_CONSOLE_ACTIONS[action])) {
     return json(req, { error: ADMIN_CONSOLE_ACTIONS[action] ? "Your role does not allow this" : "Unknown action" }, ADMIN_CONSOLE_ACTIONS[action] ? 403 : 400);
   }

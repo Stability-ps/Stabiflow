@@ -31,6 +31,11 @@ export async function adminConsole<T>(action: string, payload: Record<string, un
     const status = (error as { context?: { status?: number } }).context?.status ?? null;
     throw new AdminApiError(body?.error || "Request failed", status, body?.ref ?? null);
   }
+  // Non-staff "me" checks come back as 200 { admin: false } so customers'
+  // consoles stay clean; callers still see the same 403 they always did.
+  if (action === "me" && (data as { admin?: unknown } | null)?.admin === false) {
+    throw new AdminApiError("Forbidden", 403, null);
+  }
   return data as T;
 }
 
