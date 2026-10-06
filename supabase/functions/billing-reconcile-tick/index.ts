@@ -9,7 +9,7 @@
 //     transactions older than a few minutes (covers a lost webhook) and
 //     apply success through the same atomic path; mark long-abandoned ones.
 import { createServiceClient } from "../_shared/contentAuth.ts";
-import { paystackConfigFromEnv, timingSafeEqualHex, verifyTransaction } from "../_shared/billing/paystack.ts";
+import { isUnknownReferenceError, paystackConfigFromEnv, timingSafeEqualHex, verifyTransaction } from "../_shared/billing/paystack.ts";
 import { processPaystackEvent } from "../_shared/billing/processPaystackEvent.ts";
 import { sendBillingEmailForEvent } from "../_shared/billing/billingEmail.ts";
 import { decideLifecycle, type SubscriptionSnapshot } from "../_shared/billing/subscriptionLifecycle.ts";
@@ -68,7 +68,13 @@ Deno.serve(async (req: Request) => {
     for (const txn of (pending ?? []) as { reference: string; amount_minor: number; currency: string; created_at: string; purchase_id: string | null }[]) {
       try {
         // Mock mode must never auto-succeed a checkout nobody paid for.
-        const verified = cfg.mockMode ? { status: "abandoned", amount: 0, currency: txn.currency, paid_at: null } : await verifyTransaction(cfg, txn.reference);
+        const verified = cfg.mockMode
+          ? { status: "abandoned", amount: 0, currency: txn.currency, paid_at: null }
+          : await verifyTransaction(cfg, txn.reference).catch((e) => {
+            // Never-opened checkout: Paystack has no record, so it is unpaid.
+            if (isUnknownReferenceError(e)) return { status: "not_found", amount: 0, currency: txn.currency, paid_at: null };
+            throw e;
+          });
         if (verified.status === "success") {
           const verifiedEvent = { event: "charge.success", data: { reference: txn.reference, amount: verified.amount, currency: verified.currency, paid_at: verified.paid_at } };
           const outcome = await processPaystackEvent(sb, cfg, verifiedEvent, "reconcile");
