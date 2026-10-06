@@ -20,17 +20,29 @@ export function useInboxTemplates(workspaceId: string | null) {
   return useQuery({
     queryKey: ["whatsapp-templates", workspaceId],
     queryFn: async (): Promise<WhatsAppTemplateRow[]> => {
-      const { data, error } = await supabase
-        .from("whatsapp_message_templates")
-        .select(TEMPLATE_COLUMNS)
-        .eq("workspace_id", workspaceId as string)
-        .order("name", { ascending: true });
-      if (error) throw new Error(error.message);
+      // Supabase/PostgREST commonly caps a single select at 1,000 rows.
+      // Fetch in deterministic chunks so workspaces with thousands of Meta
+      // templates can browse the complete synced catalogue.
+      const rows: WhatsAppTemplateRow[] = [];
+      const pageSize = 1000;
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("whatsapp_message_templates")
+          .select(TEMPLATE_COLUMNS)
+          .eq("workspace_id", workspaceId as string)
+          .order("name", { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error) throw new Error(error.message);
+        const page = (data || []) as WhatsAppTemplateRow[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
+
       // Meta can expose the same logical template through more than one synced
       // number/account row. Keep one visible row per name/language/body so the
       // customer does not see confusing duplicates in Messages.
       const unique = new Map<string, WhatsAppTemplateRow>();
-      for (const row of (data as WhatsAppTemplateRow[])) {
+      for (const row of rows) {
         const body = row.components.find((part) => (part.type || "").toUpperCase() === "BODY")?.text?.trim() || "";
         const key = [row.name, row.language, row.category || "", row.provider_status, body].join("|");
         if (!unique.has(key)) unique.set(key, row);
