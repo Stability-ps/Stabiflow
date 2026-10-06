@@ -5742,6 +5742,32 @@ export type Database = {
           },
         ]
       }
+      whatsapp_template_favorites: {
+        Row: {
+          created_at: string
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          template_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_template_favorites_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "whatsapp_template_library"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_template_library: {
         Row: {
           body: string
