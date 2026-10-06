@@ -4,6 +4,7 @@ import { CheckCircle2, Copy, FileText, Heart, Library, Search, Sparkles, X } fro
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/EmptyState";
 import { useInboxTemplates } from "@/hooks/useInboxTemplates";
 import { useWhatsAppTemplateLibrary } from "@/hooks/useWhatsAppTemplateLibrary";
@@ -134,7 +135,76 @@ export default function WhatsAppTemplates() {
             <tbody>{libraryVisible.map((t) => <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30"><td className="px-4 py-3 font-medium"><button type="button" className="text-left hover:underline" onClick={() => setSelectedLibraryTemplateId(t.id)}>{t.name}</button></td><td className="px-4 py-3 text-muted-foreground">{t.industry}</td><td className="px-4 py-3"><Badge variant="outline">{t.category}</Badge></td><td className="max-w-xl px-4 py-3 text-muted-foreground"><span className="line-clamp-2">{t.body}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" aria-label={favorites.has(t.id) ? "Remove saved template" : "Save template"} onClick={async () => { await toggleFavorite(t.id); toast.success(favorites.has(t.id) ? "Removed from saved templates" : "Template saved"); }}><Heart className={`h-4 w-4 ${favorites.has(t.id) ? "fill-current" : ""}`} /></Button><Button variant="ghost" size="sm" onClick={() => { setSelectedLibraryTemplateId(t.id); setVariableValues({}); }}>Preview</Button><Button variant="ghost" size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(t.body); toast.success("Template copied"); }}><Copy className="h-4 w-4" />Copy</Button></div></td></tr>)}</tbody>
           </table>
         </div>
-        {selectedLibraryTemplate && <div className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{selectedLibraryTemplate.name}</p><Badge variant="outline">{selectedLibraryTemplate.category}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{selectedLibraryTemplate.industry} · {selectedLibraryTemplate.use_case.replaceAll("_", " ")}</p></div><Button variant="ghost" size="icon" onClick={() => setSelectedLibraryTemplateId(null)} aria-label="Close preview"><X className="h-4 w-4" /></Button></div><div className="mt-4 rounded-lg border bg-muted/20 p-4 text-sm leading-6">{customisedBody}</div>{selectedVariables.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{selectedVariables.map((variable, index) => <label key={variable} className="space-y-1.5"><span className="text-xs font-medium capitalize">{variable.replaceAll("_", " ")} <span className="text-muted-foreground">({`{{${index + 1}}}`})</span></span><Input value={variableValues[variable] || ""} onChange={(e) => setVariableValues((current) => ({ ...current, [variable]: e.target.value }))} placeholder={`Enter ${variable.replaceAll("_", " ")}`} /></label>)}</div>}<div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{selectedVariables.length} variables · Meta approval required before template sending</p><div className="flex gap-2"><Button variant="outline" size="sm" className="gap-1.5" onClick={async () => { await toggleFavorite(selectedLibraryTemplate.id); toast.success(favorites.has(selectedLibraryTemplate.id) ? "Removed from saved templates" : "Template saved"); }}><Heart className={`h-4 w-4 ${favorites.has(selectedLibraryTemplate.id) ? "fill-current" : ""}`} />{favorites.has(selectedLibraryTemplate.id) ? "Saved" : "Save"}</Button><Button size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(customisedBody); toast.success("Customised template copied"); }}><Copy className="h-4 w-4" />Use this template</Button></div></div></div>}
+        <Dialog open={!!selectedLibraryTemplate} onOpenChange={(open) => { if (!open) { setSelectedLibraryTemplateId(null); setVariableValues({}); } }}>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+            {selectedLibraryTemplate && (
+              <>
+                <DialogHeader>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <DialogTitle>{selectedLibraryTemplate.name}</DialogTitle>
+                    <Badge variant="outline">{selectedLibraryTemplate.category}</Badge>
+                  </div>
+                  <DialogDescription>
+                    {selectedLibraryTemplate.industry} · {selectedLibraryTemplate.use_case.replaceAll("_", " ")}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <div className="rounded-lg border bg-muted/20 p-4 text-sm leading-6 whitespace-pre-wrap">
+                    {customisedBody}
+                  </div>
+
+                  {selectedVariables.length > 0 && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {selectedVariables.map((variable, index) => (
+                        <label key={variable} className="space-y-1.5">
+                          <span className="text-xs font-medium capitalize">
+                            {variable.replaceAll("_", " ")}{" "}
+                            <span className="text-muted-foreground">({`{{${index + 1}}}`})</span>
+                          </span>
+                          <Input
+                            value={variableValues[variable] || ""}
+                            onChange={(e) => setVariableValues((current) => ({ ...current, [variable]: e.target.value }))}
+                            placeholder={`Enter ${variable.replaceAll("_", " ")}`}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    {selectedVariables.length} variables · Meta approval is required before this can be sent as a WhatsApp template.
+                  </p>
+                </div>
+
+                <DialogFooter className="gap-2 sm:gap-0">
+                  <Button
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={async () => {
+                      const wasSaved = favorites.has(selectedLibraryTemplate.id);
+                      await toggleFavorite(selectedLibraryTemplate.id);
+                      toast.success(wasSaved ? "Removed from saved templates" : "Template saved");
+                    }}
+                  >
+                    <Heart className={`h-4 w-4 ${favorites.has(selectedLibraryTemplate.id) ? "fill-current" : ""}`} />
+                    {favorites.has(selectedLibraryTemplate.id) ? "Saved" : "Save"}
+                  </Button>
+                  <Button
+                    className="gap-1.5"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(customisedBody);
+                      toast.success("Customised template copied");
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                    Use this template
+                  </Button>
+                </DialogFooter>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
         {libraryPageCount > 1 && <div className="flex justify-end gap-2"><Button variant="outline" size="sm" disabled={librarySafePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button><Button variant="outline" size="sm" disabled={librarySafePage >= libraryPageCount} onClick={() => setPage((p) => Math.min(libraryPageCount, p + 1))}>Next</Button></div>}
       </div>
     );
