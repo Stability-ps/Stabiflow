@@ -2225,6 +2225,48 @@ export type Database = {
           },
         ]
       }
+      business_profile_section_preferences: {
+        Row: {
+          reason: string | null
+          section: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+          workspace_id: string
+        }
+        Insert: {
+          reason?: string | null
+          section: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id: string
+        }
+        Update: {
+          reason?: string | null
+          section?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_profile_section_preferences_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_profile_section_preferences_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "business_identities"
+            referencedColumns: ["workspace_id"]
+          },
+        ]
+      }
       business_projects: {
         Row: {
           client_name: string | null
@@ -4538,6 +4580,9 @@ export type Database = {
           intake: Json
           lost_at: string | null
           lost_reason: string | null
+          next_follow_up_at: string | null
+          follow_up_note: string | null
+          follow_up_completed_at: string | null
           phone: string | null
           phone_normalized: string | null
           pipeline_id: string | null
@@ -4567,6 +4612,9 @@ export type Database = {
           intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
+          next_follow_up_at?: string | null
+          follow_up_note?: string | null
+          follow_up_completed_at?: string | null
           phone?: string | null
           phone_normalized?: string | null
           pipeline_id?: string | null
@@ -4596,6 +4644,9 @@ export type Database = {
           intake?: Json
           lost_at?: string | null
           lost_reason?: string | null
+          next_follow_up_at?: string | null
+          follow_up_note?: string | null
+          follow_up_completed_at?: string | null
           phone?: string | null
           phone_normalized?: string | null
           pipeline_id?: string | null
@@ -6483,6 +6534,7 @@ export type Database = {
           id: string
           industry: string | null
           logo_path: string | null
+          handoff_keywords: string[]
           match_customer_language: boolean
           outside_hours_auto_reply_enabled: boolean
           outside_hours_auto_reply_message: string | null
@@ -6513,6 +6565,7 @@ export type Database = {
           id?: string
           industry?: string | null
           logo_path?: string | null
+          handoff_keywords?: string[]
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
@@ -6543,6 +6596,7 @@ export type Database = {
           id?: string
           industry?: string | null
           logo_path?: string | null
+          handoff_keywords?: string[]
           match_customer_language?: boolean
           outside_hours_auto_reply_enabled?: boolean
           outside_hours_auto_reply_message?: string | null
