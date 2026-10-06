@@ -73,6 +73,9 @@ export function isNavItemActive(itemPath: string, pathname: string): boolean {
 // exactly once and can never drift between desktop and mobile.
 // ---------------------------------------------------------------------------
 
+/** The StabiFlow Guide (help centre). Reached from the header, user menu, More and Settings - never the main sidebar. */
+export const GUIDE_PATH = "/app/guide";
+
 /** Mobile "Business" tab: one hub for Business Studio, My Business and Documents. */
 export const BUSINESS_HUB_PATH = "/app/business-hub";
 
@@ -137,6 +140,8 @@ const DETAIL_ROUTES: { pattern: RegExp; meta: PageMeta }[] = [
   { pattern: /^\/app\/campaigns\/[^/]+\/?$/, meta: { title: "Campaign", parent: "/app/campaigns" } },
   { pattern: /^\/app\/customers\/[^/]+\/?$/, meta: { title: "Customer", parent: "/app/customers" } },
   { pattern: /^\/app\/operator\/?$/, meta: { title: "Operator" } },
+  { pattern: /^\/app\/guide\/?$/, meta: { title: "Guide" } },
+  { pattern: /^\/app\/guide\/.+$/, meta: { title: "Guide", parent: GUIDE_PATH } },
 ];
 
 export function mobilePageMeta(pathname: string): PageMeta {

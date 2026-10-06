@@ -1,8 +1,8 @@
 import type { MouseEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronRight, Download, LogOut, Share2, X } from "lucide-react";
+import { ChevronRight, CircleHelp, Download, LogOut, Share2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isMobileNavItemActive, type MobileNavItem } from "@/lib/navigation";
+import { GUIDE_PATH, isMobileNavItemActive, type MobileNavItem } from "@/lib/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useOverlayHistory } from "@/hooks/useOverlayHistory";
 import { BottomSheet, BottomSheetContent } from "@/components/ui/bottom-sheet";
@@ -83,6 +83,23 @@ export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
             ) : null}
           </div>
         ) : null}
+        <div className="mt-3 border-t px-2 pt-3">
+          <Link
+            to={GUIDE_PATH}
+            onClick={go(GUIDE_PATH)}
+            aria-current={pathname.startsWith(GUIDE_PATH) ? "page" : undefined}
+            className="flex min-h-12 items-center gap-3 rounded-xl px-2 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+              <CircleHelp className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Help & guide</span>
+              <span className="block text-xs text-muted-foreground">Learn StabiFlow step by step</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          </Link>
+        </div>
         {memberships.length > 0 ? (
           <div className="mt-3 border-t px-2 pt-3">
             <Link

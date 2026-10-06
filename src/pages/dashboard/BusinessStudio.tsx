@@ -19,6 +19,7 @@ import { fetchCatalog, formatMoney, startCheckout } from "@/lib/billing";
 import {
   BusinessStudioError, extractFromText, fetchPendingProposals, fetchPreview, generateDocument, improveWording, scanWebsite, type ScanResult,
 } from "@/lib/businessStudio";
+import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
 const STEPS = ["Start", "Review", "Fill the gaps", "Wording", "Design", "Preview & download"] as const;
 
@@ -122,6 +123,7 @@ export default function BusinessStudio() {
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Profile builder</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Business Studio</h1>
         <p className="text-sm text-muted-foreground">Turn your website into a professional company profile. You check every fact before it's used.</p>
+        <GuideHelpLink chapter="business-studio" className="mt-1" />
       </div>
 
       <ol className="flex flex-wrap gap-2 text-xs" aria-label="Progress">

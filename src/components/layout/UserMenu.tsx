@@ -1,4 +1,4 @@
-import { LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
+import { CircleHelp, LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery } from "@tanstack/react-query";
@@ -51,6 +51,10 @@ export function UserMenu() {
         <DropdownMenuItem onClick={() => navigate("/app/settings")}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/app/guide")}>
+          <CircleHelp className="mr-2 h-4 w-4" />
+          Help & guide
         </DropdownMenuItem>
         {canOpenAdmin && (
           <>
