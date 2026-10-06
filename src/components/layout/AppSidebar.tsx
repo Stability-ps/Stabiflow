@@ -107,12 +107,16 @@ export function AppSidebar({ items = NAV_ITEMS }: { items?: NavItem[] }) {
   function renderMessagesChildren(item: NavItem) {
     if (!item.children || !isNavItemActive(item.path, pathname)) return null;
 
+    // Automations is a top-level product area. Do not duplicate it inside
+    // Customers > Messages; keep only the message-specific child links here.
+    const visibleChildren = item.children.filter((child) => child.label !== "Automations");
+
     return (
       <SidebarMenuSub
         aria-label={`${item.label} sections`}
         className="ml-8 mt-1 border-sidebar-border/60 pl-3"
       >
-        {item.children.map((child) => {
+        {visibleChildren.map((child) => {
           const childActive = isChildActive(child, pathname);
           return (
             <SidebarMenuSubItem key={child.to}>
