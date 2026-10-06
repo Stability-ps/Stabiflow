@@ -5,13 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/EmptyState";
-import { useInboxTemplates, type WhatsAppTemplateRow } from "@/hooks/useInboxTemplates";
+import { useInboxTemplates } from "@/hooks/useInboxTemplates";
+import { filterWhatsAppTemplates, whatsappTemplateBody } from "@/pages/dashboard/whatsapp/templateFilters";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
-
-function bodyPreview(template: WhatsAppTemplateRow): string {
-  const body = template.components.find((c) => (c.type || "").toUpperCase() === "BODY");
-  return body?.text?.trim() || "—";
-}
 
 function statusTone(status: string): "default" | "secondary" | "outline" | "destructive" {
   const s = status.toUpperCase();
@@ -42,16 +38,10 @@ export default function WhatsAppTemplates() {
     [templates],
   );
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return (templates || []).filter((t) => {
-      const matchesQuery = !needle || [t.name, t.language, t.category || "", t.provider_status, bodyPreview(t)]
-        .some((value) => value.toLowerCase().includes(needle));
-      const matchesCategory = category === "ALL" || (t.category || "Uncategorised") === category;
-      const matchesStatus = status === "ALL" || t.provider_status === status;
-      return matchesQuery && matchesCategory && matchesStatus;
-    });
-  }, [templates, query, category, status]);
+  const filtered = useMemo(
+    () => filterWhatsAppTemplates(templates || [], query, category, status),
+    [templates, query, category, status],
+  );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -160,7 +150,7 @@ export default function WhatsAppTemplates() {
                 <td className="px-4 py-2.5 text-muted-foreground">{t.language}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{t.category || "—"}</td>
                 <td className="px-4 py-2.5"><Badge variant={statusTone(t.provider_status)}>{t.provider_status}</Badge></td>
-                <td className="max-w-md px-4 py-2.5 text-muted-foreground"><span className="line-clamp-2">{bodyPreview(t)}</span></td>
+                <td className="max-w-md px-4 py-2.5 text-muted-foreground"><span className="line-clamp-2">{whatsappTemplateBody(t)}</span></td>
               </tr>
             ))}
             {visible.length === 0 && (
