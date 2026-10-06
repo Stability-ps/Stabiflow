@@ -40,6 +40,14 @@ export default function BusinessStudio() {
   const catalog = useQuery({ queryKey: ["billing-catalog"], queryFn: fetchCatalog, enabled: step >= 5, staleTime: 5 * 60_000 });
 
   const completeness = useMemo(() => (identity.data ? computeCompleteness(identity.data) : null), [identity.data]);
+  const refreshAll = () => {
+    qc.invalidateQueries({ queryKey: ["fact-proposals", ws] });
+    qc.invalidateQueries({ queryKey: ["business-identity", ws] });
+  };
+  const handleError = (e: Error) => {
+    toast.error(e.message);
+    if (e instanceof BusinessStudioError && e.code === "limit_reached") toast.info("See Billing for plans with more allowance.");
+  };
   const draftValue = (key: string, fallback: unknown) => studioDraft[key] ?? (typeof fallback === "string" ? fallback : "");
   const saveStudioDetails = useMutation({
     mutationFn: async () => {
@@ -57,15 +65,6 @@ export default function BusinessStudio() {
     onSuccess: () => { setStudioDraft({}); refreshAll(); qc.invalidateQueries({ queryKey: ["bs-preview", ws] }); toast.success("Business details updated"); },
     onError: handleError,
   });
-  const refreshAll = () => {
-    qc.invalidateQueries({ queryKey: ["fact-proposals", ws] });
-    qc.invalidateQueries({ queryKey: ["business-identity", ws] });
-  };
-  const handleError = (e: Error) => {
-    toast.error(e.message);
-    if (e instanceof BusinessStudioError && e.code === "limit_reached") toast.info("See Billing for plans with more allowance.");
-  };
-
   const scanMutation = useMutation({
     mutationFn: () => scanWebsite(ws as string, url),
     onSuccess: (r) => {
@@ -110,7 +109,6 @@ export default function BusinessStudio() {
   if (!ws) return null;
   const pendingReview = (pending.data ?? []).filter((p) => p.origin === "website_scan" || p.origin === "document_upload");
   const templates = preview.data?.templates ?? [];
-  const fullStudio = preview.data?.accessMode === "full";
   const teaserStudio = preview.data?.accessMode === "teaser";
   const template = templates.find((t) => t.key === templateKey) ?? templates[0];
   const templateLocked = !!template?.is_premium && !preview.data?.canUsePremium;
