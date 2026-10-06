@@ -47,7 +47,15 @@ export function ActionConfigFields({ workspaceId, actionType, config, onChange, 
   }
 
   if (actionType === "set_conversation_handoff") {
-    return <p className="text-xs text-muted-foreground">Turns AI off for this conversation and hands it to your team, exactly like a staff takeover. Starts the human-response SLA clock.</p>;
+    return <p className="text-xs text-muted-foreground">Turns AI off and marks the conversation as needing a human. Your team is alerted and the human-response SLA clock starts.</p>;
+  }
+
+  if (actionType === "pause_conversation_ai") {
+    return <p className="text-xs text-muted-foreground">Stops AI replies on this conversation without alerting anyone or assigning it.</p>;
+  }
+
+  if (actionType === "resume_conversation_ai") {
+    return <p className="text-xs text-muted-foreground">Returns the conversation to AI and automations, and removes the team member assignment.</p>;
   }
 
   if (actionType === "add_tag") {
@@ -117,7 +125,7 @@ export function ActionConfigFields({ workspaceId, actionType, config, onChange, 
     );
   }
 
-  if (actionType === "assign_lead" || actionType === "assign_opportunity") {
+  if (actionType === "assign_lead" || actionType === "assign_opportunity" || actionType === "assign_conversation") {
     return (
       <div>
         <Label className="text-xs">Assign to</Label>

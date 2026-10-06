@@ -24,7 +24,11 @@ import { linkConversationCustomer, unlinkConversationCustomer } from "@/lib/cust
 import { useWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { computeSlaState } from "@/lib/slaState";
 import { aiMediaBadge } from "@/lib/multimodalMedia";
-import { addInternalNote, assignConversation, markConversationRead, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, retryOutboundMessage, retryTranscription, returnConversationToAI } from "@/lib/inbox";
+import { addInternalNote, assignConversation, markConversationRead, pauseConversationAI, replyToConversation, replyWithTemplate, reopenConversation, resolveConversation, retryOutboundMessage, retryTranscription, returnConversationToAI, takeOverConversation } from "@/lib/inbox";
+import { HandoverBadge } from "@/components/whatsapp/HandoverBadge";
+import { AgentAssistMenu } from "@/components/whatsapp/AgentAssistMenu";
+import { useConversationTimeline } from "@/hooks/useConversationTimeline";
+import { handoverState } from "@/lib/handoverState";
 import { canRetryOutbound, outboundDeliveryLabel, outboundDeliveryState } from "@/lib/outboundRetry";
 import { canRetryTranscription, isAudioMessage, transcriptionHint, type TranscriptionStatus } from "@/lib/voiceTranscription";
 import { aiHumanStatusText, buildMissingInfoReply, computeMessagingWindowState, deliveryLabel, deliveryTone, inboxStatusLabel, messagingWindowLabel, priorityLabel } from "@/lib/inboxPresentation";
@@ -175,6 +179,8 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   const queryClient = useQueryClient();
   const { data: messages, isLoading: messagesLoading } = useInboxMessages(conversation.id);
   const { data: notes } = useInboxInternalNotes(conversation.id);
+  const { data: timeline } = useConversationTimeline(workspaceId, conversation.id, conversation.lead_id);
+  const handover = handoverState(conversation);
   const { data: members } = useWorkspaceMembers(workspaceId);
   const { data: lead } = useLead(conversation.lead_id);
   const { data: leadOpportunities } = useOpportunitiesForLead(conversation.lead_id);
@@ -305,6 +311,32 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       toast.success("Conversation assigned");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to assign this conversation");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleTakeOver = async () => {
+    setBusy(true);
+    try {
+      await takeOverConversation(workspaceId, conversation.id);
+      invalidate();
+      toast.success("You now own this conversation. AI will not reply automatically.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to take over this conversation");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handlePauseAI = async () => {
+    setBusy(true);
+    try {
+      await pauseConversationAI(workspaceId, conversation.id);
+      invalidate();
+      toast.success("AI paused on this conversation");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to pause AI");
     } finally {
       setBusy(false);
     }
@@ -587,7 +619,8 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           <p className="truncate font-medium">{conversation.display_name || conversation.phone_number}</p>
           <p className="truncate text-xs text-muted-foreground">{conversation.phone_number}</p>
         </div>
-        <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>
+        <HandoverBadge conversation={conversation} assigneeName={conversation.assigned_staff_name} />
+        {conversation.inbox_status === "waiting_client" && <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>}
         {conversation.priority_level !== "normal" && <Badge variant="secondary">{priorityLabel(conversation.priority_level)}</Badge>}
         <Badge variant={windowState === "open" ? "outline" : "destructive"}>{messagingWindowLabel(windowState)}</Badge>
         {slaState.applicable && (
@@ -746,10 +779,14 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
                 {(members || []).map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.profile?.full_name || "Unnamed"}</SelectItem>)}
               </SelectContent>
             </Select>
-            {conversation.ai_enabled ? (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => user && handleAssign(user.id)}>Take over</Button>
-            ) : (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirmReturnToAI(true)}>Return to AI</Button>
+            {handover !== "closed" && !(handover === "human_active" && conversation.assigned_staff_id === user?.id) && (
+              <Button size="sm" variant={handover === "handover_requested" ? "default" : "outline"} disabled={busy} onClick={handleTakeOver}>Take over</Button>
+            )}
+            {handover === "bot_active" && (
+              <Button size="sm" variant="outline" disabled={busy} onClick={handlePauseAI}>Pause AI</Button>
+            )}
+            {handover !== "bot_active" && (
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirmReturnToAI(true)}>Return to automation</Button>
             )}
             {intakeSchema ? (
               <Button size="sm" variant="outline" disabled={askingInfo || !intakeEval?.nextField} onClick={handleAskNextQuestion}>
@@ -777,17 +814,28 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         ) : !messages?.length ? (
           <p className="text-sm text-muted-foreground">No messages yet.</p>
         ) : (
-          messages.map((m) => (
-            <MessageBubble
-              key={m.id}
-              message={m}
-              canManage={canManage}
-              onRetry={handleRetryMessage}
-              retrying={retryingMessageId === m.id}
-              onRetryTranscription={handleRetryTranscription}
-              transcribing={transcribingMessageId === m.id}
-            />
-          ))
+          [
+            ...messages.map((m) => ({ kind: "message" as const, at: m.created_at, m })),
+            ...(timeline ?? []).map((e) => ({ kind: "event" as const, at: e.at, e })),
+          ]
+            .sort((a, b) => a.at.localeCompare(b.at))
+            .map((item) => item.kind === "event" ? (
+              <div key={`ev-${item.e.id}`} className="flex justify-center" role="note">
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] ${item.e.tone === "handover" ? "bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300" : item.e.tone === "crm" ? "bg-sky-50 text-sky-900 dark:bg-sky-950/50 dark:text-sky-300" : "bg-muted text-muted-foreground"}`}>
+                  {item.e.text} · {new Date(item.e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            ) : (
+              <MessageBubble
+                key={item.m.id}
+                message={item.m}
+                canManage={canManage}
+                onRetry={handleRetryMessage}
+                retrying={retryingMessageId === item.m.id}
+                onRetryTranscription={handleRetryTranscription}
+                transcribing={transcribingMessageId === item.m.id}
+              />
+            ))
         )}
         <div ref={messagesEndRef} />
       </div>
@@ -806,8 +854,11 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           {windowOpen ? (
             <div className="flex gap-2">
               <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a reply..." className="min-h-[60px]" maxLength={1000} />
-              <Button onClick={handleSend} disabled={sending || !replyText.trim()} className="self-end"><Send className="h-4 w-4" /></Button>
+              <Button onClick={handleSend} disabled={sending || !replyText.trim()} className="self-end" aria-label="Send reply"><Send className="h-4 w-4" /></Button>
             </div>
+          ) : null}
+          {windowOpen ? (
+            <AgentAssistMenu workspaceId={workspaceId} conversationId={conversation.id} draft={replyText} onDraft={(t) => setReplyText(t.slice(0, 1000))} disabled={sending} />
           ) : (
             <div className="space-y-2 rounded-md border border-dashed p-3">
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

@@ -31,12 +31,32 @@ export function cleanReply(raw: string): string {
 // human_handoff_requested field) - two independent signals catch more than
 // either alone, and this one costs nothing to check before the AI call.
 export function requestsHumanHandoff(text: string): boolean {
-  const normalized = text.toLowerCase().replace(/['']/g, "'").replace(/\s+/g, " ").trim();
-  const person = "human|person|someone|agent|advisor|adviser|team|staff|manager|supervisor";
+  const normalized = text.toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, " ").trim();
+  // "consultant"/"practitioner" and the isiZulu phrases are restored from
+  // Acapolite's proven list; they are not domain-specific.
+  const person = "human|person|someone|agent|advisor|adviser|consultant|practitioner|team|staff|manager|supervisor";
   const action = "speak|talk|chat|connect|transfer|handover|hand over|put me through|call|phone|contact|assist|help";
   return new RegExp(`\\b(?:${action})\\b.{0,50}\\b(?:${person})\\b`, "i").test(normalized)
     || new RegExp(`\\b(?:${person})\\b.{0,40}\\b(?:please|now|instead|directly|call|phone|contact|assist|help|speak|talk|chat)\\b`, "i").test(normalized)
-    || /\b(i want|i need|give me|get me)\b.{0,35}\b(human|person|someone|agent|advisor|adviser)\b/i.test(normalized);
+    || /\b(i want|i need|give me|get me)\b.{0,35}\b(human|person|someone|agent|advisor|adviser|consultant|practitioner)\b/i.test(normalized)
+    || /\b(please )?(call|phone|ring) me( back)?\b/i.test(normalized)
+    || /ngifuna ukukhuluma.{0,35}(nomuntu|nomeluleki)|ngixhumanise.{0,35}(nomuntu|nomeluleki)/i.test(normalized);
+}
+
+/** Workspace-configured extra handover phrases (workspace_settings.
+ * handoff_keywords). Case-insensitive, whole words/phrases only, so "agent"
+ * does not match "agenda". Never throws on odd input. */
+export function matchesHandoffKeyword(text: string, keywords: readonly unknown[] | null | undefined): boolean {
+  if (!keywords?.length || !text) return false;
+  const normalized = text.toLowerCase().replace(/['’]/g, "'").replace(/\s+/g, " ").trim();
+  for (const raw of keywords) {
+    if (typeof raw !== "string") continue;
+    const k = raw.toLowerCase().replace(/\s+/g, " ").trim();
+    if (k.length < 2) continue;
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}($|[^\\p{L}\\p{N}])`, "iu").test(normalized)) return true;
+  }
+  return false;
 }
 
 export function containsFalseActionClaim(text: string): boolean {

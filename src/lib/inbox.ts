@@ -21,7 +21,7 @@ async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T
   return data as T;
 }
 
-export type InboxAction = "assign" | "return_to_ai" | "resolve" | "reopen" | "reply" | "reply_template" | "mark_read" | "add_note" | "retry_message" | "retry_transcription";
+export type InboxAction = "assign" | "return_to_ai" | "resolve" | "reopen" | "reply" | "reply_template" | "mark_read" | "add_note" | "retry_message" | "retry_transcription" | "take_over" | "pause_ai" | "assist";
 
 export function runInboxAction(workspaceId: string, conversationId: string, action: InboxAction, params: Record<string, unknown> = {}) {
   return invoke<{ ok: true; delivery_status?: string; warning?: string | null }>("inbox-actions", {
@@ -34,6 +34,25 @@ export function runInboxAction(workspaceId: string, conversationId: string, acti
 
 export function assignConversation(workspaceId: string, conversationId: string, staffId: string) {
   return runInboxAction(workspaceId, conversationId, "assign", { staff_id: staffId });
+}
+
+/** Take over: assign to the caller (or a chosen member) and stop AI replies. */
+export function takeOverConversation(workspaceId: string, conversationId: string, staffId?: string) {
+  return runInboxAction(workspaceId, conversationId, "take_over", staffId ? { staff_id: staffId } : {});
+}
+
+/** Stop AI replies without a handover (no alert, no assignment). */
+export function pauseConversationAI(workspaceId: string, conversationId: string) {
+  return runInboxAction(workspaceId, conversationId, "pause_ai");
+}
+
+export type AssistMode = "suggest_reply" | "improve" | "shorten" | "professional" | "follow_up" | "summarise" | "next_action" | "intent";
+export type AssistResult = { ok: true; mode: AssistMode; kind: "reply" | "insight"; text: string; warnings: string[] };
+
+/** Agent assist. Returns a draft or an insight for the staff member - never
+ * sends anything to the customer. */
+export function requestAgentAssist(workspaceId: string, conversationId: string, mode: AssistMode, draft?: string) {
+  return runInboxAction(workspaceId, conversationId, "assist", { mode, draft }) as unknown as Promise<AssistResult>;
 }
 
 export function returnConversationToAI(workspaceId: string, conversationId: string) {

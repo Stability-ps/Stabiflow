@@ -17,6 +17,9 @@ import { isBlockedWhatsAppMockSend, resolveWhatsAppSendMockMode, REAL_WHATSAPP_P
 import { MOCK_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendMock.ts";
 import { resolveMessagingWindow } from "../_shared/inbox/messagingWindow.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
+import { AGENT_ASSIST_FEATURE, assistWarnings, buildAssistPrompt, isAssistMode, runAgentAssist, ASSIST_MODES, type AssistMessage } from "../_shared/inbox/agentAssist.ts";
+import { resolveInboxAiBudget } from "../_shared/inbox/inboxAiBudgetResolve.ts";
+import { estimateCost } from "../_shared/flowAi/usage.ts";
 import { describeTemplateEligibilityError, validateTemplateEligibility } from "../_shared/inbox/templateValidation.ts";
 import { sanitizeIntegrationError } from "../_shared/integration-providers/metaGraphError.ts";
 import { classifyOutboundFailure, initialFailurePatch, isAcceptedDelivery, type InitialFailurePatch } from "../_shared/inbox/outboundRetry.ts";
@@ -35,7 +38,7 @@ import { coerceFieldValue, evaluateIntake, readIntakePayload, resolveIntakeCompl
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
 
-const VALID_ACTIONS = new Set(["assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag", "retry_message", "retry_transcription"]);
+const VALID_ACTIONS = new Set(["take_over", "pause_ai", "assist", "assign", "return_to_ai", "resolve", "reopen", "reply", "reply_template", "mark_read", "add_note", "ask_info", "set_intake_answer", "link_customer", "unlink_customer", "set_priority", "set_handoff", "request_document", "add_tag", "retry_message", "retry_transcription"]);
 
 const PRIORITY_LEVELS = new Set(["normal", "high", "urgent"]);
 
@@ -61,6 +64,19 @@ async function logActivity(sb: AnySupabaseClient, workspaceId: string, actorId: 
 // would also catch it, this just makes the Needs Attention item disappear
 // the moment the human acts. Writes one handoff_sla_resolved activity row
 // only when an alert actually transitioned (never on every call).
+// In-app notification to one workspace member (the bell). Never throws -
+// a notification must not fail the action that caused it.
+async function notifyMember(sb: AnySupabaseClient, workspaceId: string, userId: string, title: string, body: string, conversationId: string) {
+  try {
+    await sb.from("notifications").insert({
+      workspace_id: workspaceId, user_id: userId, type: "inbox_assignment", title, body,
+      related_entity_type: "inbox_conversation", related_entity_id: conversationId,
+    });
+  } catch (err) {
+    console.error("inbox-actions: notification failed", err instanceof Error ? err.message : err);
+  }
+}
+
 async function resolveSlaAlert(sb: AnySupabaseClient, workspaceId: string, conversationId: string, actorId: string, nowIso: string) {
   const { data } = await sb.from("inbox_alerts")
     .update({ is_resolved: true, resolved_at: nowIso, resolved_by: actorId })
@@ -402,8 +418,9 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, status: outcome.status });
   }
 
-  if (action === "assign") {
-    const staffId = body.staff_id;
+  if (action === "assign" || action === "take_over") {
+    // "Take over" = assign to the caller unless a team member is chosen.
+    const staffId = action === "take_over" && (typeof body.staff_id !== "string" || !body.staff_id) ? actorId : body.staff_id;
     if (typeof staffId !== "string" || !staffId) return json(req, { error: "staff_id is required" }, 400);
     const { data: member } = await serviceSb.from("workspace_members").select("user_id").eq("workspace_id", workspaceId).eq("user_id", staffId).maybeSingle();
     if (!member) return json(req, { error: "That person is not a member of this workspace" }, 400);
@@ -419,7 +436,7 @@ Deno.serve(async (req: Request) => {
       assigned_by: actorId,
     }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to assign this conversation" }, 500);
-    await logActivity(serviceSb, workspaceId, actorId, wasAssigned ? "inbox_conversation_reassigned" : "inbox_conversation_assigned", conversationId, { staff_id: staffId });
+    await logActivity(serviceSb, workspaceId, actorId, staffId === actorId && action === "take_over" ? "inbox_conversation_taken_over" : wasAssigned ? "inbox_conversation_reassigned" : "inbox_conversation_assigned", conversationId, { staff_id: staffId, previous_staff_id: conversation.assigned_staff_id, ...automationMeta });
     if (conversation.ai_enabled) {
       await emitDomainEvent(serviceSb, {
         workspaceId, eventType: "conversation.human_takeover", entityType: "inbox_conversation", entityId: conversationId,
@@ -427,10 +444,77 @@ Deno.serve(async (req: Request) => {
         dedupeKey: `conversation.human_takeover:${conversationId}:${nowIso}`,
       });
     }
+    if (conversation.assigned_staff_id !== staffId) {
+      await emitDomainEvent(serviceSb, {
+        workspaceId, eventType: "conversation.agent_took_over", entityType: "inbox_conversation", entityId: conversationId,
+        payload: { entity_id: conversationId, conversation_id: conversationId, staff_id: staffId, previous_staff_id: conversation.assigned_staff_id, by: automationCtx ? "automation" : "staff" },
+        dedupeKey: `conversation.agent_took_over:${conversationId}:${staffId}:${nowIso}`,
+      });
+      if (staffId !== actorId) {
+        await notifyMember(serviceSb, workspaceId, staffId as string, "Conversation assigned to you", `${conversation.display_name || conversation.wa_id} on WhatsApp is now yours.`, conversationId);
+      }
+    }
     return json(req, { ok: true });
   }
 
+  if (action === "pause_ai") {
+    // AI off WITHOUT a handover: nobody is alerted and nothing is assigned.
+    // Used when staff want silence (e.g. a known customer) but not a queue item.
+    if (!conversation.ai_enabled) return json(req, { ok: true, unchanged: true });
+    const { error } = await serviceSb.from("inbox_conversations").update({ ai_enabled: false }).eq("id", conversationId);
+    if (error) return json(req, { error: "Unable to pause AI for this conversation" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_ai_paused", conversationId, automationMeta);
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "conversation.ai_paused", entityType: "inbox_conversation", entityId: conversationId,
+      payload: { entity_id: conversationId, conversation_id: conversationId, by: automationCtx ? "automation" : "staff" },
+      dedupeKey: `conversation.ai_paused:${conversationId}:${nowIso}`,
+    });
+    return json(req, { ok: true });
+  }
+
+  if (action === "assist") {
+    // Drafts for the human only - see _shared/inbox/agentAssist.ts. Nothing
+    // here can send a WhatsApp message.
+    const mode = body.mode;
+    if (!isAssistMode(mode)) return json(req, { error: "Choose what you want help with" }, 400);
+    const draft = typeof body.draft === "string" ? body.draft.trim() : "";
+    if (ASSIST_MODES[mode].needsDraft && !draft) return json(req, { error: "Write a draft first" }, 400);
+    const gate = await assertWorkspaceActive(serviceSb, workspaceId);
+    if (!gate.allowed) return json(req, workspaceSuspendedBody(gate.status), 403);
+    const { data: moduleOn } = await callerSb.rpc("is_feature_enabled", { p_workspace_id: workspaceId, p_flag_key: "module.whatsapp" });
+    if (moduleOn !== true) return json(req, { error: "Agent assist needs a plan that includes WhatsApp.", upgrade_required: true }, 403);
+    const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+    const model = Deno.env.get("OPENAI_WHATSAPP_MODEL")?.trim();
+    if (!apiKey || !model) return json(req, { error: "AI is not configured for this workspace yet." }, 503);
+    const budget = await resolveInboxAiBudget(serviceSb, workspaceId, [INBOX_AI_FEATURE, "whatsapp_voice_transcription", "whatsapp_reply_localization", AGENT_ASSIST_FEATURE]);
+    if (!budget.allowed) return json(req, { error: "This month's AI allowance is used up. Agent assist resumes next month or after an upgrade.", upgrade_required: true }, 402);
+
+    const { data: rows } = await serviceSb.from("inbox_messages").select("direction,sender_type,content,created_at")
+      .eq("conversation_id", conversationId).eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false }).limit(30);
+    const { data: ws } = await serviceSb.from("workspaces").select("name").eq("id", workspaceId).maybeSingle();
+    const prompt = buildAssistPrompt(mode, { businessName: ws?.name ?? "", history: [...((rows ?? []) as AssistMessage[])].reverse(), draft });
+    const started = Date.now();
+    try {
+      const out = await runAgentAssist({ apiKey, model }, mode, prompt);
+      await serviceSb.from("ai_usage_events").insert({
+        workspace_id: workspaceId, conversation_id: null, user_id: actorId, feature: AGENT_ASSIST_FEATURE, provider: "openai", model,
+        input_tokens: out.usage.inputTokens, output_tokens: out.usage.outputTokens,
+        estimated_cost: estimateCost(model, out.usage.inputTokens, out.usage.outputTokens), latency_ms: Date.now() - started, status: "success",
+      }).then(() => {}, () => {});
+      return json(req, { ok: true, mode, kind: ASSIST_MODES[mode].output, text: out.text, warnings: assistWarnings(mode, out.text) });
+    } catch (err) {
+      console.error("inbox-actions: agent assist failed", err instanceof Error ? err.message : err);
+      await serviceSb.from("ai_usage_events").insert({
+        workspace_id: workspaceId, conversation_id: null, user_id: actorId, feature: AGENT_ASSIST_FEATURE, provider: "openai", model,
+        input_tokens: 0, output_tokens: 0, estimated_cost: 0, latency_ms: Date.now() - started, status: "error",
+      }).then(() => {}, () => {});
+      return json(req, { error: "No suggestion right now. Try again in a moment." }, 502);
+    }
+  }
+
   if (action === "return_to_ai") {
+    if (conversation.ai_enabled && conversation.status === "active" && !conversation.assigned_staff_id) return json(req, { ok: true, unchanged: true });
     const { error } = await serviceSb.from("inbox_conversations").update({
       status: "active",
       inbox_status: "new",
@@ -443,7 +527,12 @@ Deno.serve(async (req: Request) => {
       resolved_by: null,
     }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to return this conversation to AI" }, 500);
-    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_returned_to_ai", conversationId, { previous_staff_id: conversation.assigned_staff_id });
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_returned_to_ai", conversationId, { previous_staff_id: conversation.assigned_staff_id, ...automationMeta });
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "conversation.ai_resumed", entityType: "inbox_conversation", entityId: conversationId,
+      payload: { entity_id: conversationId, conversation_id: conversationId, previous_staff_id: conversation.assigned_staff_id, by: automationCtx ? "automation" : "staff" },
+      dedupeKey: `conversation.ai_resumed:${conversationId}:${nowIso}`,
+    });
     await resolveSlaAlert(serviceSb, workspaceId, conversationId, actorId, nowIso);
     await resolveAiLimitAlert(serviceSb, conversationId, actorId, nowIso);
     return json(req, { ok: true });
@@ -454,7 +543,12 @@ Deno.serve(async (req: Request) => {
     const { error } = await serviceSb.from("inbox_conversations").update({ inbox_status: "resolved", resolved_at: nowIso, resolved_by: actorId }).eq("id", conversationId);
     if (error) return json(req, { error: "Unable to resolve this conversation" }, 500);
     await serviceSb.from("inbox_alerts").update({ is_resolved: true, resolved_at: nowIso, resolved_by: actorId }).eq("conversation_id", conversationId).eq("is_resolved", false);
-    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_resolved", conversationId);
+    await logActivity(serviceSb, workspaceId, actorId, "inbox_conversation_resolved", conversationId, automationMeta);
+    await emitDomainEvent(serviceSb, {
+      workspaceId, eventType: "conversation.closed", entityType: "inbox_conversation", entityId: conversationId,
+      payload: { entity_id: conversationId, conversation_id: conversationId, assigned_staff_id: conversation.assigned_staff_id },
+      dedupeKey: `conversation.closed:${conversationId}:${nowIso}`,
+    });
     return json(req, { ok: true });
   }
 

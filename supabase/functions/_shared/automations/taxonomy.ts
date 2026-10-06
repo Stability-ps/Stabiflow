@@ -9,6 +9,7 @@ export const EVENT_TYPES = [
   "conversation.document_received", "conversation.ai_limit_reached",
   "conversation.idle_timeout", "conversation.priority_changed",
   "message.delivery_failed",
+  "conversation.agent_took_over", "conversation.ai_paused", "conversation.ai_resumed", "conversation.closed",
   "lead.created", "lead.qualified", "lead.stage_changed", "lead.idle_timeout", "lead.follow_up_scheduled", "lead.follow_up_completed",
   "opportunity.created", "opportunity.stage_changed", "opportunity.won", "opportunity.lost",
   "customer.created", "revenue.recorded",
@@ -25,6 +26,7 @@ export const ACTION_TYPES = [
   "create_internal_note", "create_notification", "request_flow_ai_analysis",
   "set_conversation_priority", "set_conversation_handoff",
   "send_whatsapp_template", "request_document", "add_tag",
+  "assign_conversation", "pause_conversation_ai", "resume_conversation_ai",
 ] as const;
 export type ActionType = (typeof ACTION_TYPES)[number];
 

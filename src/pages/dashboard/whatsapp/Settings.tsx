@@ -11,6 +11,7 @@ import { roleHasPermission } from "@/lib/permissions";
 import { workspaceRoleRank } from "@/lib/workspaceRoles";
 import { useWorkspaceSlaSettings, updateWorkspaceSlaSettings } from "@/hooks/useWorkspaceSlaSettings";
 import { useWorkspaceAiSettings, updateWorkspaceAiSettings } from "@/hooks/useWorkspaceAiSettings";
+import { HandoffKeywordsCard } from "@/pages/dashboard/whatsapp/HandoffKeywordsCard";
 import { useInboxAiUsage, updateInboxAiCap } from "@/hooks/useInboxAiUsage";
 import { AI_MEDIA_SUPPORTED_FORMATS } from "@/lib/multimodalMedia";
 import { INBOX_AI_CAP_MAX, INBOX_AI_CAP_MIN, usagePercent } from "@/lib/inboxAiBudget";
@@ -176,7 +177,7 @@ export default function WhatsAppSettings() {
   if (!section) {
     const sections = [
       { id: "connection" as const, label: "WhatsApp connection", description: "Phone numbers, health, webhook and connection tools", icon: Wifi },
-      { id: "sla" as const, label: "Inbox & SLA", description: "Human response timing and overdue conversations", icon: Clock3 },
+      { id: "sla" as const, label: "Inbox & SLA", description: "Human handover phrases, response timing and overdue conversations", icon: Clock3 },
       { id: "hours" as const, label: "Business hours & replies", description: "Opening hours and out-of-hours automatic replies", icon: BriefcaseBusiness },
       { id: "ai" as const, label: "Inbox AI", description: "Attachments, voice notes, language and monthly usage", icon: Bot },
     ];
@@ -303,6 +304,8 @@ export default function WhatsAppSettings() {
           {" "}If it stays unsubscribed after repairing, verify in Meta that the WhatsApp Business Account&apos;s callback URL and verify token are set for this app.
         </p>
       )}
+
+      <HandoffKeywordsCard workspaceId={workspaceId} canManage={canManageWorkspace} className={section === "sla" ? undefined : "hidden"} />
 
       <Card className={section === "sla" ? undefined : "hidden"}>
         <CardHeader><CardTitle className="text-base">Human response SLA</CardTitle></CardHeader>
