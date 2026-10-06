@@ -54,7 +54,7 @@ returns boolean
 language sql
 immutable
 set search_path = ''
-as $
+as $$
   select coalesce(cardinality(p), 0) <= 25
      and not exists (select 1 from unnest(coalesce(p, '{}')) k where k is null or length(btrim(k)) < 2 or length(k) > 60);
 $$;
