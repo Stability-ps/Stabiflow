@@ -28,6 +28,8 @@ const VALID_ACTIONS = new Set([
   "assign",
   "set_qualification",
   "move_stage",
+  "set_follow_up",
+  "complete_follow_up",
   "mark_lead_lost",
   "reopen_lead",
   "add_note",
