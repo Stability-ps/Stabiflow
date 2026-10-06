@@ -19,7 +19,7 @@ export const campaigns: GuideChapter = {
       blocks: [
         { type: "p", text: "Campaigns lets you create Meta adverts without leaving StabiFlow. Because StabiFlow also handles your WhatsApp conversations, leads and customers, it can show which campaigns actually produced conversations, leads, customers and revenue - not just clicks." },
         { type: "p", text: "The campaign list shows each campaign's status, objective and key figures. Use the ... menu to duplicate a campaign or delete a draft." },
-        { type: "screenshot", shot: { src: "campaigns-list.webp", alt: "Campaigns list with statuses and the New campaign button" } },
+        { type: "screenshot", shot: { src: "campaigns-list.webp", alt: "Campaigns page showing No Meta Ad Account connected with a Go to Integrations button", caption: "Until a Meta Ad Account is connected, Campaigns shows this and points you to Integrations." } },
         { type: "callout", tone: "important", text: "You need Meta connected with an Ad Account and a Facebook Page switched on (Integrations). Nothing is sent to Meta until you explicitly publish." },
       ],
     },
@@ -38,7 +38,7 @@ export const campaigns: GuideChapter = {
           { title: "Review", detail: "Check the summary and save the draft. Anything missing is listed so you can go back and fix it." },
           { title: "Publish", detail: "StabiFlow runs a readiness check against Meta's requirements. When it passes, publish." },
         ] },
-        { type: "screenshot", shot: { src: "campaign-new.webp", alt: "New campaign builder showing the Goal step" } },
+        { type: "screenshot", shot: { src: "campaign-new.webp", alt: "New campaign builder on the Goal step with the four objectives", caption: "Step 1 of the builder. \"Nothing is sent to Meta until you explicitly publish.\"" } },
       ],
     },
     {
@@ -86,7 +86,6 @@ export const campaigns: GuideChapter = {
           ["Activity", "A history of publishing and status changes."],
         ] },
         { type: "p", text: "Meta figures sync automatically every 30 minutes while a campaign is active. Use Pause and Resume to control delivery." },
-        { type: "screenshot", shot: { src: "campaign-detail.webp", alt: "Campaign detail page with Overview, Creative, Journey, Performance and Activity tabs" } },
       ],
     },
     {

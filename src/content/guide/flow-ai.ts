@@ -56,6 +56,7 @@ export const flowAi: GuideChapter = {
         { type: "list", items: [
           "How are my campaigns performing?",
           "Which leads need attention?",
+          "What's my WhatsApp conversion rate?",
           "Summarise my open opportunities.",
           "What should I focus on today?",
           "Which lead source brought the most qualified leads last month?",

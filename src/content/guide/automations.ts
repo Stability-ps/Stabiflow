@@ -25,7 +25,6 @@ export const automations: GuideChapter = {
           { label: "Enable", detail: "Switch it on." },
           { label: "Run history", detail: "See every time it ran." },
         ] },
-        { type: "screenshot", shot: { src: "automations.webp", alt: "Automations list with triggers and statuses" } },
       ],
     },
     {
@@ -40,7 +39,6 @@ export const automations: GuideChapter = {
           { title: "Then - add actions", detail: "Add at least one action and fill in its settings." },
           { title: "Save and enable", detail: "Save the automation, then enable it from the list." },
         ] },
-        { type: "screenshot", shot: { src: "automation-builder.webp", alt: "Automation builder with When, If and Then sections" } },
       ],
     },
     {
@@ -101,7 +99,8 @@ export const automations: GuideChapter = {
       id: "plans",
       title: "Plans and run allowances",
       blocks: [
-        { type: "p", text: "Automations are part of the Growth plan. Each plan includes a monthly number of automation runs; check Billing & plans for your allowance. On other plans, the Automations page shows \"Automations are a Growth feature\" with a link to plans." },
+        { type: "p", text: "Automations are part of the Growth plan and also need an active StabiFlow subscription. Each plan includes a monthly number of automation runs; check Billing & plans for your allowance. Without access, the page shows \"Automations are a Growth feature\" or \"Unlock Automations\" with a View plans button." },
+        { type: "screenshot", shot: { src: "automations.webp", alt: "Unlock Automations screen with a View plans button", caption: "What you see when your workspace has no subscription that includes Automations." } },
         { type: "p", text: "Owners, admins and managers can create, edit, enable and delete automations. Other roles can view automations and their run history." },
       ],
     },

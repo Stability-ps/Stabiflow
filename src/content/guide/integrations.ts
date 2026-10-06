@@ -19,7 +19,7 @@ export const integrations: GuideChapter = {
       blocks: [
         { type: "table", head: ["Integration", "Lets you", "Status"], rows: [
           ["Meta", "Publish posts to Facebook Pages and Instagram, run ad campaigns and track advertising performance.", "Available"],
-          ["WhatsApp Business", "Receive and reply to customer conversations in Messages.", "Available"],
+          ["WhatsApp Business Platform", "Receive and reply to customer conversations in Messages, with AI-assisted replies and approved-template messaging outside the 24-hour window.", "Available"],
           ["Google Ads", "-", "Coming later"],
           ["TikTok", "-", "Coming later"],
         ] },

@@ -20,7 +20,7 @@ export const messages: GuideChapter = {
         { type: "p", text: "Messages connects your WhatsApp Business number to StabiFlow so your whole team can see and answer customer conversations from one shared inbox - on a computer or a phone. Conversations can be handled by AI and automations, by people, or a mix of both, and every chat can become a lead and then a customer." },
         { type: "p", text: "Messages has four tabs - Inbox, Contacts, Templates and Intake - and a settings button (the gear icon) for WhatsApp Settings." },
         { type: "callout", tone: "important", text: "Messages needs WhatsApp Business connected in Integrations. Until then, the page shows Connect WhatsApp Business." },
-        { type: "screenshot", shot: { src: "whatsapp-inbox.webp", alt: "Messages Inbox with conversation list, quick views and filters" } },
+        { type: "screenshot", shot: { src: "whatsapp-inbox.webp", alt: "Messages showing Connect WhatsApp Business, before a WhatsApp number is connected", caption: "Before WhatsApp Business is connected, every Messages tab shows this. Connect it to unlock the inbox, contacts, templates and intake." } },
       ],
     },
     {
@@ -113,7 +113,6 @@ export const messages: GuideChapter = {
       keywords: ["contact list", "phone numbers"],
       blocks: [
         { type: "p", text: "Contacts lists everyone who has messaged your WhatsApp number, created automatically from your conversations. Search by name or number. A Lead badge shows contacts that already have a lead." },
-        { type: "screenshot", shot: { src: "whatsapp-contacts.webp", alt: "WhatsApp contacts list with search" } },
       ],
     },
     {
@@ -122,7 +121,6 @@ export const messages: GuideChapter = {
       keywords: ["meta templates", "approved", "pending", "rejected", "stabiflow library", "starter templates", "variables", "{{1}}", "favourites", "saved", "use this template", "utility", "marketing", "industries"],
       blocks: [
         { type: "p", text: "WhatsApp templates are pre-approved message formats. You need one to message a customer outside the 24-hour window, and automations use them to send messages. The Templates tab has two parts: My Meta templates and the StabiFlow Library." },
-        { type: "screenshot", shot: { src: "whatsapp-templates-meta.webp", alt: "My Meta templates list with status badges and filters" } },
       ],
     },
     {
@@ -163,8 +161,6 @@ export const messages: GuideChapter = {
         ] },
         { type: "callout", tone: "warning", title: "Library templates are not pre-approved", text: "StabiFlow Library templates are starting points. They are NOT automatically approved by Meta and can't be sent to customers until you submit them in Meta and Meta approves them." },
         { type: "callout", tone: "note", text: "The library opens from the Templates tab once at least one template has been synced from Meta. If you see \"No templates synced yet\", connect WhatsApp and refresh first." },
-        { type: "screenshot", shot: { src: "whatsapp-template-library.webp", alt: "StabiFlow Library with industry and category filters" } },
-        { type: "screenshot", shot: { src: "whatsapp-template-preview.webp", alt: "Library template preview with variable fields and Use this template button" } },
       ],
     },
     {
@@ -180,7 +176,6 @@ export const messages: GuideChapter = {
           { title: "Choose a set per number", detail: "Each WhatsApp number can use the workspace default or a specific question set." },
         ] },
         { type: "callout", tone: "tip", text: "Intake is optional. Without a schema, Messages keeps working normally." },
-        { type: "screenshot", shot: { src: "whatsapp-intake.webp", alt: "Intake tab showing question sets and fields" } },
       ],
     },
     {
@@ -204,7 +199,6 @@ export const messages: GuideChapter = {
           ["Inbox AI", "Let AI read customer attachments, transcribe voice notes, match the customer's language, and (owner only) set a monthly Inbox AI usage limit."],
         ] },
         { type: "callout", tone: "note", text: "Only workspace owners and admins can change these settings." },
-        { type: "screenshot", shot: { src: "whatsapp-settings.webp", alt: "Message settings with Connection, Inbox & SLA, Business hours and Inbox AI areas" } },
       ],
     },
     {

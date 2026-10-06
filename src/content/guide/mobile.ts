@@ -33,7 +33,7 @@ export const mobile: GuideChapter = {
       id: "business-hub",
       title: "The Business hub",
       blocks: [
-        { type: "p", text: "The Business tab brings your business tools together: Your business (Business Studio, My Business, Documents), Profile details (Company, About, Services & products, Brand assets, Team, Projects & case studies, Certifications & registrations) and Create (Company profile PDF and, where available, Content). It also shows your profile completeness." },
+        { type: "p", text: "The Business tab shows your profile completeness and a Scan & complete profile shortcut, then brings your business tools together: Your business (Business Studio, My Business, Documents), Profile details (Company, About, Services & products, Brand assets, Team, Projects & case studies, Certifications & registrations) and Create (Company profile PDF and, where available, Content). Each profile detail shows whether it is To do, In progress or done." },
         { type: "screenshot", shot: { src: "mobile-business-hub.webp", alt: "Business hub on a phone", mobile: true } },
       ],
     },

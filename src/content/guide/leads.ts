@@ -25,7 +25,7 @@ export const leads: GuideChapter = {
           { label: "Won", detail: "The sale happens." },
           { label: "Customer", detail: "StabiFlow creates the customer record.", chapter: "customers" },
         ] },
-        { type: "screenshot", shot: { src: "leads.webp", alt: "Leads board with pipeline stages and lead cards" } },
+        { type: "screenshot", shot: { src: "leads.webp", alt: "Leads board with New, Qualified, Proposal and Won columns and sample lead cards", caption: "The Board view. Each card shows the source and the lead reference." } },
       ],
     },
     {
@@ -96,7 +96,7 @@ export const leads: GuideChapter = {
       title: "Pipeline settings",
       keywords: ["stages", "default pipeline", "rename stage", "reorder"],
       blocks: [
-        { type: "p", text: "Every workspace starts with a default pipeline. Open Pipeline settings to rename it, create more pipelines (for example Sales and Service), set the default, and add, rename or reorder stages. Managers and above can change pipelines." },
+        { type: "p", text: "Every workspace starts with a default pipeline with New, Qualified, Proposal and Won stages. Choose Pipelines (top right of Leads) to open Pipeline settings, where you can rename it, create more pipelines (for example Sales and Service), set the default, and add, rename or reorder stages. Managers and above can change pipelines." },
       ],
     },
     {

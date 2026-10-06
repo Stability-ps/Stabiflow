@@ -27,7 +27,7 @@ export const creativeStudio: GuideChapter = {
       title: "1. Choose your brand",
       keywords: ["brand profile", "brand kit", "logo", "colours", "default cta", "disclaimer"],
       blocks: [
-        { type: "p", text: "At the top, select the brand to use. The active brand is shown with the note \"New adverts use this brand's saved identity and contact details.\" You can create or edit brands here, in My Business > Brand, or in Settings > Workspace > Brand Kit." },
+        { type: "p", text: "Under Brand / Company, choose the brand to use (or Edit it, or create a New brand). The active brand is shown with the note \"New adverts use this brand's saved identity and contact details.\" You can create or edit brands here, in My Business > Brand, or in Settings > Workspace > Brand Kit." },
         { type: "table", head: ["Brand field", "Used for"], rows: [
           ["Brand name and company name", "The brand's label and the company name on adverts."],
           ["Logo", "Placed on every advert."],
@@ -58,10 +58,10 @@ export const creativeStudio: GuideChapter = {
       title: "3. Generate your ads",
       blocks: [
         { type: "p", text: "Choose Generate Ads. StabiFlow creates the concepts, generates background visuals and renders finished adverts. Progress messages tell you how many succeeded; if a visual fails, you can retry just the failed ones." },
-        { type: "table", head: ["Size", "Best for"], rows: [
-          ["1080 x 1080 (square)", "Facebook and Instagram feeds."],
-          ["1080 x 1350 (portrait)", "Instagram feed - takes up more of the screen."],
-          ["1080 x 1920 (tall)", "Stories and full-screen placements."],
+        { type: "table", head: ["Format", "Size", "Best for"], rows: [
+          ["Square 1:1 (feed)", "1080 x 1080", "Facebook and Instagram feeds."],
+          ["Portrait 4:5 (feed)", "1080 x 1350", "Instagram feed - takes up more of the screen."],
+          ["Story / Reel 9:16", "1080 x 1920", "Stories, Reels and full-screen placements."],
         ] },
       ],
     },
