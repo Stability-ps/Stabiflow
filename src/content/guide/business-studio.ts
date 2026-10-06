@@ -49,6 +49,7 @@ export const businessStudio: GuideChapter = {
           ["Existing profile", "You already have a profile in Word or PDF.", "Paste its text (at least a few sentences) and choose Read my profile. This uses 1 AI credit."],
         ] },
         { type: "callout", tone: "note", title: "No website?", text: "Business Studio works perfectly well without one. Choose Start from scratch and enter your details - you can always scan a website later." },
+        { type: "callout", tone: "important", title: "Plans", text: "Scanning a website, reading an existing profile and AI wording are included with the Business and Growth plans (with a monthly allowance of scans and AI credits). On Free and the once-off Professional Profile these buttons are locked with a See plans link - you can still enter your details yourself and preview your profile." },
       ],
     },
     {
@@ -128,7 +129,7 @@ export const businessStudio: GuideChapter = {
       id: "permissions",
       title: "Who can use it",
       blocks: [
-        { type: "p", text: "Business Studio is available on every plan. Only workspace owners and admins can build or change the profile; other roles can view the preview. Buying the Professional Profile requires billing permission (the owner)." },
+        { type: "p", text: "Business Studio is available on every plan; the website scan, existing-profile reading and AI wording need the Business or Growth plan. Only workspace owners and admins can build or change the profile; other roles can view the preview. Buying the Professional Profile requires billing permission (the owner)." },
       ],
     },
     {
@@ -144,7 +145,7 @@ export const businessStudio: GuideChapter = {
           },
           {
             symptom: "I can't click Scan, Read or Suggest",
-            causes: ["You are not a workspace owner or admin.", "Your AI allowance for the period is used up."],
+            causes: ["Your plan doesn't include these tools (Free or Professional Profile).", "You are not a workspace owner or admin.", "Your scan or AI allowance for the month is used up."],
             check: ["Look for the message \"Only workspace owners and admins can build the company profile\".", "Check Billing & plans for your allowance."],
             fix: ["Ask the owner to give you the Admin role, or to make the changes.", "Upgrade for more allowance."],
           },

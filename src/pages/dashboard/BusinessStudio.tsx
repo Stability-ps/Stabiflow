@@ -39,6 +39,11 @@ export default function BusinessStudio() {
   const pending = useQuery({ queryKey: ["fact-proposals", ws], queryFn: () => fetchPendingProposals(ws as string), enabled: !!ws });
   const preview = useQuery({ queryKey: ["bs-preview", ws, step], queryFn: () => fetchPreview(ws as string), enabled: !!ws && step >= 4 });
   const catalog = useQuery({ queryKey: ["billing-catalog"], queryFn: fetchCatalog, enabled: step >= 5, staleTime: 5 * 60_000 });
+  // Website scanning, reading an existing profile and AI wording need a
+  // subscription (the server's "full" access). Say so up front instead of
+  // letting the click fail.
+  const access = useQuery({ queryKey: ["bs-access", ws], queryFn: async () => (await fetchPreview(ws as string)).accessMode, enabled: !!ws, staleTime: 60_000 });
+  const toolsLocked = !!access.data && access.data !== "full";
 
   const completeness = useMemo(() => (identity.data ? computeCompleteness(identity.data) : null), [identity.data]);
   const refreshAll = () => {
@@ -48,6 +53,7 @@ export default function BusinessStudio() {
   const handleError = (e: Error) => {
     toast.error(e.message);
     if (e instanceof BusinessStudioError && e.code === "limit_reached") toast.info("See Billing for plans with more allowance.");
+    if (e instanceof BusinessStudioError && e.code === "upgrade_required") toast.info("See Billing & plans to upgrade.");
   };
   const draftValue = (key: string, fallback: unknown) => studioDraft[key] ?? (typeof fallback === "string" ? fallback : "");
   const saveStudioDetails = useMutation({
@@ -150,7 +156,13 @@ export default function BusinessStudio() {
             <CardTitle className="text-base">How would you like to start?</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="website">
+            {toolsLocked && (
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950" role="note">
+                Website scanning, reading an existing profile and AI wording are included with the Business and Growth plans. You can still enter your details yourself and preview your profile.{" "}
+                <Link to="/app/billing" className="font-medium underline underline-offset-4">See plans</Link>
+              </p>
+            )}
+            <Tabs defaultValue={toolsLocked ? "scratch" : "website"} key={toolsLocked ? "locked" : "open"}>
               <TabsList className="h-auto flex-wrap">
                 <TabsTrigger value="website"><Globe className="mr-1 h-4 w-4" /> From my website</TabsTrigger>
                 <TabsTrigger value="scratch"><PenLine className="mr-1 h-4 w-4" /> Start from scratch</TabsTrigger>
@@ -159,8 +171,8 @@ export default function BusinessStudio() {
               <TabsContent value="website" className="space-y-3 pt-4">
                 <Label htmlFor="bs-url">Your website address</Label>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input id="bs-url" inputMode="url" placeholder="www.yourbusiness.co.za" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && url.trim() && canEdit && scanMutation.mutate()} />
-                  <Button onClick={() => scanMutation.mutate()} disabled={!url.trim() || !canEdit || scanMutation.isPending}>
+                  <Input id="bs-url" inputMode="url" placeholder="www.yourbusiness.co.za" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && url.trim() && canEdit && !toolsLocked && scanMutation.mutate()} />
+                  <Button onClick={() => scanMutation.mutate()} disabled={!url.trim() || !canEdit || toolsLocked || scanMutation.isPending}>
                     {scanMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Globe className="mr-2 h-4 w-4" />}
                     {scanMutation.isPending ? "Reading your website..." : "Scan my website"}
                   </Button>
@@ -175,7 +187,7 @@ export default function BusinessStudio() {
               <TabsContent value="upload" className="space-y-3 pt-4">
                 <Label htmlFor="bs-paste">Paste the text of your existing company profile</Label>
                 <Textarea id="bs-paste" rows={8} value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Copy the text from your current profile (Word or PDF) and paste it here." />
-                <Button onClick={() => pasteMutation.mutate()} disabled={pasted.trim().length < 80 || !canEdit || pasteMutation.isPending}>
+                <Button onClick={() => pasteMutation.mutate()} disabled={pasted.trim().length < 80 || !canEdit || toolsLocked || pasteMutation.isPending}>
                   {pasteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Read my profile
                 </Button>
                 <p className="text-xs text-muted-foreground">Uses 1 AI credit. Every detail we find is quoted from your text for you to check.</p>
@@ -275,10 +287,10 @@ export default function BusinessStudio() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => wordingMutation.mutate()} disabled={!canEdit || wordingMutation.isPending}>
+              <Button onClick={() => wordingMutation.mutate()} disabled={!canEdit || toolsLocked || wordingMutation.isPending}>
                 {wordingMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Suggest better wording
               </Button>
-              <span className="text-xs text-muted-foreground">Uses 1 AI credit</span>
+              <span className="text-xs text-muted-foreground">{toolsLocked ? <>Included with the Business and Growth plans. <Link to="/app/billing" className="underline underline-offset-4">See plans</Link></> : "Uses 1 AI credit"}</span>
             </div>
             <ProposalReview workspaceId={ws} canEdit={canEdit} origins={["ai_wording"]} emptyText="No wording suggestions waiting." />
             <div className="flex justify-between">

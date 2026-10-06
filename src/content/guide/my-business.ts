@@ -37,6 +37,7 @@ export const myBusiness: GuideChapter = {
       blocks: [
         { type: "p", text: "Complete with AI scans your website (if you've entered one) for industry, contact details, locations, services, social links and other supported facts, then drafts your About wording. Everything appears as suggestions under the button for you to Accept, Correct or mark Not correct." },
         { type: "callout", tone: "note", text: "Facts added by a scan or AI show a small badge with their source until you confirm them, so you always know where a detail came from." },
+        { type: "callout", tone: "important", text: "Complete with AI is included with the Business and Growth plans. On other plans the button is locked with a See plans link, and you can fill in every section yourself." },
       ],
     },
     {

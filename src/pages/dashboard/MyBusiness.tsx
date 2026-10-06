@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Building2, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
@@ -19,7 +20,7 @@ import {
   setBusinessSectionPreference, type BusinessIdentity, type BusinessIdentityBundle,
 } from "@/lib/businessIdentity";
 import type { BrandProfile } from "@/lib/brandProfiles";
-import { draftProfile, scanWebsite } from "@/lib/businessStudio";
+import { draftProfile, fetchPreview, scanWebsite } from "@/lib/businessStudio";
 
 const EMPLOYEE_RANGES = ["1", "2-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
@@ -97,6 +98,9 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const [openSection, setOpenSection] = useState<string | null>("company");
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
+  // Same rule as Business Studio: AI scanning/drafting needs a subscription.
+  const access = useQuery({ queryKey: ["bs-access", currentWorkspaceId], queryFn: async () => (await fetchPreview(currentWorkspaceId)).accessMode, staleTime: 60_000 });
+  const aiLocked = !!access.data && access.data !== "full";
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
 
   const identity = bundle.identity;
@@ -256,10 +260,16 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
             <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4" /> Complete with AI</CardTitle>
             <CardDescription className="mt-1">StabiFlow scans your website for industry, contact details, locations, services, social links and other supported facts, then drafts the About wording. Review everything before it is added.</CardDescription>
           </div>
-          {canEdit && <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting}>
+          {canEdit && <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting || aiLocked}>
             {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Complete with AI
           </Button>}
         </CardHeader>
+        {aiLocked && (
+          <p className="border-b bg-amber-50/70 px-6 py-3 text-sm text-amber-950" role="note">
+            Complete with AI is included with the Business and Growth plans. You can still fill in every section yourself.{" "}
+            <Link to="/app/billing" className="font-medium underline underline-offset-4">See plans</Link>
+          </p>
+        )}
         <CardContent className="pt-5">
           <ProposalReview workspaceId={currentWorkspaceId} canEdit={canEdit} emptyText="No suggestions need your review right now. Complete with AI to scan your website and prepare any missing profile details." />
         </CardContent>
