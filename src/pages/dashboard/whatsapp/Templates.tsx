@@ -36,6 +36,7 @@ export default function WhatsAppTemplates() {
   const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(1);
   const [selectedLibraryTemplateId, setSelectedLibraryTemplateId] = useState<string | null>(null);
+  const [selectedMetaTemplateId, setSelectedMetaTemplateId] = useState<string | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
 
@@ -45,6 +46,7 @@ export default function WhatsAppTemplates() {
   );
   const [industry, setIndustry] = useState("ALL");
   const selectedLibraryTemplate = useMemo(() => (library || []).find((t) => t.id === selectedLibraryTemplateId) || null, [library, selectedLibraryTemplateId]);
+  const selectedMetaTemplate = useMemo(() => (templates || []).find((t) => t.id === selectedMetaTemplateId) || null, [templates, selectedMetaTemplateId]);
   const filteredLibrary = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return (library || []).filter((t) => {
@@ -289,24 +291,61 @@ export default function WhatsAppTemplates() {
               <th scope="col" className="px-4 py-2 font-medium">Category</th>
               <th scope="col" className="px-4 py-2 font-medium">Status</th>
               <th scope="col" className="px-4 py-2 font-medium">Body</th>
+              <th scope="col" className="px-4 py-2 font-medium"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
             {visible.map((t) => (
-              <tr key={t.id} className="border-b last:border-b-0">
-                <td className="px-4 py-2.5 font-medium"><span className="block max-w-[280px] truncate" title={t.name}>{t.name}</span></td>
+              <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30">
+                <td className="px-4 py-2.5 font-medium">
+                  <button type="button" className="block max-w-[280px] truncate text-left hover:underline" title={t.name} onClick={() => setSelectedMetaTemplateId(t.id)}>{t.name}</button>
+                </td>
                 <td className="px-4 py-2.5 text-muted-foreground">{t.language}</td>
                 <td className="px-4 py-2.5 text-muted-foreground">{t.category || "—"}</td>
                 <td className="px-4 py-2.5"><Badge variant={statusTone(t.provider_status)}>{t.provider_status}</Badge></td>
                 <td className="max-w-md px-4 py-2.5 text-muted-foreground"><span className="line-clamp-2">{whatsappTemplateBody(t)}</span></td>
+                <td className="px-4 py-2.5 text-right"><Button variant="ghost" size="sm" onClick={() => setSelectedMetaTemplateId(t.id)}>Preview</Button></td>
               </tr>
             ))}
             {visible.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No templates match these filters.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No templates match these filters.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <Dialog open={!!selectedMetaTemplate} onOpenChange={(open) => { if (!open) setSelectedMetaTemplateId(null); }}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          {selectedMetaTemplate && (
+            <>
+              <DialogHeader>
+                <div className="flex flex-wrap items-center gap-2">
+                  <DialogTitle>{selectedMetaTemplate.name}</DialogTitle>
+                  <Badge variant={statusTone(selectedMetaTemplate.provider_status)}>{selectedMetaTemplate.provider_status}</Badge>
+                </div>
+                <DialogDescription>
+                  {selectedMetaTemplate.language} · {selectedMetaTemplate.category || "Uncategorised"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-lg border bg-muted/20 p-4 text-sm leading-6 whitespace-pre-wrap">
+                {whatsappTemplateBody(selectedMetaTemplate)}
+              </div>
+              <DialogFooter>
+                <Button
+                  className="gap-1.5"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(whatsappTemplateBody(selectedMetaTemplate));
+                    toast.success("Template copied");
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy template
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {pageCount > 1 && (
         <div className="flex items-center justify-end gap-2">
