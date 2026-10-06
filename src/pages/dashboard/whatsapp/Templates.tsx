@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Copy, FileText, Library, Search, Sparkles, X } from "lucide-react";
+import { CheckCircle2, Copy, FileText, Heart, Library, Search, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/EmptyState";
 import { useInboxTemplates } from "@/hooks/useInboxTemplates";
 import { useWhatsAppTemplateLibrary } from "@/hooks/useWhatsAppTemplateLibrary";
+import { useWhatsAppTemplateFavorites } from "@/hooks/useWhatsAppTemplateFavorites";
 import { filterWhatsAppTemplates, whatsappTemplateBody } from "@/pages/dashboard/whatsapp/templateFilters";
 import { useWhatsAppOutlet } from "@/pages/dashboard/whatsapp/whatsappOutlet";
 import { toast } from "sonner";
@@ -27,12 +28,15 @@ export default function WhatsAppTemplates() {
   const { workspaceId } = useWhatsAppOutlet();
   const { data: templates, isLoading } = useInboxTemplates(workspaceId);
   const { data: library, isLoading: libraryLoading } = useWhatsAppTemplateLibrary();
+  const { favorites, toggleFavorite } = useWhatsAppTemplateFavorites();
   const [source, setSource] = useState<"synced" | "library">("synced");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
   const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(1);
   const [selectedLibraryTemplateId, setSelectedLibraryTemplateId] = useState<string | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
 
   const libraryIndustries = useMemo(
     () => Array.from(new Set((library || []).map((t) => t.industry)).values()).sort(),
@@ -46,9 +50,10 @@ export default function WhatsAppTemplates() {
       const matchesQuery = !needle || [t.name, t.industry, t.use_case, t.body].some((value) => value.toLowerCase().includes(needle));
       const matchesCategory = category === "ALL" || t.category === category;
       const matchesIndustry = industry === "ALL" || t.industry === industry;
-      return matchesQuery && matchesCategory && matchesIndustry;
+      const matchesFavorite = !favoritesOnly || favorites.has(t.id);
+      return matchesQuery && matchesCategory && matchesIndustry && matchesFavorite;
     });
-  }, [library, query, category, industry]);
+  }, [library, query, category, industry, favoritesOnly, favorites]);
 
   const categories = useMemo(
     () => Array.from(new Set((templates || []).map((t) => t.category || "Uncategorised"))).sort(),
@@ -91,7 +96,9 @@ export default function WhatsAppTemplates() {
     const libraryPageCount = Math.max(1, Math.ceil(filteredLibrary.length / PAGE_SIZE));
     const librarySafePage = Math.min(page, libraryPageCount);
     const libraryVisible = filteredLibrary.slice((librarySafePage - 1) * PAGE_SIZE, librarySafePage * PAGE_SIZE);
-    const hasLibraryFilters = Boolean(query.trim()) || category !== "ALL" || industry !== "ALL";
+    const hasLibraryFilters = Boolean(query.trim()) || category !== "ALL" || industry !== "ALL" || favoritesOnly;
+    const selectedVariables = selectedLibraryTemplate && Array.isArray(selectedLibraryTemplate.variables) ? selectedLibraryTemplate.variables.filter((value): value is string => typeof value === "string") : [];
+    const customisedBody = selectedLibraryTemplate ? selectedVariables.reduce((body, variable, index) => body.replaceAll(`{{${index + 1}}}`, variableValues[variable]?.trim() || `{{${index + 1}}}`), selectedLibraryTemplate.body) : "";
 
     return (
       <div className="space-y-4">
@@ -116,17 +123,18 @@ export default function WhatsAppTemplates() {
             <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
               <option value="ALL">All categories</option><option value="UTILITY">UTILITY</option><option value="MARKETING">MARKETING</option>
             </select>
-            {hasLibraryFilters ? <Button variant="ghost" size="sm" className="h-10 gap-1.5" onClick={() => { setQuery(""); setIndustry("ALL"); setCategory("ALL"); setPage(1); }}><X className="h-4 w-4" />Clear</Button> : <div />}
+            <Button type="button" variant={favoritesOnly ? "secondary" : "outline"} size="sm" className="h-10 gap-1.5" onClick={() => { setFavoritesOnly((value) => !value); setPage(1); }}><Heart className={`h-4 w-4 ${favoritesOnly ? "fill-current" : ""}`} />Saved {favorites.size > 0 ? `(${favorites.size})` : ""}</Button>
+            {hasLibraryFilters ? <Button variant="ghost" size="sm" className="h-10 gap-1.5" onClick={() => { setQuery(""); setIndustry("ALL"); setCategory("ALL"); setFavoritesOnly(false); setPage(1); }}><X className="h-4 w-4" />Clear</Button> : <div />}
           </div>
           <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">{filteredLibrary.length.toLocaleString()} of {(library || []).length.toLocaleString()} templates</div>
         </div>
         <div className="overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-2">Template</th><th className="px-4 py-2">Industry</th><th className="px-4 py-2">Category</th><th className="px-4 py-2">Message</th><th className="px-4 py-2"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>{libraryVisible.map((t) => <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30"><td className="px-4 py-3 font-medium"><button type="button" className="text-left hover:underline" onClick={() => setSelectedLibraryTemplateId(t.id)}>{t.name}</button></td><td className="px-4 py-3 text-muted-foreground">{t.industry}</td><td className="px-4 py-3"><Badge variant="outline">{t.category}</Badge></td><td className="max-w-xl px-4 py-3 text-muted-foreground"><span className="line-clamp-2">{t.body}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="sm" onClick={() => setSelectedLibraryTemplateId(t.id)}>Preview</Button><Button variant="ghost" size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(t.body); toast.success("Template copied"); }}><Copy className="h-4 w-4" />Copy</Button></div></td></tr>)}</tbody>
+            <tbody>{libraryVisible.map((t) => <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30"><td className="px-4 py-3 font-medium"><button type="button" className="text-left hover:underline" onClick={() => setSelectedLibraryTemplateId(t.id)}>{t.name}</button></td><td className="px-4 py-3 text-muted-foreground">{t.industry}</td><td className="px-4 py-3"><Badge variant="outline">{t.category}</Badge></td><td className="max-w-xl px-4 py-3 text-muted-foreground"><span className="line-clamp-2">{t.body}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" aria-label={favorites.has(t.id) ? "Remove saved template" : "Save template"} onClick={async () => { await toggleFavorite(t.id); toast.success(favorites.has(t.id) ? "Removed from saved templates" : "Template saved"); }}><Heart className={`h-4 w-4 ${favorites.has(t.id) ? "fill-current" : ""}`} /></Button><Button variant="ghost" size="sm" onClick={() => { setSelectedLibraryTemplateId(t.id); setVariableValues({}); }}>Preview</Button><Button variant="ghost" size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(t.body); toast.success("Template copied"); }}><Copy className="h-4 w-4" />Copy</Button></div></td></tr>)}</tbody>
           </table>
         </div>
-        {selectedLibraryTemplate && <div className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{selectedLibraryTemplate.name}</p><Badge variant="outline">{selectedLibraryTemplate.category}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{selectedLibraryTemplate.industry} · {selectedLibraryTemplate.use_case.replaceAll("_", " ")}</p></div><Button variant="ghost" size="icon" onClick={() => setSelectedLibraryTemplateId(null)} aria-label="Close preview"><X className="h-4 w-4" /></Button></div><div className="mt-4 rounded-lg border bg-muted/20 p-4 text-sm leading-6">{selectedLibraryTemplate.body}</div><div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{Array.isArray(selectedLibraryTemplate.variables) ? selectedLibraryTemplate.variables.length : 0} variables · Meta approval required before template sending</p><Button size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(selectedLibraryTemplate.body); toast.success("Template copied — customise it before Meta submission"); }}><Copy className="h-4 w-4" />Use this template</Button></div></div>}
+        {selectedLibraryTemplate && <div className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><p className="font-semibold">{selectedLibraryTemplate.name}</p><Badge variant="outline">{selectedLibraryTemplate.category}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{selectedLibraryTemplate.industry} · {selectedLibraryTemplate.use_case.replaceAll("_", " ")}</p></div><Button variant="ghost" size="icon" onClick={() => setSelectedLibraryTemplateId(null)} aria-label="Close preview"><X className="h-4 w-4" /></Button></div><div className="mt-4 rounded-lg border bg-muted/20 p-4 text-sm leading-6">{customisedBody}</div>{selectedVariables.length > 0 && <div className="mt-4 grid gap-3 sm:grid-cols-2">{selectedVariables.map((variable, index) => <label key={variable} className="space-y-1.5"><span className="text-xs font-medium capitalize">{variable.replaceAll("_", " ")} <span className="text-muted-foreground">({{`{{${index + 1}}}`}})</span></span><Input value={variableValues[variable] || ""} onChange={(e) => setVariableValues((current) => ({ ...current, [variable]: e.target.value }))} placeholder={`Enter ${variable.replaceAll("_", " ")}`} /></label>)}</div>}<div className="mt-3 flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground">{selectedVariables.length} variables · Meta approval required before template sending</p><div className="flex gap-2"><Button variant="outline" size="sm" className="gap-1.5" onClick={async () => { await toggleFavorite(selectedLibraryTemplate.id); toast.success(favorites.has(selectedLibraryTemplate.id) ? "Removed from saved templates" : "Template saved"); }}><Heart className={`h-4 w-4 ${favorites.has(selectedLibraryTemplate.id) ? "fill-current" : ""}`} />{favorites.has(selectedLibraryTemplate.id) ? "Saved" : "Save"}</Button><Button size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(customisedBody); toast.success("Customised template copied"); }}><Copy className="h-4 w-4" />Use this template</Button></div></div></div>}
         {libraryPageCount > 1 && <div className="flex justify-end gap-2"><Button variant="outline" size="sm" disabled={librarySafePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Previous</Button><Button variant="outline" size="sm" disabled={librarySafePage >= libraryPageCount} onClick={() => setPage((p) => Math.min(libraryPageCount, p + 1))}>Next</Button></div>}
       </div>
     );
