@@ -3908,6 +3908,41 @@ export type Database = {
         }
         Relationships: []
       }
+      guide_article_feedback: {
+        Row: {
+          article_slug: string
+          created_at: string
+          helpful: boolean
+          updated_at: string
+          user_id: string
+          workspace_id: string | null
+        }
+        Insert: {
+          article_slug: string
+          created_at?: string
+          helpful: boolean
+          updated_at?: string
+          user_id: string
+          workspace_id?: string | null
+        }
+        Update: {
+          article_slug?: string
+          created_at?: string
+          helpful?: boolean
+          updated_at?: string
+          user_id?: string
+          workspace_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guide_article_feedback_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       hosted_profiles: {
         Row: {
           created_at: string
