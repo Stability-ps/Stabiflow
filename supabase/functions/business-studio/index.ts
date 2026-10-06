@@ -170,7 +170,7 @@ Deno.serve(async (req: Request) => {
         offerings: (offerings ?? []).map((o) => ({ name: o.name, description: o.description })),
       };
       if (!source.trading_name && !source.industry && !source.short_description && !source.long_description && source.offerings.length === 0) {
-        return json(req, { error: "Scan your website or add some business information first so AI has reliable source material." }, 400);
+        return json(req, { error: "Add your business name, industry, description or services first so AI has reliable source material. A website is optional." }, 400);
       }
       if (!(await consume(sb, workspaceId, "ai_credits"))) {
         return json(req, { error: "You've used all your AI credits for this month.", code: "limit_reached" }, 402);
