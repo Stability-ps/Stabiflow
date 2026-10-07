@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export type Pipeline = {
@@ -31,8 +31,8 @@ export function usePipelines(workspaceId: string | null) {
   });
 }
 
-export function usePipelineStages(workspaceId: string | null, pipelineId: string | null) {
-  return useQuery({
+function pipelineStagesQuery(workspaceId: string | null, pipelineId: string | null) {
+  return {
     queryKey: ["pipeline-stages", workspaceId, pipelineId],
     queryFn: async (): Promise<PipelineStage[]> => {
       const { data, error } = await supabase
@@ -45,7 +45,21 @@ export function usePipelineStages(workspaceId: string | null, pipelineId: string
       return data as PipelineStage[];
     },
     enabled: !!workspaceId && !!pipelineId,
-  });
+  };
+}
+
+export function usePipelineStages(workspaceId: string | null, pipelineId: string | null) {
+  return useQuery(pipelineStagesQuery(workspaceId, pipelineId));
+}
+
+/**
+ * Stages for every pipeline (one query per pipeline, sharing the exact
+ * cache entries usePipelineStages uses - no extra endpoint, no duplicate
+ * fetch when the board or detail already loaded them).
+ */
+export function useAllPipelineStages(workspaceId: string | null, pipelineIds: string[]): PipelineStage[] {
+  const results = useQueries({ queries: pipelineIds.map((id) => pipelineStagesQuery(workspaceId, id)) });
+  return results.flatMap((r) => r.data ?? []);
 }
 
 export type LeadRow = {
