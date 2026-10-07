@@ -12,7 +12,7 @@
 // injected by passing the already-classified outcome to the RPC - exactly
 // what the worker does after classifyOutboundFailure().
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 const ACTIONS_URL = `${SUPABASE_URL}/functions/v1/inbox-actions`;
@@ -177,7 +177,9 @@ describe("Phase 9 - WhatsApp outbound retry + dead-letter reliability", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("wa-retry");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     other = await createTestTenant("wa-retry-other");
+    await enableModules(other.workspaceId, "module.whatsapp");
     const setup = await seedWhatsAppSetup(ws.workspaceId);
     numberId = setup.id;
     integrationId = setup.integrationId;

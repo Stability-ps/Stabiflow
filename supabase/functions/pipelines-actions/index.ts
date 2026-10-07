@@ -6,6 +6,7 @@
 // is idempotent (races into the unique partial index on pipelines.is_default,
 // not a second default).
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 const VALID_ACTIONS = new Set([
   "ensure_default_pipeline",
@@ -46,6 +47,10 @@ Deno.serve(async (req: Request) => {
   const action = body.action;
   if (typeof workspaceId !== "string" || !workspaceId) return json(req, { error: "workspace_id is required" }, 400);
   if (typeof action !== "string" || !VALID_ACTIONS.has(action)) return json(req, { error: "Unknown action" }, 400);
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.leads");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const serviceSb = createServiceClient();
 

@@ -11,6 +11,7 @@
 // architecture is explicit that Inbox must share it too, not fork its own
 // audit trail.
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 import { cleanReply } from "../_shared/inbox/replyGuardrails.ts";
 import type { WhatsAppSendCredential, WhatsAppTemplateParameter } from "../_shared/inbox/whatsappSend.ts";
 import { isBlockedWhatsAppMockSend, resolveWhatsAppSendMockMode, REAL_WHATSAPP_PROVIDER } from "../_shared/inbox/whatsappSendProvider.ts";
@@ -193,6 +194,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, workspaceId, requiredPermission))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.whatsapp");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const serviceSb = createServiceClient();
 

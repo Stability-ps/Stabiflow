@@ -10,6 +10,7 @@
 // deactivation, or a delete that (via ON DELETE SET NULL / jsonb storage)
 // never erases a stored answer.
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 import { isIntakeFieldType } from "../_shared/inbox/intakeSchema.ts";
 
 const VALID_ACTIONS = new Set([
@@ -78,6 +79,10 @@ Deno.serve(async (req: Request) => {
 
   const needed = action === "list" ? "intake.view" : "intake.manage";
   if (!(await hasWorkspacePermission(callerSb, workspaceId, needed))) return json(req, { error: "Forbidden" }, 403);
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.whatsapp");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const serviceSb = createServiceClient();
 

@@ -17,6 +17,7 @@
 import { updateObjectStatus } from "../_shared/ad-providers/metaMarketingApi.ts";
 import { sanitizeAdErrorForStorage } from "../_shared/ad-providers/metaAdsErrorClassifier.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 
@@ -51,6 +52,14 @@ Deno.serve(async (req: Request) => {
 
   if (!(await hasWorkspacePermission(callerSb, campaign.workspace_id, "campaign.pause"))) {
     return json(req, { error: "Forbidden" }, 403);
+  }
+  // Pausing stays available after a downgrade so a live campaign can always
+  // be stopped; resuming (spend) needs the plan.
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  if (action === "resume") {
+    const moduleRefusal = await requireModule(callerSb, campaign.workspace_id, "module.campaigns");
+    if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
   }
 
   const serviceSb = createServiceClient();

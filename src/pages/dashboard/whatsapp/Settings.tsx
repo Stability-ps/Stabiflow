@@ -85,8 +85,9 @@ export default function WhatsAppSettings() {
     let cap: number | null = null;
     if (trimmed !== "") {
       const n = Math.trunc(Number(trimmed));
-      if (!Number.isFinite(n) || n < INBOX_AI_CAP_MIN || n > INBOX_AI_CAP_MAX) {
-        toast.error(`Enter a whole number between ${INBOX_AI_CAP_MIN} and ${INBOX_AI_CAP_MAX}, or leave blank for the platform default.`);
+      const max = inboxAiUsage?.planCap ?? INBOX_AI_CAP_MAX;
+      if (!Number.isFinite(n) || n < INBOX_AI_CAP_MIN || n > max) {
+        toast.error(`Enter a whole number between ${INBOX_AI_CAP_MIN} and ${max.toLocaleString()}, or leave blank to use your full plan limit.`);
         return;
       }
       cap = n;
@@ -95,7 +96,7 @@ export default function WhatsAppSettings() {
     try {
       await updateInboxAiCap(workspaceId, cap);
       await queryClient.invalidateQueries({ queryKey: ["inbox-ai-usage", workspaceId] });
-      toast.success(cap == null ? "Inbox AI limit set to the platform default" : "Inbox AI monthly limit saved");
+      toast.success(cap == null ? "Inbox AI limit set to your full plan limit" : "Inbox AI monthly limit saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Unable to save the Inbox AI limit");
     } finally {
@@ -431,8 +432,8 @@ export default function WhatsAppSettings() {
             <Input
               type="number"
               min={INBOX_AI_CAP_MIN}
-              max={INBOX_AI_CAP_MAX}
-              placeholder="Platform default"
+              max={inboxAiUsage?.planCap ?? INBOX_AI_CAP_MAX}
+              placeholder="Plan limit"
               value={capInput}
               disabled={!canManageBilling || savingCap}
               onChange={(e) => setCapInput(e.target.value)}
@@ -450,13 +451,15 @@ export default function WhatsAppSettings() {
               </Button>
             )}
           </div>
-          {inboxAiUsage?.overrideCap == null && (
-            <p className="text-xs text-muted-foreground">Currently using the platform default limit. Enter a number to set a workspace-specific limit; clear it to go back to the default.</p>
-          )}
-          {inboxAiUsage?.overrideCap != null && inboxAiUsage.usedThisMonth != null && (
+          {inboxAiUsage?.planCap != null && (
             <p className="text-xs text-muted-foreground">
-              Used this month: {inboxAiUsage.usedThisMonth.toLocaleString()} / {inboxAiUsage.overrideCap.toLocaleString()} tokens
-              {" "}({usagePercent(inboxAiUsage.usedThisMonth, inboxAiUsage.overrideCap)}%)
+              Your plan allows up to {inboxAiUsage.planCap.toLocaleString()} tokens a month. You can set a lower limit to control spend; clear it to use the full plan limit.
+            </p>
+          )}
+          {inboxAiUsage?.effectiveCap != null && inboxAiUsage.usedThisMonth != null && (
+            <p className="text-xs text-muted-foreground">
+              Used this month: {inboxAiUsage.usedThisMonth.toLocaleString()} / {inboxAiUsage.effectiveCap.toLocaleString()} tokens
+              {" "}({usagePercent(inboxAiUsage.usedThisMonth, inboxAiUsage.effectiveCap)}%)
             </p>
           )}
           {!canManageBilling && <p className="text-xs text-muted-foreground">Only the workspace owner can change AI usage limits.</p>}

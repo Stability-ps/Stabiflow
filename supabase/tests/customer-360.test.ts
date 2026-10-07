@@ -5,7 +5,7 @@
 // webhook here always exercises the (mock-token) send-failure path, and
 // none of the Customer 360 surface sends anything.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, getTestEnv, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, getTestEnv, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 import { seedLead, seedOpportunity, seedPipeline } from "./leadsHelpers";
 
@@ -52,7 +52,9 @@ describe("Phase 4 - Customer linking + Customer 360", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("cust360");
+    await enableModules(ws.workspaceId, "module.whatsapp", "module.customers", "module.leads");
     other = await createTestTenant("cust360-other");
+    await enableModules(other.workspaceId, "module.whatsapp", "module.customers", "module.leads");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     numberId = num.id;
     phoneNumberId = num.phone_number_id;

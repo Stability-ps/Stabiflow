@@ -9,7 +9,7 @@
 // every workspace createTestTenant() produces already has one, which is
 // exactly what that file proves end to end.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedPipeline } from "./leadsHelpers";
 
 const ACTIONS_URL = `${SUPABASE_URL}/functions/v1/pipelines-actions`;
@@ -26,7 +26,9 @@ describe("Pipeline configuration actions (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("pipelines-actions");
+    await enableModules(workspace.workspaceId, "module.leads");
     otherWorkspace = await createTestTenant("pipelines-actions-other");
+    await enableModules(otherWorkspace.workspaceId, "module.leads");
     const { data: session } = await workspace.client.auth.getSession();
     ownerToken = session.session!.access_token;
   });

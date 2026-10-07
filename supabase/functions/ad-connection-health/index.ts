@@ -13,6 +13,7 @@ import { checkAdAccountHealth, checkPageHealth, checkInstagramAccountHealth, che
 import { sanitizeAdErrorForStorage } from "../_shared/ad-providers/metaAdsErrorClassifier.ts";
 import type { AdErrorCategory } from "../_shared/ad-providers/types.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
@@ -51,6 +52,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, workspaceId, "campaign.view"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.campaigns");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const serviceSb: AnySupabaseClient = createServiceClient();
   const nowIso = new Date().toISOString();

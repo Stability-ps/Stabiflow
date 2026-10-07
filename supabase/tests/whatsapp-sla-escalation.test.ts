@@ -7,7 +7,7 @@
 // provider, or mutates a conversation. Every scenario below asserts that
 // no outbound inbox_messages row appears as a side effect.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedWhatsAppSetup, seedInboxConversation } from "./inboxHelpers";
 import { computeSlaState } from "../functions/_shared/inbox/slaState.ts";
 
@@ -107,7 +107,9 @@ describe("Phase 5 - WhatsApp handoff SLA + overdue escalation", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("sla");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     other = await createTestTenant("sla-other");
+    await enableModules(other.workspaceId, "module.whatsapp");
     numberId = (await seedWhatsAppSetup(ws.workspaceId)).id;
     otherNumberId = (await seedWhatsAppSetup(other.workspaceId)).id;
     ownerToken = (await ws.client.auth.getSession()).data.session!.access_token;

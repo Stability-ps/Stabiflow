@@ -237,19 +237,24 @@ describe("Phase 7 - Inbox AI cost governance", () => {
 
   // --- set_workspace_inbox_ai_cap RPC ---------------------------
 
-  it("set_workspace_inbox_ai_cap: owner can set / clear; sibling limits keys survive", async () => {
+  it("set_workspace_inbox_ai_cap: owner can set / clear a lower cap; billing limits are never written", async () => {
+    // 20261026060000: the workspace's own cap lives in workspace_settings and
+    // can only lower the plan/platform cap (500000 for this plan).
     await admin.from("workspace_billing").update({ limits: { flow_ai_monthly_token_limit: 777 } }).eq("workspace_id", ws.workspaceId);
     const { data: setRes, error: setErr } = await ws.client.rpc("set_workspace_inbox_ai_cap", { p_workspace_id: ws.workspaceId, p_cap: 250000 });
     expect(setErr).toBeNull();
     expect(Number(setRes)).toBe(250000);
+    const { data: settings } = await admin.from("workspace_settings").select("inbox_ai_monthly_token_self_cap").eq("workspace_id", ws.workspaceId).single();
+    expect(Number(settings!.inbox_ai_monthly_token_self_cap)).toBe(250000);
     let { data: b } = await admin.from("workspace_billing").select("limits").eq("workspace_id", ws.workspaceId).single();
-    expect((b!.limits as Record<string, unknown>).whatsapp_inbox_ai_monthly_token_limit).toBe(250000);
+    expect("whatsapp_inbox_ai_monthly_token_limit" in (b!.limits as Record<string, unknown>)).toBe(false);
     expect((b!.limits as Record<string, unknown>).flow_ai_monthly_token_limit).toBe(777); // untouched
 
     const { data: clrRes } = await ws.client.rpc("set_workspace_inbox_ai_cap", { p_workspace_id: ws.workspaceId });
     expect(clrRes).toBeNull();
+    const { data: cleared } = await admin.from("workspace_settings").select("inbox_ai_monthly_token_self_cap").eq("workspace_id", ws.workspaceId).single();
+    expect(cleared!.inbox_ai_monthly_token_self_cap).toBeNull();
     ({ data: b } = await admin.from("workspace_billing").select("limits").eq("workspace_id", ws.workspaceId).single());
-    expect("whatsapp_inbox_ai_monthly_token_limit" in (b!.limits as Record<string, unknown>)).toBe(false);
     expect((b!.limits as Record<string, unknown>).flow_ai_monthly_token_limit).toBe(777);
   });
 
@@ -259,6 +264,8 @@ describe("Phase 7 - Inbox AI cost governance", () => {
     const { error: zero } = await ws.client.rpc("set_workspace_inbox_ai_cap", { p_workspace_id: ws.workspaceId, p_cap: 0 });
     expect(zero).toBeTruthy();
 
+    // A Free test workspace has one seat; allow a second for this role check.
+    await admin.from("workspace_entitlement_overrides").upsert({ workspace_id: ws.workspaceId, entitlement_key: "team_seats", limit_value: 5, reason: "cost governance test" }, { onConflict: "workspace_id,entitlement_key" });
     const marketing = await createTestUser("aicost-mkt");
     await seedMembership(ws.workspaceId, marketing.userId, "marketing");
     const { error: forbidden } = await marketing.client.rpc("set_workspace_inbox_ai_cap", { p_workspace_id: ws.workspaceId, p_cap: 123 });

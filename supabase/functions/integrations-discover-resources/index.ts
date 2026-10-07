@@ -7,6 +7,7 @@ import { sanitizeIntegrationError } from "../_shared/integration-providers/metaG
 import { subscribeWhatsAppWebhooks } from "../_shared/integration-providers/whatsappWebhookSubscription.ts";
 import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json, optionalEnvVar } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -38,6 +39,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, workspaceId, "integration.manage"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.integrations");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const serviceSb = createServiceClient();
   const { data: integration } = await serviceSb.from("workspace_integrations").select("id, status").eq("workspace_id", workspaceId).eq("provider", provider).maybeSingle();

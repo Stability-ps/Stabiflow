@@ -18,6 +18,7 @@
 // columns and is the only thing the renderer draws, an AI image is never
 // authoritative for a headline / price / CTA / contact / disclaimer.
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 import { CONTENT_MEDIA_BUCKET } from "../_shared/contentPublishExecution.ts";
 import { readPngDimensions, registerContentMediaAsset } from "../_shared/creativeStudio/mediaAssets.ts";
@@ -74,6 +75,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, workspaceId, "content.create"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.creative_studio");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 
