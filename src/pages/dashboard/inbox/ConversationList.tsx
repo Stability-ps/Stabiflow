@@ -104,8 +104,8 @@ export function ConversationList({
   if (filters.unreadOnly) chips.push({ key: "unread", label: "Unread", clear: () => set({ unreadOnly: false }) });
 
   return (
-    <div className="flex h-full flex-col border-r">
-      <div className="space-y-2 border-b p-3">
+    <div className="flex h-full min-h-0 flex-col border-r bg-card">
+      <div className="shrink-0 space-y-2 border-b bg-card p-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -200,7 +200,7 @@ export function ConversationList({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto" role="list" aria-label="WhatsApp conversations">
+      <div className="min-h-0 flex-1 overflow-y-auto" role="list" aria-label="WhatsApp conversations">
         {conversations.length === 0 ? (
           filtersActive ? (
             <EmptyState
@@ -230,7 +230,7 @@ export function ConversationList({
                   onClick={() => onSelect(c.id)}
                   aria-current={selectedId === c.id ? "true" : undefined}
                   aria-label={`Conversation with ${name}${unread ? ", unread" : ""}, ${inboxStatusLabel(c.inbox_status)}`}
-                  className={`flex w-full items-start gap-3 border-b p-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selectedId === c.id ? "bg-muted" : ""}`}
+                  className={`flex w-full items-start gap-3 border-b px-3 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selectedId === c.id ? "bg-primary/5 shadow-[inset_3px_0_0_hsl(var(--primary))]" : ""}`}
                 >
                   <Avatar className="h-9 w-9 shrink-0">
                     <AvatarFallback className="text-xs">{(c.display_name || c.wa_id).slice(0, 2).toUpperCase()}</AvatarFallback>
