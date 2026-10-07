@@ -56,7 +56,7 @@ export function MobileMoreSheet({ open, onOpenChange, items, lockedItems = [] }:
           </ul>
           {lockedItems.length > 0 ? (
             <div className="mt-3 border-t px-1 pt-3">
-              <p className="px-1 pb-1 text-overline uppercase text-subtle-foreground">Not in your plan</p>
+              <p className="px-1 pb-1 text-overline uppercase text-muted-foreground">Not in your plan</p>
               <ul className="grid grid-cols-3 gap-1">
                 {lockedItems.map((item) => {
                   const info = MODULE_LOCK_INFO[NAV_FLAG_BY_PATH[item.path]];
@@ -72,7 +72,7 @@ export function MobileMoreSheet({ open, onOpenChange, items, lockedItems = [] }:
                       >
                         <item.icon className="h-5 w-5 text-locked" aria-hidden="true" />
                         <span className="line-clamp-2 leading-tight">{item.label}</span>
-                        <Lock className="absolute right-2 top-2 h-3 w-3 text-locked" aria-hidden="true" />
+                        <Lock className="absolute right-2 top-2 h-3 w-3 text-muted-foreground" aria-hidden="true" />
                       </Link>
                     </li>
                   );

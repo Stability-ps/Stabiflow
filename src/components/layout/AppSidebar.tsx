@@ -47,7 +47,7 @@ function LockedRow({ item, pathname }: { item: NavItem; pathname: string }) {
         asChild
         isActive={active}
         tooltip={`${item.label} - locked. ${explanation}`}
-        className={`${ITEM} [&>svg:first-child]:text-locked`}
+        className={`${ITEM} relative [&>svg:first-child]:text-locked`}
       >
         <Link
           to={item.path}
@@ -58,7 +58,7 @@ function LockedRow({ item, pathname }: { item: NavItem; pathname: string }) {
         >
           <item.icon aria-hidden="true" />
           <span className="flex-1">{item.label}</span>
-          <Lock className="!size-3.5 shrink-0 text-locked" aria-hidden="true" />
+          <Lock className="!size-3.5 shrink-0 text-sidebar-foreground group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:bottom-0.5 group-data-[collapsible=icon]:right-0.5 group-data-[collapsible=icon]:!size-2.5 group-data-[collapsible=icon]:rounded-sm group-data-[collapsible=icon]:bg-sidebar" aria-hidden="true" data-testid="lock-indicator" />
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
@@ -119,8 +119,8 @@ export function AppSidebar({ items = NAV_ITEMS, lockedItems = [] }: { items?: Na
             if (rows.length === 0) return null;
             const labelId = `sidebar-section-${section.key}`;
             return (
-              <SidebarGroup key={section.key} className="px-0 py-0.5" role="group" aria-labelledby={labelId}>
-                <SidebarGroupLabel id={labelId} className="h-7 px-2 pt-1.5 text-overline uppercase text-subtle-foreground">
+              <SidebarGroup key={section.key} className="px-0 py-0.5 group-data-[collapsible=icon]:mt-1 group-data-[collapsible=icon]:border-t group-data-[collapsible=icon]:border-sidebar-border group-data-[collapsible=icon]:pt-1" role="group" aria-labelledby={labelId}>
+                <SidebarGroupLabel id={labelId} className="h-7 px-2 pt-1.5 text-overline uppercase text-sidebar-foreground">
                   {section.label}
                 </SidebarGroupLabel>
                 <SidebarGroupContent>

@@ -110,7 +110,7 @@ export function CommandMenu({ items, lockedItems, canOpenAdmin }: { items: NavIt
                   const showGroup = i === 0 || results[i - 1].group !== d.group;
                   return (
                     <li key={d.key} role="presentation">
-                      {showGroup ? <p className="px-2.5 pb-1 pt-2 text-overline uppercase text-subtle-foreground">{d.group}</p> : null}
+                      {showGroup ? <p className="px-2.5 pb-1 pt-2 text-overline uppercase text-muted-foreground">{d.group}</p> : null}
                       <div
                         id={`${listId}-${i}`}
                         role="option"

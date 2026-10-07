@@ -20,6 +20,9 @@ describe("Metric five-state model", () => {
     renderMetric({ kind: "zero" });
     expect(screen.getByText("0")).toBeInTheDocument();
     expect(screen.getByText(/Measured/)).toBeInTheDocument();
+    // A zero must never read as missing data.
+    expect(screen.queryByText(/no data|nothing recorded|not connected/i)).not.toBeInTheDocument();
+    expect(document.querySelector("[data-metric-state]")).toHaveAttribute("data-metric-state", "zero");
   });
 
   it("no_data: never renders a 0", () => {

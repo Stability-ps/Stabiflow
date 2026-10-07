@@ -38,7 +38,7 @@ export function WorkspaceSwitcher() {
               <span className="grid min-w-0 flex-1 text-left leading-tight">
                 <span className="truncate text-label font-semibold text-foreground" title={workspaceName}>{workspaceName}</span>
                 <span
-                  className={cn("truncate text-xs", plan.status === "unavailable" ? "text-subtle-foreground" : "text-muted-foreground")}
+                  className={cn("truncate text-xs text-muted-foreground", plan.status === "unavailable" && "italic")}
                   data-plan-status={plan.status}
                 >
                   {planLabel}

@@ -29,7 +29,7 @@ export function Metric({ label, state, icon, to, className }: {
     <>
       <div className="flex items-center gap-2">
         <p className="min-w-0 flex-1 truncate text-label text-muted-foreground">{label}</p>
-        {state.kind === "locked" ? <Lock className="h-3.5 w-3.5 shrink-0 text-locked" aria-hidden="true" /> : icon}
+        {state.kind === "locked" ? <Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /> : icon}
       </div>
       <MetricValue state={state} />
       <MetricNote state={state} />
@@ -57,7 +57,7 @@ function MetricValue({ state }: { state: MetricState }) {
       return <p className="text-metric tabular-nums text-foreground">{state.value ?? "0"}</p>;
     case "no_data":
       return (
-        <p className="text-metric text-subtle-foreground">
+        <p className="text-metric text-muted-foreground">
           <span aria-hidden="true">—</span>
           <span className="sr-only">No data</span>
         </p>
@@ -72,7 +72,7 @@ function MetricValue({ state }: { state: MetricState }) {
 function MetricNote({ state }: { state: MetricState }) {
   const fallback: Record<MetricState["kind"], string> = {
     value: "",
-    zero: "Measured - nothing recorded yet",
+    zero: "Measured this period",
     no_data: "No data for this period",
     not_connected: "",
     locked: "Not included in your current plan",

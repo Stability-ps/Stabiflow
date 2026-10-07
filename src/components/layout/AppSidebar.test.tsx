@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { NAV_ITEMS, NAV_SECTIONS, type NavItem } from "@/lib/navigation";
 import { AppSidebar } from "./AppSidebar";
 
@@ -210,10 +210,44 @@ describe("AppSidebar collapsed, search and staff links", () => {
     expect(screen.getByTestId("workspace-switcher")).toBeInTheDocument();
   });
 
+  it("keeps plan-locked modules identifiable on the collapsed rail (lock badge + locked name)", () => {
+    renderSidebar("/app", { collapsed: true, items: NAV_ITEMS.filter((i) => i.label !== "Flow AI"), lockedItems: [byLabel("Flow AI")] });
+    const locked = screen.getByRole("link", { name: /Flow AI \(locked\)/ });
+    expect(within(locked).getByTestId("lock-indicator")).toBeInTheDocument();
+  });
+
   it("restores the last collapsed/expanded choice from the sidebar cookie", () => {
     document.cookie = "sidebar:state=false; path=/";
     renderSidebar("/app");
     expect(document.querySelector('[data-state="collapsed"]')).not.toBeNull();
+  });
+
+  it("persists the toggle: collapsing writes the sidebar cookie and the next load starts collapsed", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = () => (
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={["/app"]}>
+          <SidebarProvider><SidebarTrigger /><AppSidebar /></SidebarProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    render(tree());
+    const trigger = screen.getByRole("button", { name: "Collapse sidebar" });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(trigger);
+    expect(document.cookie).toMatch(/sidebar:state=false/);
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveAttribute("aria-expanded", "false");
+    cleanup();
+    render(tree());
+    expect(document.querySelector('[data-state="collapsed"]')).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }));
+    expect(document.cookie).toMatch(/sidebar:state=true/);
+  });
+
+  it("collapsed rows show their label as a tooltip on keyboard focus", async () => {
+    renderSidebar("/app", { collapsed: true });
+    fireEvent.focus(screen.getByRole("link", { name: "Leads" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Leads");
   });
 
   it("opens 'Search or jump to…' and navigates by keyboard", () => {
