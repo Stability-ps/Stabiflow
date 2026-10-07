@@ -635,7 +635,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         )}
       </div>
 
-      <div className="shrink-0 border-b bg-muted/15 px-3 py-2">
+      <div className="shrink-0 border-b bg-muted/10 px-4 py-2">
         <AttributionSourceSummary workspaceId={workspaceId} targetType="conversation" targetId={conversation.id} compact fallbackLabel="Direct WhatsApp - no ad referral." />
       </div>
 
@@ -715,7 +715,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       )}
 
       {canManage && (
-        <div className="shrink-0 border-b bg-muted/20 px-3 py-2">
+        <div className="shrink-0 border-b bg-muted/10 px-3 py-2">
           <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             {conversation.ai_enabled ? <Bot className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
             {aiStatusText}
@@ -808,7 +808,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         </div>
       )}
 
-      <div className="min-h-[12rem] flex-1 space-y-3 overflow-y-auto bg-background/35 p-4">
+      <div className="min-h-[14rem] flex-1 space-y-3 overflow-y-auto bg-background/25 p-4">
         {messagesLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : !messages?.length ? (
@@ -850,7 +850,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       )}
 
       {canManage && (
-        <div className="shrink-0 space-y-2 border-t bg-card p-3">
+        <div className="shrink-0 space-y-2 border-t bg-card px-3 py-2.5">
           {windowOpen ? (
             <div className="flex gap-2">
               <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a reply..." className="min-h-[60px]" maxLength={1000} />
