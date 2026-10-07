@@ -17,7 +17,7 @@
 // before OpenAI is ever reached, or calls a plain Postgres RPC directly.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 
 async function tokenFor(client: SupabaseClient): Promise<string> {
   const { data } = await client.auth.getSession();
@@ -42,7 +42,9 @@ describe("Flow AI (Phase I, release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("flow-ai");
+    await enableModules(workspace.workspaceId, "module.flow_ai");
     otherWorkspace = await createTestTenant("flow-ai-other");
+    await enableModules(otherWorkspace.workspaceId, "module.flow_ai");
 
     const viewerUser = await createTestUser("flow-ai-viewer");
     await seedMembership(workspace.workspaceId, viewerUser.userId, "viewer");
@@ -196,6 +198,7 @@ describe("Flow AI (Phase I, release blocker)", () => {
 
     it("blocks with a 429 once the workspace's monthly token quota is exceeded, and never mentions the OpenAI key", async () => {
       const quotaWorkspace = await createTestTenant("flow-ai-quota");
+      await enableModules(quotaWorkspace.workspaceId, "module.flow_ai");
       try {
         await admin.from("workspace_billing").update({ limits: { flow_ai_monthly_token_limit: 100 } }).eq("workspace_id", quotaWorkspace.workspaceId);
         await admin.from("ai_usage_events").insert({ workspace_id: quotaWorkspace.workspaceId, model: "gpt-4o-mini", status: "success", input_tokens: 60, output_tokens: 60 });
@@ -211,6 +214,7 @@ describe("Flow AI (Phase I, release blocker)", () => {
 
     it("the platform-wide emergency ceiling blocks an UNRELATED workspace's request without leaking any usage number", async () => {
       const platformTestWorkspace = await createTestTenant("flow-ai-platform-ceiling");
+      await enableModules(platformTestWorkspace.workspaceId, "module.flow_ai");
       const priorEvent = { workspace_id: platformTestWorkspace.workspaceId, model: "gpt-4o-mini", status: "success" as const, input_tokens: 3_000_000, output_tokens: 0 };
       try {
         // One oversized row is enough to push the platform-wide daily total

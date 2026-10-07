@@ -77,6 +77,18 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Forbidden" }, 403);
   }
 
+  // Plan/feature access is authoritative server-side, not just the route
+  // FeatureGate (same evaluator as the UI). Checked before any allowance is
+  // charged or provider called.
+  const { data: creativeStudioEnabled, error: featureError } = await callerSb.rpc("is_feature_enabled", {
+    p_workspace_id: workspaceId,
+    p_flag_key: "module.creative_studio",
+  });
+  if (featureError) return json(req, { error: "Forbidden" }, 403);
+  if (creativeStudioEnabled !== true) {
+    return json(req, { error: "Creative Studio is part of the Growth plan. Upgrade in Billing & plans to use it.", code: "MODULE_NOT_IN_PLAN" }, 403);
+  }
+
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 
@@ -218,7 +230,7 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     console.error("creative-studio-concepts: generation failed", err instanceof Error ? err.message : err);
     await refundGeneration();
-    return json(req, { error: "Unable to generate visual concepts right now. Try again shortly No generation was used." }, 502);
+    return json(req, { error: "Unable to generate visual concepts right now. Try again shortly. No generation was used." }, 502);
   }
 
   const { data: batch, error: batchErr } = await callerSb
