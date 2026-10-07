@@ -74,10 +74,10 @@ export default function WhatsAppLayout() {
   };
 
   return (
-    <div className="mx-auto max-w-[1600px] space-y-4">
-      <div className="flex items-start justify-between gap-3 rounded-3xl border border-emerald-100/80 bg-gradient-to-br from-white via-white to-emerald-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(155_45%_35%/0.24)] sm:p-6">
+    <div className="operational-page space-y-3">
+      <div className="operational-header">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Customer conversations</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Messages</h1>
+          <p className="operational-section-label">Customer conversations</p><h1 className="operational-title">Messages</h1>
           <p className="hidden text-sm text-muted-foreground sm:block">Conversations, contacts, templates and intake for your connected WhatsApp Business number.</p>
         </div>
         {canManageIntegration && (
@@ -101,7 +101,7 @@ export default function WhatsAppLayout() {
         </div>
       ) : null}
 
-      <nav aria-label="WhatsApp sections" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
+      <nav aria-label="WhatsApp sections" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-border/70 bg-card p-1">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}
