@@ -11,7 +11,7 @@ export const analytics: GuideChapter = {
   appPath: "/app/analytics",
   updated: GUIDE_UPDATED,
   related: ["campaigns", "customers", "flow-ai"],
-  keywords: ["reports", "kpi", "funnel", "conversion", "roas", "cost per lead", "attribution", "first touch", "last touch", "revenue", "date range", "lead sources"],
+  keywords: ["reports", "kpi", "funnel", "conversion", "roas", "cost per lead", "attribution", "first touch", "last touch", "revenue", "date range", "lead sources", "creator", "creator campaign", "influencer", "ugc", "videos", "tiktok", "instagram", "youtube", "cpm", "cpi", "cac", "rpm"],
   sections: [
     {
       id: "overview",
@@ -64,6 +64,35 @@ export const analytics: GuideChapter = {
       id: "campaigns",
       title: "Campaign and creative performance",
       blocks: [{ type: "p", text: "Tables compare campaigns and creatives by spend, results, conversions and revenue under the selected attribution model. Use them to decide where to put more budget." }],
+    },
+    {
+      id: "creator-campaigns",
+      title: "Creator Campaigns",
+      keywords: ["creator", "creator campaign", "influencer", "ugc", "paid creator", "videos", "tiktok", "instagram", "youtube", "cpm", "cpi", "cac", "rpm", "roas"],
+      blocks: [
+        { type: "p", text: "Creator Campaigns measures paid creator or UGC deals separately from advertising. Open Analytics → Creator campaigns to see which creators are actually producing installs, paying customers and revenue - not just views." },
+        { type: "callout", tone: "tip", text: "Creator spend is not ad spend. If you pay a creator a fixed fee for a package of videos, enter that amount as the creator fee. Meta or other media spend remains advertising spend elsewhere in Analytics." },
+        { type: "table", head: ["Step", "What to do"], rows: [
+          ["1. Create the deal", "Choose New creator campaign. Enter the campaign name, creator, platform, creator fee, currency and number of videos contracted."],
+          ["2. Record delivery", "Each time a contracted video is published, choose Add delivered video and add its post link and latest performance."],
+          ["3. Add outcomes", "Record views, impressions, clicks, installs, leads, paying customers and revenue when those figures are available."],
+          ["4. Review the funnel", "Compare views → installs → paid customers and check delivery progress, for example 17/30 videos."],
+          ["5. Decide what to repeat", "Use acquisition cost and return metrics to compare creators and decide who is worth hiring again."],
+        ] },
+        { type: "p", text: "Example: you pay a creator $900 for 30 videos. Together the videos produce 600,000 views, 1,200 installs, 120 paying customers and $2,400 revenue. StabiFlow calculates $30 per contracted video, $1.50 CPM, $0.75 CPI, $7.50 CAC, $4.00 RPM and 2.67× revenue-to-creator-spend return." },
+        { type: "table", head: ["Metric", "Meaning"], rows: [
+          ["Cost / video", "Creator fee ÷ number of videos contracted."],
+          ["CPM", "Creator fee ÷ views × 1,000. The effective cost of 1,000 creator views."],
+          ["CPI", "Creator fee ÷ installs. The creator cost for each attributed install."],
+          ["CAC", "Creator fee ÷ paying customers. The creator acquisition cost per paying customer."],
+          ["RPM", "Revenue ÷ views × 1,000. Revenue generated per 1,000 creator views."],
+          ["Return", "Revenue ÷ creator fee. For example, 2.67× means $2.67 of recorded revenue for each $1 paid to the creator."],
+          ["View → install", "Installs ÷ views. Shows how effectively views become installs."],
+          ["Install → paid", "Paying customers ÷ installs. Shows how effectively installs become paying customers."],
+        ] },
+        { type: "callout", tone: "tip", text: "A creator with fewer views can still be the better investment if their CPI, CAC and revenue return are stronger. Do not rank creators on views alone." },
+        { type: "p", text: "Performance can be entered manually today. Where supported platform integrations are connected, synced metrics can update the same creator-post records; provider APIs may refresh periodically rather than second-by-second." },
+      ],
     },
     {
       id: "crm",
