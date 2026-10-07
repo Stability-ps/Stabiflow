@@ -232,9 +232,9 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.25)] sm:p-6">
+      <div className="operational-header">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business identity</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">My Business</h1>
+        <h1 className="operational-title">My Business</h1>
         <p className="text-sm text-muted-foreground">Keep your business facts in one place. StabiFlow uses these details for your profile, documents and marketing.</p>
       </div>
 
