@@ -1,4 +1,4 @@
-import { assertEquals, assertMatch } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertMatch } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { buildFlowAiSystemPrompt } from "./systemPrompt.ts";
 
 const FIXED_NOW = new Date("2026-08-27T12:00:00.000Z");
@@ -44,4 +44,11 @@ Deno.test("buildFlowAiSystemPrompt does not reuse WhatsApp AI's own customer-fac
   // OTHER system's actual instruction phrasing would not be.
   assertEquals(prompt.includes("helping customers on WhatsApp"), false);
   assertEquals(prompt.includes("no personal human name"), false);
+});
+
+Deno.test("buildFlowAiSystemPrompt tells the model not to add unrequested filters, to count from list results and not to repeat identical calls", () => {
+  const p = buildFlowAiSystemPrompt("Acme", new Date("2026-10-07T00:00:00Z"));
+  assert(p.includes("Only pass the filters the person actually asked for"));
+  assert(p.includes("the number of rows IS the total"));
+  assert(p.includes("Never repeat a tool call with the same arguments"));
 });
