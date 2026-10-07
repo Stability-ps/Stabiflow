@@ -6699,6 +6699,7 @@ export type Database = {
           ad_footer_disclaimer: string | null
           ai_multimodal_enabled: boolean
           ai_voice_transcription_enabled: boolean
+          inbox_ai_monthly_token_self_cap: number | null
           brand_accent_color: string | null
           brand_cta_text_color: string | null
           brand_primary_color: string | null
@@ -6730,6 +6731,7 @@ export type Database = {
           ad_footer_disclaimer?: string | null
           ai_multimodal_enabled?: boolean
           ai_voice_transcription_enabled?: boolean
+          inbox_ai_monthly_token_self_cap?: number | null
           brand_accent_color?: string | null
           brand_cta_text_color?: string | null
           brand_primary_color?: string | null
@@ -6761,6 +6763,7 @@ export type Database = {
           ad_footer_disclaimer?: string | null
           ai_multimodal_enabled?: boolean
           ai_voice_transcription_enabled?: boolean
+          inbox_ai_monthly_token_self_cap?: number | null
           brand_accent_color?: string | null
           brand_cta_text_color?: string | null
           brand_primary_color?: string | null
@@ -7627,6 +7630,14 @@ export type Database = {
           became_qualified: number
           conversations_started: number
           staff_reply_count: number
+        }[]
+      }
+      get_workspace_inbox_ai_cap: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          effective_cap: number
+          plan_cap: number
+          self_cap: number
         }[]
       }
       get_whatsapp_operational_analytics: {
