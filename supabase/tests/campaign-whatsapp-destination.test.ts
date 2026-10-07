@@ -14,7 +14,7 @@
 // Treat the payload shape as documented-but-unverified against a live
 // Meta ad account, exactly like the error classifier's own disclosure.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedFacebookPage, seedMediaAsset, seedWorkspaceIntegration, uploadRealTestObject } from "./contentHelpers";
 import { seedAdCampaign, seedAdCreative, seedMetaAdAccount } from "./campaignHelpers";
 
@@ -49,7 +49,9 @@ describe("Click-to-WhatsApp campaign destination (release blocker)", () => {
 
   beforeAll(async () => {
     workspaceA = await createTestTenant("wa-destination-a");
+    await enableModules(workspaceA.workspaceId, "module.campaigns");
     workspaceB = await createTestTenant("wa-destination-b");
+    await enableModules(workspaceB.workspaceId, "module.campaigns");
 
     integrationId = await seedWorkspaceIntegration(workspaceA.workspaceId);
     await admin.rpc("set_workspace_integration_secret", { p_integration_id: integrationId, p_secret: "mock-meta-token-not-a-real-credential" });

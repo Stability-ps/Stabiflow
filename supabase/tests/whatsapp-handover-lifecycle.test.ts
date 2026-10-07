@@ -14,7 +14,7 @@
 // reply is generated and sends fail-and-record; "AI may reply" is asserted
 // through the shared aiMayReply() gate the webhook itself uses.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, ANON_KEY, cleanupTenant, createTestTenant, getTestEnv, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, ANON_KEY, cleanupTenant, createTestTenant, getTestEnv, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedWhatsAppSetup } from "./inboxHelpers";
 import { aiMayReply, handoverState } from "../functions/_shared/inbox/handoverState";
 
@@ -74,7 +74,9 @@ let number: { id: string; phone_number_id: string };
 
 beforeAll(async () => {
   tenant = await createTestTenant("wa-handover");
+  await enableModules(tenant.workspaceId, "module.whatsapp");
   other = await createTestTenant("wa-handover-other");
+  await enableModules(other.workspaceId, "module.whatsapp");
   number = await seedWhatsAppSetup(tenant.workspaceId, { phone_number_id: `phone-handover-${Date.now()}` });
   const { data: n } = await admin.from("workspace_whatsapp_numbers").select("integration_id").eq("id", number.id).single();
   await admin.rpc("set_workspace_integration_secret", { p_integration_id: n!.integration_id, p_secret: "mock-whatsapp-token-not-a-real-credential" });
@@ -222,11 +224,12 @@ describe("pause, close and isolation", () => {
 
 describe("agent assist", () => {
   it("is refused without a plan that includes WhatsApp, and never sends anything", async () => {
+    await admin.from("feature_flag_workspace_targets").delete().eq("flag_key", "module.whatsapp").eq("workspace_id", tenant.workspaceId);
     const c = await conversationFor(number.id);
     const before = await outboundCount(c.id);
     const res = await inboxAction(tenant, { action: "assist", conversation_id: c.id, mode: "suggest_reply" });
     expect(res.status).toBe(403);
-    expect(res.body).toMatchObject({ upgrade_required: true });
+    expect(res.body).toMatchObject({ code: "MODULE_NOT_IN_PLAN" });
     expect(await outboundCount(c.id)).toBe(before);
   });
 

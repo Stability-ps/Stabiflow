@@ -4,7 +4,7 @@
 // discover-resources re-runs discovery using the already-stored (mock)
 // token and never flips is_active on an already-known resource.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedFacebookPage } from "./contentHelpers";
 import { seedWorkspaceIntegration } from "./integrationHelpers";
 
@@ -40,6 +40,7 @@ describe("Integrations disconnect (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("integrations-disconnect");
+    await enableModules(workspace.workspaceId, "module.integrations");
     integrationId = await seedWorkspaceIntegration(workspace.workspaceId);
     await admin.rpc("set_workspace_integration_secret", { p_integration_id: integrationId, p_secret: "token-to-be-cleared" });
     pageId = await seedFacebookPage(workspace.workspaceId, integrationId, { page_name: "Historical Page" });
@@ -86,6 +87,7 @@ describe("Integrations manual resource refresh (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("integrations-discover");
+    await enableModules(workspace.workspaceId, "module.integrations");
     integrationId = await seedWorkspaceIntegration(workspace.workspaceId);
     await admin.rpc("set_workspace_integration_secret", { p_integration_id: integrationId, p_secret: "mock-refresh-token" });
     // Pre-select one of the mock pages as ACTIVE, simulating an admin's

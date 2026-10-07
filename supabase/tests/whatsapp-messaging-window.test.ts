@@ -10,7 +10,7 @@
 // not the security boundary" is the whole point of these tests existing
 // as edge-function-level tests, not UI tests.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 const ACTIONS_URL = `${SUPABASE_URL}/functions/v1/inbox-actions`;
@@ -57,7 +57,9 @@ describe("WhatsApp 24-hour messaging window + templates (Phase L-1, release bloc
 
   beforeAll(async () => {
     workspace = await createTestTenant("wa-window");
+    await enableModules(workspace.workspaceId, "module.whatsapp");
     otherWorkspace = await createTestTenant("wa-window-other");
+    await enableModules(otherWorkspace.workspaceId, "module.whatsapp");
 
     const number = await seedWhatsAppSetup(workspace.workspaceId);
     numberId = number.id;
