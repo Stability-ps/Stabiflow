@@ -26,6 +26,11 @@ type Spec = {
   canDelete: boolean;
   // Column + value for a no-op update when the table has no workspace_id.
   noopUpdate?: (row: Row) => Row;
+  // Rows only the server may create (20261025070000): with the module on, a
+  // client insert is still refused, by this message.
+  serverOnlyInsert?: RegExp;
+  // Same for updates (workspace_integrations is never edited by clients).
+  serverOnlyUpdate?: RegExp;
 };
 
 type Fixture = { ws: string; userId: string; ids: Record<string, string> };
@@ -39,6 +44,8 @@ const AUTOMATIONS = /Automations are part of the Growth plan/;
 const WHATSAPP = /WhatsApp is part of the Growth plan/;
 const INTEGRATIONS = /Integrations are part of the Growth plan/;
 const FLOW_AI = /Flow AI is part of the Growth plan/;
+const SERVER_ONLY = /Accounts are connected from the Integrations page/;
+const TOGGLE_ONLY = /Only the on\/off setting of a connected account can be changed here/;
 
 const uniq = () => randomUUID().slice(0, 8);
 const PLATFORMS = ["facebook", "instagram", "linkedin"];
@@ -107,15 +114,15 @@ const SPECS: Spec[] = [
     build: (f) => ({ workspace_id: f.ws, day_of_week: (dayCursor++ % 7) + 1, is_open: false }) },
   // Deleting the integration itself is refused by its foreign keys (numbers,
   // pages, ad accounts), not by the plan trigger, so only insert/update here.
-  { table: "workspace_integrations", flag: "module.integrations", message: INTEGRATIONS, canInsert: false, canUpdate: true, canDelete: false,
+  { table: "workspace_integrations", flag: "module.integrations", message: INTEGRATIONS, serverOnlyUpdate: TOGGLE_ONLY, canInsert: false, canUpdate: true, canDelete: false,
     build: (f) => ({ workspace_id: f.ws, provider: "meta" }) },
-  { table: "workspace_whatsapp_numbers", flag: "module.integrations", message: INTEGRATIONS, canInsert: true, canUpdate: true, canDelete: true,
+  { table: "workspace_whatsapp_numbers", flag: "module.integrations", message: INTEGRATIONS, serverOnlyInsert: SERVER_ONLY, canInsert: true, canUpdate: true, canDelete: true,
     build: (f) => ({ workspace_id: f.ws, integration_id: f.ids.waIntegration, phone_number_id: `gate-${uniq()}` }) },
-  { table: "workspace_facebook_pages", flag: "module.integrations", message: INTEGRATIONS, canInsert: true, canUpdate: true, canDelete: true,
+  { table: "workspace_facebook_pages", flag: "module.integrations", message: INTEGRATIONS, serverOnlyInsert: SERVER_ONLY, canInsert: true, canUpdate: true, canDelete: true,
     build: (f) => ({ workspace_id: f.ws, integration_id: f.ids.metaIntegration, page_id: `gate-${uniq()}`, page_name: "Gate" }) },
-  { table: "workspace_instagram_accounts", flag: "module.integrations", message: INTEGRATIONS, canInsert: true, canUpdate: true, canDelete: true,
+  { table: "workspace_instagram_accounts", flag: "module.integrations", message: INTEGRATIONS, serverOnlyInsert: SERVER_ONLY, canInsert: true, canUpdate: true, canDelete: true,
     build: (f) => ({ workspace_id: f.ws, integration_id: f.ids.metaIntegration, ig_business_account_id: `gate-${uniq()}` }) },
-  { table: "workspace_meta_ad_accounts", flag: "module.integrations", message: INTEGRATIONS, canInsert: true, canUpdate: true, canDelete: true,
+  { table: "workspace_meta_ad_accounts", flag: "module.integrations", message: INTEGRATIONS, serverOnlyInsert: SERVER_ONLY, canInsert: true, canUpdate: true, canDelete: true,
     build: (f) => ({ workspace_id: f.ws, integration_id: f.ids.metaIntegration, ad_account_id: `gate-${uniq()}` }) },
   { table: "ai_conversations", flag: "module.flow_ai", message: FLOW_AI, canInsert: true, canUpdate: true, canDelete: false,
     build: (f) => ({ workspace_id: f.ws, created_by: f.userId }) },
@@ -217,12 +224,20 @@ describe("module-owned tables follow the plan for direct writes", () => {
       // Module ON: the same writes succeed.
       await setModules(true, spec.flag);
       let inserted: Row | null = null;
-      if (spec.canInsert) {
+      if (spec.canInsert && spec.serverOnlyInsert) {
+        const { error } = await tenant.client.from(spec.table).insert(spec.build(fixture));
+        expect(error?.code, `${spec.table} client insert while on`).toBe("42501");
+        expect(error?.message).toMatch(spec.serverOnlyInsert);
+      } else if (spec.canInsert) {
         const { data, error } = await tenant.client.from(spec.table).insert(spec.build(fixture)).select("*").single();
         expect(error, `${spec.table} insert while on`).toBeNull();
         inserted = data as Row;
       }
-      if (spec.canUpdate) {
+      if (spec.canUpdate && spec.serverOnlyUpdate) {
+        const { error } = await matchKey(tenant.client.from(spec.table).update(noop), key);
+        expect(error?.code, `${spec.table} client update while on`).toBe("42501");
+        expect(error?.message).toMatch(spec.serverOnlyUpdate);
+      } else if (spec.canUpdate) {
         const { data, error } = await matchKey(tenant.client.from(spec.table).update(noop), key).select("*");
         expect(error, `${spec.table} update while on`).toBeNull();
         expect((data ?? []).length).toBe(1);

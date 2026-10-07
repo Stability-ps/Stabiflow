@@ -80,8 +80,13 @@ describe("Integrations tenant isolation (release blocker)", () => {
   it("workspace A (owner) CAN read and manage its OWN integration (sanity check - RLS isn't blocking everyone)", async () => {
     const { data: readBack } = await workspaceA.client.from("workspace_integrations").select("id").eq("id", integrationAId).single();
     expect(readBack?.id).toBe(integrationAId);
-    const { data: updated } = await workspaceA.client.from("workspace_integrations").update({ status: "disconnected" }).eq("id", integrationAId).select("id");
-    expect(updated).toHaveLength(1);
+    // The integration row itself is server-managed (20261025070000): a direct
+    // status edit reaches the row (RLS lets the owner see it - otherwise it
+    // would silently match nothing) and is then refused by the guard. The
+    // app disconnects through integrations-disconnect instead.
+    const { error } = await workspaceA.client.from("workspace_integrations").update({ status: "disconnected" }).eq("id", integrationAId);
+    expect(error?.code).toBe("42501");
+    expect(error?.message).toMatch(/Only the on\/off setting of a connected account can be changed here/);
   });
 
   describe("workspace-consistency triggers (instruction #21/#22)", () => {
