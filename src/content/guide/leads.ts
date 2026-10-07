@@ -46,7 +46,7 @@ export const leads: GuideChapter = {
       keywords: ["new lead", "duplicate", "phone"],
       blocks: [
         { type: "steps", steps: [
-          { title: "Choose New lead", detail: "On the Leads page." },
+          { title: "Choose Add lead", detail: "On the Leads page." },
           { title: "Enter what you know", detail: "Contact name is required; phone, email and company are optional and can be added later." },
           { title: "Handle duplicates", detail: "If a lead with the same phone number already exists, StabiFlow shows it. Open the existing lead, or choose Create new anyway." },
         ] },

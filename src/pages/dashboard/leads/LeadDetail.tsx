@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Archive, ArchiveRestore, Mail, MessageCircle, Phone, Trophy, XCircle } from "lucide-react";
+import { Archive, ArchiveRestore, CheckCircle2, Clock, Mail, MessageCircle, Phone, Trophy, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,18 +24,8 @@ import { Paperclip } from "lucide-react";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
 import { RevenueSection } from "@/components/attribution/RevenueSection";
 import { CustomerDetail } from "@/pages/dashboard/leads/CustomerDetail";
-
-const LEAD_STATUS_TONE: Record<string, string> = {
-  active: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  converted: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  lost: "bg-muted text-muted-foreground",
-};
-
-const OPPORTUNITY_STATUS_TONE: Record<string, string> = {
-  open: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  won: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  lost: "bg-muted text-muted-foreground",
-};
+import { StatusPill } from "@/components/ui/status-pill";
+import { followUpState, sourceLabel } from "@/lib/leadsWorkspace";
 
 // Phase 2: documents the customer sent on WhatsApp, linked to the lead at
 // conversion. Metadata comes from the RLS-scoped lead_attachments rows;
@@ -64,7 +53,7 @@ function LeadDocuments({ workspaceId, leadId, canView }: { workspaceId: string; 
 
   return (
     <section className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">Documents ({attachments.length})</p>
+      <h3 className="text-overline uppercase text-muted-foreground">Documents ({attachments.length})</h3>
       <div className="space-y-1.5">
         {attachments.map((a) => {
           const size = formatBytes(a.media_size_bytes);
@@ -143,8 +132,8 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
 
   if (!lead) {
     return (
-      <SheetContent className="w-full sm:max-w-xl">
-        <SheetHeader><SheetTitle>Loading...</SheetTitle></SheetHeader>
+      <SheetContent className="w-full sm:max-w-2xl">
+        <SheetHeader><SheetTitle>Loading lead…</SheetTitle><SheetDescription className="sr-only">Loading lead details</SheetDescription></SheetHeader>
       </SheetContent>
     );
   }
@@ -337,200 +326,189 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
     }
   };
 
+  const now = new Date();
+  const fu = followUpState(lead, now);
+  const assignedName = lead.assigned_to ? (members || []).find((m) => m.user_id === lead.assigned_to)?.profile?.full_name || "Former member" : null;
+  const stageName = lead.pipeline_stage_id ? (stages || []).find((s) => s.id === lead.pipeline_stage_id)?.name ?? null : null;
+  const intake = intakeRows(lead.intake);
+  const valueLabel = lead.estimated_value != null && Number(lead.estimated_value) > 0 ? `R ${Number(lead.estimated_value).toLocaleString("en-ZA", { maximumFractionDigits: 0 })}` : null;
+  const section = "space-y-3 border-b border-border px-4 py-4 sm:px-6";
+  const heading = (text: string, action?: ReactNode) => (
+    <div className="flex items-center gap-2">
+      <h3 className="flex-1 text-overline uppercase text-muted-foreground">{text}</h3>
+      {action}
+    </div>
+  );
+  const fuTone = fu.kind === "overdue" ? "bg-destructive-soft text-destructive-strong" : fu.kind === "due_today" ? "bg-warning-soft text-warning" : "bg-muted text-foreground";
+
   return (
-    <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-      <SheetHeader className="text-left">
-        <div className="flex items-center gap-2">
-          <SheetTitle>{lead.contact_name || lead.human_reference}</SheetTitle>
-          <Badge variant="secondary" className={LEAD_STATUS_TONE[lead.status]}>{lead.status}</Badge>
-          {lead.archived_at && <Badge variant="outline">Archived</Badge>}
+    <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      <SheetHeader className="space-y-2 border-b border-border px-4 pb-4 pt-5 pr-12 text-left sm:px-6">
+        <SheetTitle className="text-title-section">{lead.contact_name || lead.phone || lead.human_reference}</SheetTitle>
+        <SheetDescription className="text-sm">{[lead.company_name, lead.human_reference].filter(Boolean).join(" · ")}</SheetDescription>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusPill tone={lead.status === "converted" ? "success" : lead.status === "lost" ? "neutral" : "info"} className="capitalize">{lead.status}</StatusPill>
+          {lead.qualification_status !== "unqualified" && (
+            <StatusPill tone={lead.qualification_status === "qualified" ? "success" : lead.qualification_status === "not_qualified" ? "neutral" : "warning"}>
+              {qualificationStatusLabel(lead.qualification_status)}
+            </StatusPill>
+          )}
+          {stageName && <StatusPill tone="neutral" dot={false}>{stageName}</StatusPill>}
+          {lead.archived_at && <StatusPill tone="neutral" dot={false}>Archived</StatusPill>}
         </div>
-        <SheetDescription>{lead.human_reference}</SheetDescription>
-        {leadCustomer && (
-          <Link to={`/app/customers/${leadCustomer.id}`} className="text-xs font-medium text-primary underline underline-offset-2">
-            Open Customer 360 - {leadCustomer.name}
-          </Link>
+        {(lead.phone || lead.email || leadCustomer) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {lead.phone && <Button asChild size="sm" variant="outline"><a href={`tel:${lead.phone}`}><Phone aria-hidden="true" />Call</a></Button>}
+            {lead.phone && <Button asChild size="sm" variant="outline"><a href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"><MessageCircle aria-hidden="true" />WhatsApp</a></Button>}
+            {lead.email && <Button asChild size="sm" variant="outline"><a href={`mailto:${lead.email}`}><Mail aria-hidden="true" />Email</a></Button>}
+            {leadCustomer && (
+              <Button asChild size="sm" variant="ghost"><Link to={`/app/customers/${leadCustomer.id}`}>Open Customer 360 - {leadCustomer.name}</Link></Button>
+            )}
+          </div>
         )}
       </SheetHeader>
 
-      <div className="mt-4 space-y-6">
-        <section className="space-y-2 text-sm">
-          <div className="flex flex-wrap gap-2">
-            {lead.phone && <Button asChild size="sm" variant="outline" className="h-8"><a href={`tel:${lead.phone}`}><Phone className="mr-1.5 h-3.5 w-3.5" />Call</a></Button>}
-            {lead.phone && <Button asChild size="sm" variant="outline" className="h-8"><a href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`} target="_blank" rel="noreferrer"><MessageCircle className="mr-1.5 h-3.5 w-3.5" />WhatsApp</a></Button>}
-            {lead.email && <Button asChild size="sm" variant="outline" className="h-8"><a href={`mailto:${lead.email}`}><Mail className="mr-1.5 h-3.5 w-3.5" />Email</a></Button>}
-          </div>
-          {lead.phone && <p><span className="text-muted-foreground">Phone:</span> {lead.phone}</p>}
-          {lead.email && <p><span className="text-muted-foreground">Email:</span> {lead.email}</p>}
-          {lead.company_name && <p><span className="text-muted-foreground">Company:</span> {lead.company_name}</p>}
-          <p><span className="text-muted-foreground">Source:</span> {lead.source}{lead.source_detail ? ` (${lead.source_detail})` : ""}</p>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {lead.archived_at && (
+          <p className="border-b border-border bg-muted/60 px-4 py-3 text-sm text-foreground sm:px-6" role="note">
+            Archived on {new Date(lead.archived_at).toLocaleDateString()}. It is hidden from active lead views; its history is kept.
+          </p>
+        )}
+
+        {lead.status === "active" && !lead.archived_at && (
+          <section className={section} aria-label="Next action">
+            {heading("Next action")}
+            <div className={`rounded-xl px-3 py-2.5 ${fuTone}`}>
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {fu.kind === "overdue"
+                  ? `Follow-up overdue${fu.days ? ` by ${fu.days} day${fu.days === 1 ? "" : "s"}` : ""}`
+                  : fu.kind === "due_today"
+                    ? "Follow-up due today"
+                    : fu.kind === "upcoming"
+                      ? "Follow-up scheduled"
+                      : "No follow-up scheduled"}
+              </p>
+              {fu.kind !== "none" && <p className="mt-0.5 pl-[1.375rem] text-xs opacity-80">{fu.at.toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</p>}
+              {lead.follow_up_note && <p className="mt-1 text-sm text-foreground">{lead.follow_up_note}</p>}
+              {fu.kind === "none" && !assignedName && <p className="mt-1 text-xs text-muted-foreground">This lead also has no owner yet.</p>}
+            </div>
+            {canEdit && (
+              <>
+                {lead.next_follow_up_at && <Button size="sm" onClick={handleCompleteFollowUp} disabled={busy}><CheckCircle2 aria-hidden="true" /> Mark follow-up done</Button>}
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,12rem)_1fr_auto]">
+                  <Input type="datetime-local" value={followUpAt} onChange={(e) => setFollowUpAt(e.target.value)} aria-label="Follow-up date and time" />
+                  <Input placeholder="What should happen next?" value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} maxLength={500} aria-label="Follow-up note" />
+                  <Button variant="outline" onClick={handleScheduleFollowUp} disabled={busy || !followUpAt}>{lead.next_follow_up_at ? "Reschedule" : "Schedule"}</Button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        <section className={section} aria-label="Details">
+          {heading("Details")}
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">Owner</dt>
+              <dd>
+                {canAssign ? (
+                  <Select value={lead.assigned_to || ""} onValueChange={handleAssign} disabled={busy}>
+                    <SelectTrigger aria-label="Owner"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+                    <SelectContent>
+                      {(members || []).map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.profile?.full_name || "Unnamed"}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className={assignedName ? "text-foreground" : "font-medium text-warning"}>{assignedName ?? "Unassigned"}</span>
+                )}
+              </dd>
+            </div>
+            <div className="grid gap-1">
+              <dt className="text-xs text-muted-foreground">Pipeline stage</dt>
+              <dd>
+                {canEdit && lead.pipeline_id ? (
+                  <Select value={lead.pipeline_stage_id || ""} onValueChange={handleMoveStage} disabled={busy}>
+                    <SelectTrigger aria-label="Pipeline stage"><SelectValue placeholder="No stage" /></SelectTrigger>
+                    <SelectContent>
+                      {(stages || []).map((st) => <SelectItem key={st.id} value={st.id}>{st.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-foreground">{stageName ?? "No stage"}</span>
+                )}
+              </dd>
+            </div>
+            <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Estimated value</dt><dd className="text-foreground">{valueLabel ?? <span className="text-muted-foreground">Not set</span>}</dd></div>
+            <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Source</dt><dd className="text-foreground">{sourceLabel(lead.source)}{lead.source_detail ? ` (${lead.source_detail})` : ""}</dd></div>
+            {lead.phone && <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Phone</dt><dd className="break-words text-foreground">{lead.phone}</dd></div>}
+            {lead.email && <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Email</dt><dd className="break-words text-foreground">{lead.email}</dd></div>}
+            {lead.company_name && <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Company</dt><dd className="text-foreground">{lead.company_name}</dd></div>}
+            <div className="grid gap-1"><dt className="text-xs text-muted-foreground">Created</dt><dd className="text-foreground">{new Date(lead.created_at).toLocaleDateString()}</dd></div>
+          </dl>
           {lead.created_from_conversation_id && (
-            <p className="flex items-center gap-1 text-muted-foreground">
-              <MessageCircle className="h-3.5 w-3.5" />
-              <Link
-                to="/app/whatsapp/inbox"
-                state={{ selectedId: lead.created_from_conversation_id }}
-                className="font-medium text-foreground underline-offset-2 hover:underline"
-              >
+            <p className="flex items-center gap-1.5 text-sm">
+              <MessageCircle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+              <Link to="/app/whatsapp/inbox" state={{ selectedId: lead.created_from_conversation_id }} className="font-medium text-link underline-offset-2 hover:underline">
                 Open the originating WhatsApp conversation
               </Link>
             </p>
           )}
         </section>
 
-        {lead.summary && (
-          <section>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Summary</p>
-            <p className="whitespace-pre-wrap rounded-md border bg-muted/30 p-2 text-sm">{lead.summary}</p>
-          </section>
-        )}
-
-        {(() => {
-          const rows = intakeRows(lead.intake);
-          if (rows.length === 0) return null;
-          return (
-            <section>
-              <p className="mb-1 text-xs font-medium text-muted-foreground">What the customer told us</p>
-              <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1 rounded-md border p-2 text-sm">
-                {rows.map((r) => (
-                  <div key={r.key} className="contents">
-                    <dt className="truncate text-muted-foreground">{r.label}</dt>
-                    <dd className="min-w-0 break-words">{r.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-          );
-        })()}
-
-        <section>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Attribution</p>
-          <AttributionSourceSummary
-            workspaceId={workspaceId}
-            targetType="lead"
-            targetId={leadId}
-            fallbackLabel={lead.source === "manual" || lead.source === "referral" ? "Manually entered - no campaign attribution." : "No attribution evidence recorded."}
-          />
+        <section className={section} aria-label="Activity and notes">
+          {heading("Activity & notes")}
+          {canEdit && (
+            <div className="flex gap-2">
+              <Input placeholder="Add a note" value={noteText} onChange={(e) => setNoteText(e.target.value)} aria-label="Add a note" onKeyDown={(e) => e.key === "Enter" && handleAddNote()} />
+              <Button variant="outline" onClick={handleAddNote} disabled={!noteText.trim()}>Add</Button>
+            </div>
+          )}
+          {(notes || []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No notes yet.</p>
+          ) : (
+            <ol className="space-y-2">
+              {(notes || []).map((n) => (
+                <li key={n.id} className="rounded-lg bg-muted/70 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">{n.author_name}{n.created_at ? ` · ${new Date(n.created_at).toLocaleString()}` : ""}</p>
+                  <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{n.body}</p>
+                </li>
+              ))}
+            </ol>
+          )}
         </section>
 
-        {canAssign && (
-          <section>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Assigned to</p>
-            <Select value={lead.assigned_to || ""} onValueChange={handleAssign} disabled={busy}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Unassigned" /></SelectTrigger>
-              <SelectContent>
-                {(members || []).map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.profile?.full_name || "Unnamed"}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </section>
-        )}
-
-        {canEdit && (
-          <section className="space-y-2 rounded-md border p-3">
-            <p className="text-xs font-medium text-muted-foreground">Qualification</p>
-            <Select value={effectiveQualificationStatus} onValueChange={(v) => setQualificationStatus(v as QualificationStatus)} disabled={busy}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {QUALIFICATION_STATUSES.map((s) => <SelectItem key={s} value={s}>{qualificationStatusLabel(s)}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {effectiveQualificationStatus === "not_qualified" && (
-              <Input placeholder="Reason not qualified" defaultValue={lead.qualification_reason || ""} onChange={(e) => setQualificationReason(e.target.value)} className="h-8 text-xs" />
-            )}
-            <Textarea placeholder="Qualification notes" defaultValue={lead.qualification_notes || ""} onChange={(e) => setQualificationNotes(e.target.value)} className="min-h-[60px] text-xs" />
-            <Button size="sm" variant="outline" onClick={handleSaveQualification} disabled={busy}>Save qualification</Button>
-          </section>
-        )}
-
-        {canEdit && lead.status === "active" && (
-          <section className="space-y-2 rounded-md border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground">Next follow-up</p>
-                {lead.next_follow_up_at && (
-                  <p className={`mt-0.5 text-sm font-medium ${new Date(lead.next_follow_up_at).getTime() < Date.now() ? "text-destructive" : ""}`}>
-                    {new Date(lead.next_follow_up_at).toLocaleString()}
-                    {new Date(lead.next_follow_up_at).getTime() < Date.now() ? " · Overdue" : ""}
-                  </p>
-                )}
-                {lead.follow_up_note && <p className="mt-0.5 text-xs text-muted-foreground">{lead.follow_up_note}</p>}
-              </div>
-              {lead.next_follow_up_at && <Button size="sm" variant="outline" onClick={handleCompleteFollowUp} disabled={busy}>Done</Button>}
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
-              <Input type="datetime-local" value={followUpAt} onChange={(e) => setFollowUpAt(e.target.value)} className="h-8 text-xs" />
-              <Input placeholder="What should happen next?" value={followUpNote} onChange={(e) => setFollowUpNote(e.target.value)} maxLength={500} className="h-8 text-xs" />
-              <Button size="sm" onClick={handleScheduleFollowUp} disabled={busy || !followUpAt}>{lead.next_follow_up_at ? "Reschedule" : "Schedule"}</Button>
-            </div>
-          </section>
-        )}
-
-        {canEdit && lead.pipeline_id && (
-          <section>
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Pipeline stage</p>
-            <Select value={lead.pipeline_stage_id || ""} onValueChange={handleMoveStage} disabled={busy}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="No stage" /></SelectTrigger>
-              <SelectContent>
-                {(stages || []).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </section>
-        )}
-
-        {lead.archived_at && (
-          <p className="rounded-lg border bg-muted/40 p-3 text-sm" role="note">
-            Archived on {new Date(lead.archived_at).toLocaleDateString()}. It is hidden from active lead views; its history is kept.
-          </p>
-        )}
-
-        {(canEdit || canArchive) && (
-          <section className="flex flex-wrap gap-2">
-            {!canEdit || lead.archived_at ? null : lead.status === "lost" ? (
-              <Button size="sm" variant="outline" onClick={handleReopenLead} disabled={busy}>Reopen lead</Button>
-            ) : lead.status === "active" ? (
-              <Button size="sm" variant="outline" onClick={() => setShowLostDialog(true)} disabled={busy}><XCircle className="mr-1.5 h-3.5 w-3.5" /> Mark lead lost</Button>
-            ) : null}
-            {canArchive && (lead.archived_at ? (
-              <Button size="sm" variant="outline" onClick={() => handleArchive(false)} disabled={busy}><ArchiveRestore className="mr-1.5 h-3.5 w-3.5" /> Restore lead</Button>
-            ) : (
-              <Button size="sm" variant="ghost" onClick={() => setShowArchiveDialog(true)} disabled={busy}><Archive className="mr-1.5 h-3.5 w-3.5" /> Archive lead</Button>
-            ))}
-          </section>
-        )}
-
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-medium text-muted-foreground">{pluralizeLabel(opportunityLabel)}</p>
-            {canCreateOpportunity && (
-              <Button size="sm" variant="ghost" onClick={() => setShowOpportunityForm((v) => !v)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button>
-            )}
-          </div>
+        <section className={section} aria-label={pluralizeLabel(opportunityLabel)}>
+          {heading(
+            pluralizeLabel(opportunityLabel),
+            canCreateOpportunity ? <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-link" onClick={() => setShowOpportunityForm((v) => !v)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button> : undefined,
+          )}
           {showOpportunityForm && (
             <div className="flex gap-2">
-              <Input placeholder={`${opportunityLabel} title`} value={newOpportunityTitle} onChange={(e) => setNewOpportunityTitle(e.target.value)} className="h-8 text-xs" />
-              <Button size="sm" onClick={handleCreateOpportunity} disabled={busy || !newOpportunityTitle.trim()}>Create</Button>
+              <Input placeholder={`${opportunityLabel} title`} value={newOpportunityTitle} onChange={(e) => setNewOpportunityTitle(e.target.value)} aria-label={`${opportunityLabel} title`} />
+              <Button onClick={handleCreateOpportunity} disabled={busy || !newOpportunityTitle.trim()}>Create</Button>
             </div>
           )}
           {(opportunities || []).length === 0 && !showOpportunityForm && (
-            <p className="text-xs text-muted-foreground">No {opportunityLabel.toLowerCase()} yet. Create one when this lead is ready to progress.</p>
+            <p className="text-sm text-muted-foreground">No {opportunityLabel.toLowerCase()} yet. Create one when this lead is ready to progress.</p>
           )}
           {(opportunities || []).map((o) => (
-            <div key={o.id} className="space-y-2 rounded-md border p-2 text-xs">
-              <div className="flex items-center justify-between">
-                <p className="font-medium">{o.title}</p>
-                <Badge variant="secondary" className={OPPORTUNITY_STATUS_TONE[o.status]}>{opportunityStatusLabel(o.status)}</Badge>
+            <div key={o.id} className="space-y-2 rounded-lg border border-border p-3 text-sm">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium text-foreground">{o.title}</p>
+                <StatusPill tone={o.status === "won" ? "success" : o.status === "open" ? "info" : "neutral"}>{opportunityStatusLabel(o.status)}</StatusPill>
               </div>
-              {o.estimated_value != null && <p className="text-muted-foreground">Est. value: {o.estimated_value}</p>}
-              {o.actual_value != null && <p className="text-muted-foreground">Actual deal value: {o.actual_value}</p>}
+              {o.estimated_value != null && <p className="text-xs text-muted-foreground">Est. value: {o.estimated_value}</p>}
+              {o.actual_value != null && <p className="text-xs text-muted-foreground">Actual deal value: {o.actual_value}</p>}
               <AttributionSourceSummary workspaceId={workspaceId} targetType="opportunity" targetId={o.id} compact fallbackLabel="Inherited from the lead - no direct attribution recorded on this opportunity." />
               {canCloseOpportunity && o.status === "open" && (
-                <div className="mt-1 flex gap-2">
-                  <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleMarkWon(o.id)} disabled={busy}><Trophy className="mr-1 h-3 w-3" /> Won</Button>
-                  <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => handleMarkLostOpportunity(o.id)} disabled={busy}>Lost</Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => handleMarkWon(o.id)} disabled={busy}><Trophy aria-hidden="true" /> Won</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleMarkLostOpportunity(o.id)} disabled={busy}>Lost</Button>
                 </div>
               )}
               {canCloseOpportunity && o.status !== "open" && (
-                <Button size="sm" variant="outline" className="mt-1 h-7 px-2" onClick={() => handleReopenOpportunity(o.id)} disabled={busy}>Reopen</Button>
+                <Button size="sm" variant="outline" onClick={() => handleReopenOpportunity(o.id)} disabled={busy}>Reopen</Button>
               )}
               {o.status === "won" && (
                 <WonOpportunityRevenue workspaceId={workspaceId} opportunityId={o.id} leadId={leadId} canRecordRevenue={canRecordRevenue} onViewCustomer={setCustomerSheetId} />
@@ -539,20 +517,68 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
           ))}
         </section>
 
-        <LeadDocuments workspaceId={workspaceId} leadId={leadId} canView={canViewAttachments} />
+        {(lead.summary || intake.length > 0) && (
+          <section className={section} aria-label="What the customer told us">
+            {heading("What the customer told us")}
+            {lead.summary && <p className="whitespace-pre-wrap text-sm text-foreground">{lead.summary}</p>}
+            {intake.length > 0 && (
+              <dl className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-3 gap-y-1.5 text-sm">
+                {intake.map((r) => (
+                  <div key={r.key} className="contents">
+                    <dt className="truncate text-muted-foreground">{r.label}</dt>
+                    <dd className="min-w-0 break-words text-foreground">{r.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </section>
+        )}
 
-        <section className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">Notes</p>
-          {(notes || []).map((n) => (
-            <p key={n.id} className="rounded-md bg-amber-50 p-2 text-xs dark:bg-amber-950/20"><span className="font-medium">{n.author_name}:</span> {n.body}</p>
-          ))}
-          {canEdit && (
-            <div className="flex gap-2">
-              <Input placeholder="Add a note" value={noteText} onChange={(e) => setNoteText(e.target.value)} className="h-8 text-xs" onKeyDown={(e) => e.key === "Enter" && handleAddNote()} />
-              <Button size="sm" variant="ghost" onClick={handleAddNote} disabled={!noteText.trim()}>Add</Button>
-            </div>
-          )}
+        {canEdit && (
+          <section className={section} aria-label="Qualification">
+            {heading("Qualification")}
+            <Select value={effectiveQualificationStatus} onValueChange={(v) => setQualificationStatus(v as QualificationStatus)} disabled={busy}>
+              <SelectTrigger aria-label="Qualification status"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {QUALIFICATION_STATUSES.map((st) => <SelectItem key={st} value={st}>{qualificationStatusLabel(st)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {effectiveQualificationStatus === "not_qualified" && (
+              <Input placeholder="Reason not qualified" defaultValue={lead.qualification_reason || ""} onChange={(e) => setQualificationReason(e.target.value)} aria-label="Reason not qualified" />
+            )}
+            <Textarea placeholder="Qualification notes" defaultValue={lead.qualification_notes || ""} onChange={(e) => setQualificationNotes(e.target.value)} aria-label="Qualification notes" className="min-h-[64px]" />
+            <Button variant="outline" onClick={handleSaveQualification} disabled={busy}>Save qualification</Button>
+          </section>
+        )}
+
+        <section className={section} aria-label="Attribution">
+          {heading("Attribution")}
+          <AttributionSourceSummary
+            workspaceId={workspaceId}
+            targetType="lead"
+            targetId={leadId}
+            fallbackLabel={lead.source === "manual" || lead.source === "referral" ? "Manually entered - no campaign attribution." : "No attribution evidence recorded."}
+          />
         </section>
+
+        <div className={canViewAttachments ? section : "hidden"}>
+          <LeadDocuments workspaceId={workspaceId} leadId={leadId} canView={canViewAttachments} />
+        </div>
+
+        {(canEdit || canArchive) && (
+          <section className="flex flex-wrap gap-2 px-4 py-4 sm:px-6" aria-label="Lead actions">
+            {!canEdit || lead.archived_at ? null : lead.status === "lost" ? (
+              <Button size="sm" variant="outline" onClick={handleReopenLead} disabled={busy}>Reopen lead</Button>
+            ) : lead.status === "active" ? (
+              <Button size="sm" variant="outline" onClick={() => setShowLostDialog(true)} disabled={busy}><XCircle aria-hidden="true" /> Mark lead lost</Button>
+            ) : null}
+            {canArchive && (lead.archived_at ? (
+              <Button size="sm" variant="outline" onClick={() => handleArchive(false)} disabled={busy}><ArchiveRestore aria-hidden="true" /> Restore lead</Button>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setShowArchiveDialog(true)} disabled={busy}><Archive aria-hidden="true" /> Archive lead</Button>
+            ))}
+          </section>
+        )}
       </div>
 
       <AlertDialog open={showLostDialog} onOpenChange={setShowLostDialog}>

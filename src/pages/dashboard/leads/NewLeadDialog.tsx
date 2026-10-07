@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -49,11 +50,11 @@ export function NewLeadDialog({ workspaceId, onCreated }: { workspaceId: string;
   return (
     <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) reset(); }}>
       <DialogTrigger asChild>
-        <Button size="sm">New lead</Button>
+        <Button><Plus aria-hidden="true" />Add lead</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New lead</DialogTitle>
+          <DialogTitle>Add a lead</DialogTitle>
           <DialogDescription>Create a lead manually. Unknown fields can be filled in later.</DialogDescription>
         </DialogHeader>
 
