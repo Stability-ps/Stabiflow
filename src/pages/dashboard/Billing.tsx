@@ -242,8 +242,8 @@ export default function Billing() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-sky-50/65 to-violet-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.3)] sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace subscription</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Billing & plans</h1>
+      <div className="operational-header">
+        <p className="operational-section-label">Workspace subscription</p><h1 className="operational-title">Billing & plans</h1>
         <p className="mt-1 text-sm text-slate-600">Choose the plan that fits your business. Payments are processed securely by Paystack.</p>
         <GuideHelpLink chapter="billing" label="How plans and payments work" className="mt-1" />
       </div>
