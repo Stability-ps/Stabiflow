@@ -612,8 +612,8 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b p-3">
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <div className="flex shrink-0 items-center gap-3 border-b bg-card px-4 py-3">
         {onBack && <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>}
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{conversation.display_name || conversation.phone_number}</p>
@@ -635,7 +635,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         )}
       </div>
 
-      <div className="border-b p-2">
+      <div className="shrink-0 border-b bg-muted/15 px-3 py-2">
         <AttributionSourceSummary workspaceId={workspaceId} targetType="conversation" targetId={conversation.id} compact fallbackLabel="Direct WhatsApp - no ad referral." />
       </div>
 
@@ -644,7 +644,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       )}
 
       {(canCreateLead || canViewLead) && (
-        <div className="space-y-2 border-b bg-muted/20 p-2">
+        <div className="shrink-0 space-y-2 border-b bg-muted/15 px-3 py-2">
           {conversation.lead_id ? (
             <>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -715,7 +715,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       )}
 
       {canManage && (
-        <div className="border-b bg-muted/30 p-3">
+        <div className="shrink-0 border-b bg-muted/20 px-3 py-2">
           <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
             {conversation.ai_enabled ? <Bot className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
             {aiStatusText}
@@ -808,7 +808,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         </div>
       )}
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+      <div className="min-h-[12rem] flex-1 space-y-3 overflow-y-auto bg-background/35 p-4">
         {messagesLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : !messages?.length ? (
@@ -850,7 +850,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
       )}
 
       {canManage && (
-        <div className="space-y-2 border-t p-3">
+        <div className="shrink-0 space-y-2 border-t bg-card p-3">
           {windowOpen ? (
             <div className="flex gap-2">
               <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a reply..." className="min-h-[60px]" maxLength={1000} />
@@ -860,7 +860,7 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           {windowOpen ? (
             <AgentAssistMenu workspaceId={workspaceId} conversationId={conversation.id} draft={replyText} onDraft={(t) => setReplyText(t.slice(0, 1000))} disabled={sending} />
           ) : (
-            <div className="space-y-2 rounded-md border border-dashed p-3">
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/55 p-3 dark:border-amber-900 dark:bg-amber-950/20">
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 24-hour messaging window closed - a normal reply can't be sent until the customer messages again, or you send an approved template below.
