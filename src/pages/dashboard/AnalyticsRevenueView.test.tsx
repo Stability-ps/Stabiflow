@@ -25,6 +25,7 @@ vi.mock("@/hooks/useAnalytics", () => ({
   useCreativePerformance: () => ({ data: [], isLoading: false }),
   useLeadSourceBreakdown: () => ({ data: [], isLoading: false }),
   useWhatsAppAnalytics: () => ({ data: null, isLoading: false }),
+  useCrmPerformance: () => ({ data: null, isLoading: false }),
 }));
 vi.mock("@/hooks/useRevenueBreakdown", () => ({
   useRevenueBreakdown: () => ({ source: [], assist: [], day: [], isLoading: false, isError: false }),

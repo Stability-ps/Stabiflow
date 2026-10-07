@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Guide from "@/pages/dashboard/Guide";
 import { resetGuideProgressCache } from "@/hooks/useGuideProgress";
 import type { FeatureFlagKey } from "@/lib/featureFlags";
+import { GUIDE_UPDATED } from "@/content/guide/common";
+import { formatUpdated } from "@/content/guide/format";
 
 const enabledFlags = new Set<FeatureFlagKey>();
 
@@ -74,7 +76,10 @@ describe("Guide chapters", () => {
     renderGuide("/app/guide/billing");
     expect(screen.getByRole("heading", { level: 1, name: "Billing & plans" })).toBeInTheDocument();
     expect(screen.getByText("All plans")).toBeInTheDocument();
-    expect(screen.getByText(/Last updated: 6 October 2026/)).toBeInTheDocument();
+    // The guide-wide date moves with every content release (a34ee8d set it
+    // to 2026-10-07), so check it renders the current value in words.
+    expect(screen.getByText(`Last updated: ${formatUpdated(GUIDE_UPDATED)}`)).toBeInTheDocument();
+    expect(formatUpdated("2026-10-07")).toBe("7 October 2026");
     expect(screen.getByRole("heading", { level: 2, name: "Upgrading and paying" })).toBeInTheDocument();
   });
 

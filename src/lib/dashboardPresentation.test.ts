@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { formatMoney } from "./adMoney";
 import { dashboardConversationValue, dashboardMoneyValue, hasCurrentIntegration } from "./dashboardPresentation";
 
 describe("Dashboard data presentation", () => {
@@ -13,8 +14,12 @@ describe("Dashboard data presentation", () => {
 
   it("distinguishes no money data from an authoritative measured zero and preserves currency", () => {
     expect(dashboardMoneyValue([], "ZAR")).toBeUndefined();
-    expect(dashboardMoneyValue([{ currency: "ZAR", amount_minor: 0 }], "ZAR")).toBe("ZAR 0.00");
-    expect(dashboardMoneyValue([{ currency: "EUR", amount_minor: 1250 }], "ZAR")).toBe("€12.50");
+    // formatMoney follows the viewer's locale (en-US: "ZAR 0.00", en-ZA:
+    // "R 0,00"), so compare against it rather than one locale's spelling.
+    expect(dashboardMoneyValue([{ currency: "ZAR", amount_minor: 0 }], "ZAR")).toBe(formatMoney(0, "ZAR"));
+    // The row's own currency wins over the workspace currency.
+    expect(dashboardMoneyValue([{ currency: "EUR", amount_minor: 1250 }], "ZAR")).toBe(formatMoney(1250, "EUR"));
+    expect(dashboardMoneyValue([{ currency: "EUR", amount_minor: 1250 }], "ZAR")).toMatch(/€|EUR/);
   });
 
   it("does not present a disconnected empty conversation source as a measured zero", () => {

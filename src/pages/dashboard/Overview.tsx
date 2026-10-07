@@ -205,7 +205,8 @@ export default function Overview() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
+        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">
+          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
             {conversationsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
