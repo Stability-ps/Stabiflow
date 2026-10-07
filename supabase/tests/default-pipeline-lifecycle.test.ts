@@ -6,7 +6,7 @@
 // atomically (20260906060000_default_pipeline_lifecycle_fix.sql) rather
 // than depending on a client-side useEffect that has since been removed.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedPipeline, seedLead } from "./leadsHelpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 
@@ -28,6 +28,7 @@ describe("Default-pipeline lifecycle fix (release blocker)", () => {
   describe("workspace creation is atomic", () => {
     it("a newly created workspace immediately has exactly one default pipeline with the standard New/Qualified/Proposal/Won stages - no /leads visit, no explicit ensure_default_pipeline call", async () => {
       const workspace = await createTestTenant("pipeline-atomic-bootstrap");
+      await enableModules(workspace.workspaceId, "module.leads");
       try {
         const { data: pipelines } = await admin.from("pipelines").select("id, name, is_default").eq("workspace_id", workspace.workspaceId);
         expect(pipelines).toHaveLength(1);
@@ -51,6 +52,7 @@ describe("Default-pipeline lifecycle fix (release blocker)", () => {
 
     beforeAll(async () => {
       workspace = await createTestTenant("pipeline-ensure-idempotent");
+      await enableModules(workspace.workspaceId, "module.leads");
       const { data: session } = await workspace.client.auth.getSession();
       ownerToken = session.session!.access_token;
     });
@@ -104,6 +106,7 @@ describe("Default-pipeline lifecycle fix (release blocker)", () => {
 
     beforeAll(async () => {
       workspace = await createTestTenant("lead-defensive-placement");
+      await enableModules(workspace.workspaceId, "module.leads");
       const { data: session } = await workspace.client.auth.getSession();
       ownerToken = session.session!.access_token;
       const number = await seedWhatsAppSetup(workspace.workspaceId);
@@ -150,7 +153,9 @@ describe("Default-pipeline lifecycle fix (release blocker)", () => {
 
     beforeAll(async () => {
       workspaceA = await createTestTenant("backfill-a");
+      await enableModules(workspaceA.workspaceId, "module.leads");
       workspaceB = await createTestTenant("backfill-b");
+      await enableModules(workspaceB.workspaceId, "module.leads");
     });
 
     afterAll(async () => {
@@ -198,7 +203,9 @@ describe("Default-pipeline lifecycle fix (release blocker)", () => {
   describe("tenant isolation is preserved", () => {
     it("REGRESSION: even a direct service-role write cannot place a lead onto another workspace's pipeline/stage - the pre-existing consistency trigger still fires", async () => {
       const workspaceA = await createTestTenant("pipeline-isolation-a");
+      await enableModules(workspaceA.workspaceId, "module.leads");
       const workspaceB = await createTestTenant("pipeline-isolation-b");
+      await enableModules(workspaceB.workspaceId, "module.leads");
       try {
         const { data: pipelineB } = await admin.from("pipelines").select("id").eq("workspace_id", workspaceB.workspaceId).eq("is_default", true).single();
         const { error } = await admin.from("leads").insert({ workspace_id: workspaceA.workspaceId, contact_name: "Cross-workspace attempt", source: "manual", pipeline_id: pipelineB!.id });
@@ -212,7 +219,9 @@ describe("Default-pipeline lifecycle fix (release blocker)", () => {
 
     it("REGRESSION: ensure_default_pipeline for workspace A can never resolve to workspace B's pipeline", async () => {
       const workspaceA = await createTestTenant("pipeline-isolation-c");
+      await enableModules(workspaceA.workspaceId, "module.leads");
       const workspaceB = await createTestTenant("pipeline-isolation-d");
+      await enableModules(workspaceB.workspaceId, "module.leads");
       try {
         const { data: session } = await workspaceA.client.auth.getSession();
         const tokenA = session.session!.access_token;

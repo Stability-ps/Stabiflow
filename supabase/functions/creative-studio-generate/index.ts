@@ -49,6 +49,18 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Forbidden" }, 403);
   }
 
+  // Plan/feature access is authoritative server-side, not just the route
+  // FeatureGate (same evaluator as the UI). Checked before any allowance is
+  // charged or provider called.
+  const { data: creativeStudioEnabled, error: featureError } = await callerSb.rpc("is_feature_enabled", {
+    p_workspace_id: workspaceId,
+    p_flag_key: "module.creative_studio",
+  });
+  if (featureError) return json(req, { error: "Forbidden" }, 403);
+  if (creativeStudioEnabled !== true) {
+    return json(req, { error: "Creative Studio is part of the Growth plan. Upgrade in Billing & plans to use it.", code: "MODULE_NOT_IN_PLAN" }, 403);
+  }
+
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 

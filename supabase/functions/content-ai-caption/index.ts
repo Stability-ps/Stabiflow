@@ -46,6 +46,13 @@ Deno.serve(async (req: Request) => {
   if (!workspaceId || !mediaAssetId) return json(req, { error: "workspace_id and media_asset_id are required" }, 400);
 
   if (!(await hasWorkspacePermission(callerSb, workspaceId, "content.create"))) return json(req, { error: "Forbidden" }, 403);
+  // Plan/feature access is authoritative server-side (same evaluator as the
+  // UI), checked before any allowance is charged.
+  const { data: contentEnabled, error: featureError } = await callerSb.rpc("is_feature_enabled", { p_workspace_id: workspaceId, p_flag_key: "module.content" });
+  if (featureError) return json(req, { error: "Forbidden" }, 403);
+  if (contentEnabled !== true) {
+    return json(req, { error: "Content is part of the Business and Growth plans. Upgrade in Billing & plans to use AI captions.", code: "MODULE_NOT_IN_PLAN" }, 403);
+  }
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 

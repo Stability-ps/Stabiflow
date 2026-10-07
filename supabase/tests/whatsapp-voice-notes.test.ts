@@ -26,7 +26,7 @@
 // runtime has no OPENAI_API_KEY, so transcription never reaches a provider.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 import { seedPipeline } from "./leadsHelpers";
 
@@ -96,7 +96,9 @@ describe("Phase 10 - WhatsApp voice notes + safe transcription", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("voice");
+    await enableModules(ws.workspaceId, "module.leads");
     other = await createTestTenant("voice-other");
+    await enableModules(other.workspaceId, "module.leads");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     numberId = num.id;
     phoneNumberId = num.phone_number_id;

@@ -4,7 +4,7 @@
 // validation, stage-move workspace consistency, and the opportunity
 // won/lost/reopen lifecycle including automatic customer creation.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 import { seedLead, seedPipeline } from "./leadsHelpers";
 
@@ -24,7 +24,9 @@ describe("Leads/Opportunities staff actions (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("leads-actions");
+    await enableModules(workspace.workspaceId, "module.leads");
     otherWorkspace = await createTestTenant("leads-actions-other");
+    await enableModules(otherWorkspace.workspaceId, "module.leads");
     const number = await seedWhatsAppSetup(workspace.workspaceId);
     numberId = number.id;
 
@@ -182,5 +184,54 @@ describe("Leads/Opportunities staff actions (release blocker)", () => {
     const { data: afterReopen } = await admin.from("leads").select("status, lost_at").eq("id", lead.id).single();
     expect(afterReopen?.status).toBe("active");
     expect(afterReopen?.lost_at).toBeNull();
+  });
+});
+
+// The Leads module is plan-gated server-side, not only by the route
+// FeatureGate: a workspace whose plan does not include Leads cannot use the
+// API directly, and the refusal never reveals another workspace's plan.
+describe("leads-actions plan gate", () => {
+  let freeWorkspace: TestTenant;
+  let paidWorkspace: TestTenant;
+  let freeToken: string;
+
+  beforeAll(async () => {
+    freeWorkspace = await createTestTenant("leads-gate-free");
+    paidWorkspace = await createTestTenant("leads-gate-paid");
+    await enableModules(paidWorkspace.workspaceId, "module.leads");
+    const { data: session } = await freeWorkspace.client.auth.getSession();
+    freeToken = session.session!.access_token;
+  });
+
+  afterAll(async () => {
+    await cleanupTenant(freeWorkspace);
+    await cleanupTenant(paidWorkspace);
+  });
+
+  it("refuses a workspace without the Leads module and creates nothing", async () => {
+    const result = await callAction(freeToken, { workspace_id: freeWorkspace.workspaceId, action: "create_manual", contact_name: "Gate Test", source: "manual", force: true });
+    expect(result.status).toBe(403);
+    expect(result.body.code).toBe("MODULE_NOT_IN_PLAN");
+    expect(result.body.error).toMatch(/Business and Growth plans/);
+    const { count } = await admin.from("leads").select("id", { count: "exact", head: true }).eq("workspace_id", freeWorkspace.workspaceId);
+    expect(count).toBe(0);
+  });
+
+  it("refuses read-only actions too", async () => {
+    const result = await callAction(freeToken, { workspace_id: freeWorkspace.workspaceId, action: "check_duplicates", phone: "+27830000000" });
+    expect(result.status).toBe(403);
+    expect(result.body.code).toBe("MODULE_NOT_IN_PLAN");
+  });
+
+  it("answers a non-member with Forbidden, never with the other workspace's plan", async () => {
+    const result = await callAction(freeToken, { workspace_id: paidWorkspace.workspaceId, action: "create_manual", contact_name: "Gate Test", source: "manual", force: true });
+    expect(result.status).toBe(403);
+    expect(result.body).toEqual({ error: "Forbidden" });
+  });
+
+  it("allows the workspace once the module is switched on", async () => {
+    await enableModules(freeWorkspace.workspaceId, "module.leads");
+    const result = await callAction(freeToken, { workspace_id: freeWorkspace.workspaceId, action: "create_manual", contact_name: "Gate Test", source: "manual", force: true });
+    expect(result.status).toBe(200);
   });
 });

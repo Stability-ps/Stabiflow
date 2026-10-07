@@ -11,7 +11,7 @@
 // supabase/functions/operator-workspaces/index.ts and
 // supabase/functions/_shared/workspaceStatus.ts.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, resetAdminRolesWithFixtureOwner, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, resetAdminRolesWithFixtureOwner, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 
 const OPERATOR_URL = `${SUPABASE_URL}/functions/v1/operator-workspaces`;
 const FLOW_AI_URL = `${SUPABASE_URL}/functions/v1/flow-ai-chat`;
@@ -29,7 +29,9 @@ describe("Platform operator authorization + workspace suspension (release blocke
 
   beforeAll(async () => {
     workspace = await createTestTenant("operator-suspend");
+    await enableModules(workspace.workspaceId, "module.flow_ai");
     otherWorkspace = await createTestTenant("operator-suspend-other");
+    await enableModules(otherWorkspace.workspaceId, "module.flow_ai");
 
     await resetAdminRolesWithFixtureOwner();
     operatorUser = await createTestUser("operator-flag-holder");

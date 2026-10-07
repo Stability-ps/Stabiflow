@@ -86,6 +86,17 @@ Deno.serve(async (req: Request) => {
   let workspaceId: string;
   let isNewConversation = false;
 
+  // Plan/feature access is authoritative server-side, not just the route
+  // FeatureGate. is_feature_enabled uses the same evaluator as the UI and
+  // runs as the caller, so a non-member gets an error (reported as not
+  // authorized) rather than another workspace's plan.
+  const planRefusal = async (targetWorkspaceId: string): Promise<Response | null> => {
+    const { data: enabled, error } = await callerClient.rpc("is_feature_enabled", { p_workspace_id: targetWorkspaceId, p_flag_key: "module.flow_ai" });
+    if (error) return new Response(JSON.stringify({ error: "Not authorized to use Flow AI in this workspace" }), { status: 403, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
+    if (enabled !== true) return new Response(JSON.stringify({ error: "Flow AI is part of the Growth plan. Upgrade in Billing & plans to use it.", code: "MODULE_NOT_IN_PLAN" }), { status: 403, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
+    return null;
+  };
+
   if (body.conversationId) {
     const { data: existing, error } = await callerClient.from("ai_conversations").select("id, workspace_id").eq("id", body.conversationId).maybeSingle();
     if (error || !existing) {
@@ -93,11 +104,15 @@ Deno.serve(async (req: Request) => {
     }
     conversationId = existing.id;
     workspaceId = existing.workspace_id;
+    const refusal = await planRefusal(workspaceId);
+    if (refusal) return refusal;
   } else {
     if (!body.workspaceId) {
       return new Response(JSON.stringify({ error: "workspaceId is required to start a new conversation" }), { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
     }
     workspaceId = body.workspaceId;
+    const refusal = await planRefusal(workspaceId);
+    if (refusal) return refusal;
     const { data: created, error } = await callerClient
       .from("ai_conversations")
       .insert({ workspace_id: workspaceId, created_by: userId, title: message.slice(0, 60) })

@@ -1,7 +1,25 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// supabase-js leaves `data` null on a non-2xx response and hardcodes
+// error.message to "Edge Function returned a non-2xx status code"; the
+// function's JSON error body is only on error.context (the raw Response).
+// Same handling as creativeStudio.ts / adCampaigns.ts.
+async function readErrorPayloadFromContext(error: unknown): Promise<unknown> {
+  const context = (error as { context?: unknown } | null)?.context;
+  if (!context || typeof context !== "object") return null;
+  const maybeResponse = context as { json?: () => Promise<unknown>; clone?: () => unknown };
+  const source = typeof maybeResponse.clone === "function" ? (maybeResponse.clone() as typeof maybeResponse) : maybeResponse;
+  if (typeof source.json !== "function") return null;
+  try {
+    return await source.json();
+  } catch {
+    return null;
+  }
+}
+
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(name, { body });
+  const { data: rawData, error } = await supabase.functions.invoke(name, { body });
+  const data = error && rawData == null ? await readErrorPayloadFromContext(error) : rawData;
   if (error) {
     // supabase-js surfaces a non-2xx edge function response as `error`
     // without the JSON body attached in every SDK version - fall back to a
@@ -74,5 +92,5 @@ export function generateContentCaption(input: {
   target_platform?: "facebook" | "instagram";
   tone?: string;
 }) {
-  return invoke<{ ok: true; suggestion: AiCaptionSuggestion }>("content-ai-caption-preview", input);
+  return invoke<{ ok: true; suggestion: AiCaptionSuggestion }>("content-ai-caption", input);
 }

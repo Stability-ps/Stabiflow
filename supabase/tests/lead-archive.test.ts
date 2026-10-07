@@ -2,7 +2,7 @@
 // restore_lead), against LOCAL Supabase with real RLS, triggers and the
 // served leads-actions function.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, enableModules, type TestTenant } from "./helpers";
 
 let owner: TestTenant;
 let other: TestTenant;
@@ -16,7 +16,9 @@ async function act(client: TestTenant["client"], body: Record<string, unknown>) 
 
 beforeAll(async () => {
   owner = await createTestTenant("lead-archive-owner");
+  await enableModules(owner.workspaceId, "module.leads");
   other = await createTestTenant("lead-archive-other");
+  await enableModules(other.workspaceId, "module.leads");
   const { data } = await act(owner.client, { workspace_id: owner.workspaceId, action: "create_manual", contact_name: "Archive Test Lead", source: "manual", force: true });
   leadId = (data as { lead: { id: string } }).lead.id;
 });
