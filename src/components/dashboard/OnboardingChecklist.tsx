@@ -49,9 +49,9 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
 
   return (
     <Card className="overflow-hidden border-border/70 shadow-sm">
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 bg-muted/20 pb-4">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 bg-muted/20 pb-3 pt-4">
         <div>
-          <CardTitle className="text-lg">Finish setting up StabiFlow</CardTitle>
+          <CardTitle className="text-base">Finish setting up StabiFlow</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">{completed} of {total} complete · {total - completed} remaining</p>
         </div>
         <div className="flex items-center gap-1">
@@ -64,7 +64,7 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 pt-4">
+      <CardContent className="space-y-3 pb-4 pt-3">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
         </div>
@@ -74,7 +74,7 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
               key={item.key}
               type="button"
               onClick={() => navigate(item.to)}
-              className="group flex min-h-20 items-start gap-3 rounded-xl border bg-background p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm"
+              className="group flex min-h-16 items-start gap-3 rounded-xl border bg-background p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-sm"
             >
               <Circle className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
