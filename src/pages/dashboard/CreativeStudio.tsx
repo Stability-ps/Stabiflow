@@ -175,12 +175,12 @@ export default function CreativeStudio() {
   }
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-violet-100/80 bg-gradient-to-br from-white via-white to-violet-50/70 p-5 shadow-[0_18px_60px_-44px_hsl(260_70%_50%/0.35)] sm:p-6">
-        <div className="pointer-events-none absolute -right-16 -top-24 h-56 w-56 rounded-full bg-violet-200/25 blur-3xl" />
-        <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Marketing workspace</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Creative Studio</h1>
+    <div className="operational-page space-y-4">
+      <div className="operational-header">
+
+        <div>
+          <p className="operational-section-label">Marketing workspace</p>
+          <h1 className="operational-title">Creative Studio</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Tell StabiFlow what you want to promote. Your brand profile handles the rest.</p>
         </div>
       </div>
@@ -216,7 +216,7 @@ export default function CreativeStudio() {
             </>
           )}
 
-          <Card className="border-border/60 bg-card/90 shadow-[0_16px_50px_-38px_hsl(260_50%_35%/0.35)]">
+          <Card className="operational-panel">
             <CardHeader><CardTitle className="text-base">Create your advert</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div>
