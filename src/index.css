@@ -369,7 +369,29 @@ html {
     }
 
     [data-sidebar="sidebar"] [data-sidebar="menu-button"] {
-      color: hsl(215 20% 82%);
+      color: hsl(215 24% 88%);
+      opacity: 1;
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-sub-button"] {
+      color: hsl(215 22% 82%);
+      opacity: 1;
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-sub-button"]:hover,
+    [data-sidebar="sidebar"] [data-sidebar="menu-sub-button"][data-active="true"] {
+      background: hsl(220 24% 18%);
+      color: white;
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"] > span:first-of-type {
+      border-color: hsl(220 18% 29%);
+      background: hsl(220 24% 17% / 0.9);
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"][data-active="true"] > span:first-of-type {
+      border-color: hsl(222 30% 20% / 0.15);
+      background: hsl(0 0% 100% / 0.55);
     }
 
     [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover {
