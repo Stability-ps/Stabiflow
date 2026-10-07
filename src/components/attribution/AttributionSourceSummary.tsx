@@ -76,9 +76,9 @@ export function AttributionSourceSummary({ workspaceId, targetType, targetId, co
 
   if (compact) {
     return (
-      <div className="space-y-1 rounded-md border p-2">
+      <div className="space-y-0.5">
         <TouchLine label="Source" row={lastTouch || firstTouch} workspaceId={workspaceId} />
-        <p className="text-[11px] text-muted-foreground">{explainTouch(lastTouch || firstTouch)}</p>
+        <p className="line-clamp-1 text-[11px] text-muted-foreground">{explainTouch(lastTouch || firstTouch)}</p>
       </div>
     );
   }

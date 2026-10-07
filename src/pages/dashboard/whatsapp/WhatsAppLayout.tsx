@@ -74,11 +74,11 @@ export default function WhatsAppLayout() {
   };
 
   return (
-    <div className="operational-page space-y-3">
-      <div className="operational-header">
+    <div className="operational-page flex h-[calc(100vh-7.5rem)] min-h-[38rem] flex-col gap-2 overflow-hidden">
+      <div className="operational-header !mb-0 shrink-0 !border-b-0 !pb-1">
         <div>
-          <p className="operational-section-label">Customer conversations</p><h1 className="operational-title">Messages</h1>
-          <p className="hidden text-sm text-muted-foreground sm:block">Conversations, contacts, templates and intake for your connected WhatsApp Business number.</p>
+          <h1 className="operational-title">Messages</h1>
+          <p className="hidden text-sm text-muted-foreground sm:block">Manage customer conversations and WhatsApp follow-up.</p>
         </div>
         {canManageIntegration && (
           <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" onClick={() => navigate("/app/whatsapp/settings")} aria-label="Message settings">
@@ -101,7 +101,7 @@ export default function WhatsAppLayout() {
         </div>
       ) : null}
 
-      <nav aria-label="WhatsApp sections" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-border/70 bg-card p-1">
+      <nav aria-label="WhatsApp sections" className="flex w-fit max-w-full shrink-0 gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card p-1 shadow-sm">
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}
@@ -123,7 +123,7 @@ export default function WhatsAppLayout() {
         ))}
       </nav>
 
-      <Outlet context={context} />
+      <div className="min-h-0 flex-1 overflow-hidden"><Outlet context={context} /></div>
     </div>
   );
 }

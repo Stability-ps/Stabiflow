@@ -85,10 +85,10 @@ export default function WhatsAppInbox() {
   const filtersActive = !!filters.search.trim() || !!filters.inboxStatus || !!filters.assignment || !!filters.priority || !!filters.handling || filters.unreadOnly;
 
   return (
-    <div className="flex h-[calc(100vh-15rem)] min-h-[32rem] flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <h2 className="sr-only">WhatsApp Inbox</h2>
-      <div className="operational-split flex">
-        <div className={`w-full md:w-[22rem] md:shrink-0 ${mobileShowDetail ? "hidden md:block" : "block"}`}>
+      <div className="operational-split flex min-h-0 flex-1">
+        <div className={`w-full bg-card md:w-[21rem] md:shrink-0 ${mobileShowDetail ? "hidden md:block" : "block"}`}>
           <ConversationList
             conversations={conversations}
             unreadIds={unreadIds}
@@ -107,7 +107,7 @@ export default function WhatsAppInbox() {
             onLoadMore={() => fetchNextPage()}
           />
         </div>
-        <div className={`min-w-0 flex-1 ${mobileShowDetail ? "block" : "hidden md:block"}`}>
+        <div className={`min-w-0 flex-1 bg-card ${mobileShowDetail ? "block" : "hidden md:block"}`}>
           {selected ? (
             <ConversationDetail
               workspaceId={workspaceId}
