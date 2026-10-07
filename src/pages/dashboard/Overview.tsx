@@ -108,9 +108,13 @@ export default function Overview() {
     }).formatToParts(date);
     const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
     const localDay = `${get("year")}-${get("month")}-${get("day")}`;
-    const todayParts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-    const yesterday = new Date(now.getTime() - 86_400_000);
-    const yesterdayParts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(yesterday);
+    const dayKey = (input: Date) => {
+      const dayParts = new Intl.DateTimeFormat("en", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(input);
+      const part = (type: Intl.DateTimeFormatPartTypes) => dayParts.find((item) => item.type === type)?.value ?? "";
+      return `${part("year")}-${part("month")}-${part("day")}`;
+    };
+    const todayParts = dayKey(now);
+    const yesterdayParts = dayKey(new Date(now.getTime() - 86_400_000));
     const time = `${get("hour")}:${get("minute")}`;
     if (localDay === todayParts) return `Today, ${time}`;
     if (localDay === yesterdayParts) return `Yesterday, ${time}`;
