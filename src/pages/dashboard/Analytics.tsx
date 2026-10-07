@@ -17,6 +17,7 @@ import { WhatsAppAnalyticsSection } from "@/components/analytics/WhatsAppAnalyti
 import { RevenueAnalyticsSection } from "@/components/analytics/RevenueAnalyticsSection";
 import { RevenueAttributionView } from "@/components/analytics/RevenueAttributionView";
 import { CrmPerformanceSection } from "@/components/analytics/CrmPerformanceSection";
+import { CreatorCampaignsSection } from "@/components/analytics/CreatorCampaignsSection";
 import {
   useAnalyticsKpis, useCampaignPerformance, useCreativePerformance, useLeadSourceBreakdown, useWhatsAppAnalytics, useCrmPerformance,
 } from "@/hooks/useAnalytics";
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { DEFAULT_ATTRIBUTION_MODEL, type AttributionModel } from "@/lib/analytics";
 import { previousComparisonRange, resolveDateRangePreset, type DateRangePreset } from "@/lib/analyticsDate";
 
-type AnalyticsView = "overview" | "revenue";
+type AnalyticsView = "overview" | "creators" | "revenue";
 
 export default function Analytics() {
   const { currentWorkspaceId, hasPermission } = useAuth();
@@ -46,7 +47,8 @@ export default function Analytics() {
   // The Revenue view is only reachable with revenue.view - a viewer/
   // marketing role without it never sees a selectable tab that would only
   // ever show a permission wall (audit §19). Backend/RPC stay authoritative.
-  const view: AnalyticsView = canSeeRevenue && searchParams.get("view") === "revenue" ? "revenue" : "overview";
+  const requestedView = searchParams.get("view");
+  const view: AnalyticsView = requestedView === "creators" ? "creators" : canSeeRevenue && requestedView === "revenue" ? "revenue" : "overview";
   const setView = (next: AnalyticsView) => {
     const params = new URLSearchParams(searchParams);
     if (next === "overview") params.delete("view");
@@ -112,7 +114,7 @@ export default function Analytics() {
       </div>
 
       <nav className="flex w-fit gap-1 rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm" aria-label="Analytics views">
-        {(canSeeRevenue ? ([["overview", "Overview"], ["revenue", "Revenue"]] as const) : ([["overview", "Overview"]] as const)).map(([key, label]) => (
+        {(canSeeRevenue ? ([["overview", "Overview"], ["creators", "Creator campaigns"], ["revenue", "Revenue"]] as const) : ([["overview", "Overview"], ["creators", "Creator campaigns"]] as const)).map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -134,6 +136,8 @@ export default function Analytics() {
         <div className="h-40 animate-pulse rounded-lg bg-muted" />
       ) : kpisQuery.isError ? (
         <EmptyState icon={BarChart3} title="Unable to load analytics" description="Something went wrong loading analytics for this workspace. Try again shortly." />
+      ) : kpisQuery.data && view === "creators" ? (
+        <CreatorCampaignsSection workspaceId={currentWorkspaceId} canSeeRevenue={canSeeRevenue} />
       ) : kpisQuery.data && view === "revenue" ? (
         <RevenueAttributionView
           workspaceId={currentWorkspaceId}
