@@ -25,5 +25,8 @@ export function useCustomersSearch(workspaceId: string | null, query: string) {
     queryKey: ["customers-search", workspaceId, query.trim()],
     queryFn: () => searchCustomers(workspaceId as string, query.trim()),
     enabled: !!workspaceId,
+    // Keep the current rows on screen while the next search term loads -
+    // only within the same workspace, never across a workspace switch.
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === workspaceId ? previous : undefined),
   });
 }
