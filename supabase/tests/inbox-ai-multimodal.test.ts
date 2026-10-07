@@ -91,9 +91,9 @@ describe("Phase 6 - Multimodal WhatsApp AI", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("mm");
-    await enableModules(ws.workspaceId, "module.leads");
+    await enableModules(ws.workspaceId, "module.leads", "module.whatsapp");
     other = await createTestTenant("mm-other");
-    await enableModules(other.workspaceId, "module.leads");
+    await enableModules(other.workspaceId, "module.leads", "module.whatsapp");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     numberId = num.id;
     phoneNumberId = num.phone_number_id;

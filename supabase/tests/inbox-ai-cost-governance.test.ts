@@ -20,7 +20,7 @@
 // both, so an over-cap turn never reaches either.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 
 const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/whatsapp-webhook`;
@@ -102,7 +102,9 @@ describe("Phase 7 - Inbox AI cost governance", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("aicost");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     other = await createTestTenant("aicost-other");
+    await enableModules(other.workspaceId, "module.whatsapp");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     numberId = num.id;
     phoneNumberId = num.phone_number_id;
@@ -204,6 +206,7 @@ describe("Phase 7 - Inbox AI cost governance", () => {
 
   it("the cap counts only feature='whatsapp_inbox_ai' and only the current UTC month", async () => {
     const scoped = await createTestTenant("aicost-scope");
+    await enableModules(scoped.workspaceId, "module.whatsapp");
     try {
       const num = await seedWhatsAppSetup(scoped.workspaceId);
       await admin.rpc("set_workspace_integration_secret", {

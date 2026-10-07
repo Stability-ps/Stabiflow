@@ -96,9 +96,9 @@ describe("Phase 10 - WhatsApp voice notes + safe transcription", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("voice");
-    await enableModules(ws.workspaceId, "module.leads");
+    await enableModules(ws.workspaceId, "module.leads", "module.whatsapp");
     other = await createTestTenant("voice-other");
-    await enableModules(other.workspaceId, "module.leads");
+    await enableModules(other.workspaceId, "module.leads", "module.whatsapp");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     numberId = num.id;
     phoneNumberId = num.phone_number_id;
