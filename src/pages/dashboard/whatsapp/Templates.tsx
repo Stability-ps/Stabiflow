@@ -29,7 +29,7 @@ const PAGE_SIZE = 50;
 export default function WhatsAppTemplates() {
   const { workspaceId } = useWhatsAppOutlet();
   const { data: templates, isLoading } = useInboxTemplates(workspaceId);
-  const { data: library, isLoading: libraryLoading } = useWhatsAppTemplateLibrary();
+  const { data: library, isLoading: libraryLoading, isError: libraryError } = useWhatsAppTemplateLibrary();
   const { favorites, toggleFavorite } = useWhatsAppTemplateFavorites();
   const [source, setSource] = useState<"synced" | "library">("synced");
   const [query, setQuery] = useState("");
@@ -83,16 +83,73 @@ export default function WhatsAppTemplates() {
     setPage(1);
   }
 
-  if (isLoading || libraryLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  const switchSource = (next: "synced" | "library") => {
+    setSource(next);
+    setQuery("");
+    setCategory("ALL");
+    setStatus("ALL");
+    setIndustry("ALL");
+    setFavoritesOnly(false);
+    setPage(1);
+  };
 
-  if (!templates || templates.length === 0) {
+  // Two sources, each with its own loading/empty state. The StabiFlow
+  // Library is always reachable - including before any Meta template has
+  // synced, when it's the most useful place to start.
+  const sourceToggle = (
+    <div role="group" aria-label="Template source" className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5">
+      {([["synced", "My Meta templates"], ["library", "StabiFlow Library"]] as const).map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          aria-pressed={source === value}
+          onClick={() => switchSource(value)}
+          className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${source === value ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          {value === "library" ? <Library className="h-4 w-4" aria-hidden="true" /> : null}
+          {label}
+          {value === "synced" && templates ? <span className="text-xs text-muted-foreground">{templates.length.toLocaleString()}</span> : null}
+        </button>
+      ))}
+    </div>
+  );
+  const loadingBlock = <div className="h-64 animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading templates" />;
+
+  if (source === "library" && (libraryLoading || libraryError || !library || library.length === 0)) {
     return (
-      <EmptyState
-        icon={FileText}
-        title="No templates synced yet"
-        description="Message templates are created in Meta and synced into StabiFlow. Connect WhatsApp, or use Refresh under Settings, to pull them in."
-        action={<Link to="/app/whatsapp/settings" className="text-sm font-medium underline underline-offset-2">Go to WhatsApp Settings</Link>}
-      />
+      <div className="space-y-4">
+        {sourceToggle}
+        {libraryLoading ? loadingBlock : (
+          <EmptyState
+            icon={Library}
+            title="The StabiFlow Library isn't available right now"
+            description={libraryError ? "We couldn't load the template library. Try again in a moment - your own Meta templates are unaffected." : "No library templates are published yet."}
+          />
+        )}
+      </div>
+    );
+  }
+
+  if (source === "synced" && isLoading) {
+    return <div className="space-y-4">{sourceToggle}{loadingBlock}</div>;
+  }
+
+  if (source === "synced" && (!templates || templates.length === 0)) {
+    return (
+      <div className="space-y-4">
+        {sourceToggle}
+        <EmptyState
+          icon={FileText}
+          title="No Meta templates synced yet"
+          description="Message templates are created in Meta and synced into StabiFlow. Connect WhatsApp, or use Refresh under Settings, to pull them in. Meanwhile, start from a ready-made template in the StabiFlow Library."
+          action={
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => switchSource("library")}><Library aria-hidden="true" /> Browse the StabiFlow Library</Button>
+              <Button asChild variant="outline"><Link to="/app/whatsapp/settings">Go to WhatsApp Settings</Link></Button>
+            </div>
+          }
+        />
+      </div>
     );
   }
 
@@ -106,10 +163,7 @@ export default function WhatsAppTemplates() {
 
     return (
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/20 p-1">
-          <Button size="sm" variant="ghost" onClick={() => { setSource("synced"); setQuery(""); setCategory("ALL"); setIndustry("ALL"); setPage(1); }}>My Meta templates</Button>
-          <Button size="sm" variant="default" className="gap-1.5"><Library className="h-4 w-4" />StabiFlow Library</Button>
-        </div>
+        {sourceToggle}
         <div>
           <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-semibold">{(library || []).length.toLocaleString()} ready-to-customise templates</p><Badge variant="secondary" className="gap-1 font-normal"><Sparkles className="h-3 w-3" />{libraryIndustries.length} industries</Badge></div>
           <p className="mt-1 text-sm text-muted-foreground">Find a starting point, preview it, copy it and customise it before submitting the final template to Meta for approval.</p>
@@ -216,14 +270,11 @@ export default function WhatsAppTemplates() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2 rounded-lg border bg-muted/20 p-1">
-        <Button size="sm" variant="default">My Meta templates</Button>
-        <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => { setSource("library"); setQuery(""); setCategory("ALL"); setStatus("ALL"); setPage(1); }}><Library className="h-4 w-4" />StabiFlow Library</Button>
-      </div>
+      {sourceToggle}
       <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">{templates.length.toLocaleString()} synced template{templates.length === 1 ? "" : "s"}</p>
+            <p className="text-sm font-semibold">{(templates ?? []).length.toLocaleString()} synced template{(templates ?? []).length === 1 ? "" : "s"}</p>
             <Badge variant="secondary" className="gap-1 font-normal">
               <CheckCircle2 className="h-3 w-3" />
               {approvedCount.toLocaleString()} approved
@@ -279,7 +330,7 @@ export default function WhatsAppTemplates() {
         ) : <div />}
         </div>
         <div className="mt-2 flex items-center justify-between border-t pt-2 text-xs text-muted-foreground">
-          <span>{filtered.length.toLocaleString()} of {templates.length.toLocaleString()} template{templates.length === 1 ? "" : "s"}</span>
+          <span>{filtered.length.toLocaleString()} of {(templates ?? []).length.toLocaleString()} template{(templates ?? []).length === 1 ? "" : "s"}</span>
           {pageCount > 1 && <span>Page {safePage.toLocaleString()} of {pageCount.toLocaleString()}</span>}
         </div>
       </div>

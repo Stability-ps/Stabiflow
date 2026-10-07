@@ -79,16 +79,21 @@ export default function WhatsAppInbox() {
   const selected = conversations.find((c) => c.id === selectedId) || null;
 
   if (conversationsLoading) {
-    return <div className="h-[60vh] animate-pulse rounded-lg bg-muted" />;
+    return <div className="h-[calc(100dvh-14rem)] min-h-[28rem] animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading conversations" />;
   }
 
   const filtersActive = !!filters.search.trim() || !!filters.inboxStatus || !!filters.assignment || !!filters.priority || !!filters.handling || filters.unreadOnly;
 
   return (
-    <div className="flex h-[calc(100vh-15rem)] min-h-[32rem] flex-col">
+    // Fills the viewport below the shell header and Messages header (and the
+    // bottom nav on phones) so the list and chat scroll internally, never
+    // the page.
+    <div className="flex h-[calc(100dvh-var(--header-height)-var(--bottom-nav-height)-env(safe-area-inset-top)-8.5rem)] min-h-[20rem] flex-col md:h-[calc(100dvh-var(--header-height)-11.75rem)] lg:h-[calc(100dvh-var(--header-height)-8.5rem)]">
       <h2 className="sr-only">WhatsApp Inbox</h2>
-      <div className="operational-split flex">
-        <div className={`w-full md:w-[22rem] md:shrink-0 ${mobileShowDetail ? "hidden md:block" : "block"}`}>
+      <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
+        {/* List + conversation side by side from lg; below that the list and
+            the open conversation take turns (with a back button). */}
+        <div className={`w-full border-border lg:w-[20.5rem] lg:shrink-0 lg:border-r ${mobileShowDetail ? "hidden lg:block" : "block"}`}>
           <ConversationList
             conversations={conversations}
             unreadIds={unreadIds}
@@ -107,7 +112,15 @@ export default function WhatsAppInbox() {
             onLoadMore={() => fetchNextPage()}
           />
         </div>
-        <div className={`min-w-0 flex-1 ${mobileShowDetail ? "block" : "hidden md:block"}`}>
+        {/* Phones: an open conversation fills the screen between the app
+            header and the bottom navigation, so the chat gets the room. */}
+        <div
+          className={`min-w-0 flex-1 ${
+            mobileShowDetail
+              ? "block max-md:fixed max-md:inset-x-0 max-md:bottom-[var(--bottom-nav-height)] max-md:top-[calc(var(--header-height)+env(safe-area-inset-top))] max-md:z-20 max-md:bg-card"
+              : "hidden lg:block"
+          }`}
+        >
           {selected ? (
             <ConversationDetail
               workspaceId={workspaceId}
@@ -117,7 +130,7 @@ export default function WhatsAppInbox() {
               onChanged={() => {}}
             />
           ) : (
-            <EmptyState icon={MessageCircle} title="Select a conversation" description="Choose a conversation from the list to view and manage the chat." className="h-full border-none" />
+            <EmptyState icon={MessageCircle} title="Select a conversation" description="Choose a conversation from the list to view and manage the chat." className="h-full bg-background/40" />
           )}
         </div>
       </div>

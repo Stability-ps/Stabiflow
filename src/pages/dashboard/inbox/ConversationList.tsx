@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Search, SlidersHorizontal, X, Inbox as InboxIcon } from "lucide-react";
+import { MessageCircle, Search, SlidersHorizontal, X, Inbox as InboxIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { inboxStatusLabel, priorityLabel } from "@/lib/inboxPresentation";
@@ -27,18 +26,13 @@ function relativeTime(iso: string | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function statusTone(status: string): string {
-  if (status === "resolved") return "bg-muted text-muted-foreground";
-  if (status === "waiting_client") return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300";
-  if (status === "unassigned" || status === "new") return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
-  return "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300";
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }
 
-function priorityTone(priority: string): string {
-  if (priority === "urgent") return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
-  if (priority === "high") return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
-  return "";
-}
+const QUICK_VIEW_CLASS =
+  "h-7 shrink-0 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground aria-[pressed=true]:bg-selected aria-[pressed=true]:text-selected-foreground";
 
 const HANDLING_LABEL: Record<NonNullable<InboxConversationFilters["handling"]>, string> = {
   ai_active: "AI active",
@@ -104,8 +98,8 @@ export function ConversationList({
   if (filters.unreadOnly) chips.push({ key: "unread", label: "Unread", clear: () => set({ unreadOnly: false }) });
 
   return (
-    <div className="flex h-full flex-col border-r">
-      <div className="space-y-2 border-b p-3">
+    <div className="flex h-full flex-col">
+      <div className="space-y-2 border-b border-border p-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -125,13 +119,13 @@ export function ConversationList({
 
         <div className="flex flex-wrap gap-1 pb-0.5" role="group" aria-label="Inbox views">
           {QUICK_VIEWS.filter((v) => v.key !== "mine" || me).map((v) => (
-            <Button key={v.key} type="button" size="sm" title={v.title} aria-pressed={view === v.key} variant={view === v.key ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set(v.patch(me))}>{v.label}</Button>
+            <Button key={v.key} type="button" size="sm" title={v.title} aria-pressed={view === v.key} variant="ghost" className={QUICK_VIEW_CLASS} onClick={() => set(v.patch(me))}>{v.label}</Button>
           ))}
-          <Button type="button" size="sm" aria-pressed={filters.unreadOnly} variant={filters.unreadOnly ? "secondary" : "ghost"} className="h-7 shrink-0 px-2 text-xs" onClick={() => set({ unreadOnly: !filters.unreadOnly })}>Unread</Button>
+          <Button type="button" size="sm" aria-pressed={filters.unreadOnly} variant="ghost" className={QUICK_VIEW_CLASS} onClick={() => set({ unreadOnly: !filters.unreadOnly })}>Unread</Button>
         </div>
 
         {panelOpen && (
-          <div className="space-y-2 rounded-md border bg-muted/30 p-2">
+          <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-2">
             <Select value={filters.inboxStatus ?? "all"} onValueChange={(v) => set({ inboxStatus: v === "all" ? null : (v as InboxConversationFilters["inboxStatus"]) })}>
               <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Inbox status" /></SelectTrigger>
               <SelectContent>
@@ -191,7 +185,7 @@ export function ConversationList({
         {chips.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {chips.map((c) => (
-              <button key={c.key} type="button" onClick={c.clear} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs text-secondary-foreground hover:bg-secondary/80" aria-label={`Remove filter ${c.label}`}>
+              <button key={c.key} type="button" onClick={c.clear} className="inline-flex items-center gap-1 rounded-full bg-selected px-2 py-0.5 text-xs font-medium text-selected-foreground hover:bg-selected/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Remove filter ${c.label}`}>
                 {c.label} <X className="h-3 w-3" />
               </button>
             ))}
@@ -230,24 +224,22 @@ export function ConversationList({
                   onClick={() => onSelect(c.id)}
                   aria-current={selectedId === c.id ? "true" : undefined}
                   aria-label={`Conversation with ${name}${unread ? ", unread" : ""}, ${inboxStatusLabel(c.inbox_status)}`}
-                  className={`flex w-full items-start gap-3 border-b p-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selectedId === c.id ? "bg-muted" : ""}`}
+                  className={`flex w-full items-start gap-3 border-b border-border px-3 py-2.5 text-left transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${selectedId === c.id ? "bg-selected" : "hover:bg-accent/60"}`}
                 >
-                  <Avatar className="h-9 w-9 shrink-0">
-                    <AvatarFallback className="text-xs">{(c.display_name || c.wa_id).slice(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-selected text-xs font-semibold text-selected-foreground ring-1 ring-card" aria-hidden="true">
+                    {c.display_name ? initialsOf(c.display_name) : <MessageCircle className="h-3.5 w-3.5" />}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
-                      <p className={`truncate text-sm ${unread ? "font-semibold" : "font-medium"}`}>{name}</p>
-                      <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(c.last_inbound_at || c.updated_at)}</span>
+                      <p className={`truncate text-sm text-foreground ${unread ? "font-semibold" : "font-medium"}`}>{name}</p>
+                      <span className={`shrink-0 text-xs ${unread ? "font-medium text-info" : "text-muted-foreground"}`}>{relativeTime(c.last_inbound_at || c.updated_at)}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1">
                       <HandoverBadge conversation={c} assigneeName={c.assigned_staff_name} />
-                      {c.inbox_status === "waiting_client" && <Badge variant="secondary" className={statusTone(c.inbox_status)}>{inboxStatusLabel(c.inbox_status)}</Badge>}
-                      {c.priority_level !== "normal" && <Badge variant="secondary" className={priorityTone(c.priority_level)}>{priorityLabel(c.priority_level)}</Badge>}
-                      {computeSlaState(c, slaSettings).phase === "overdue" && (
-                        <Badge variant="secondary" className="bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">Overdue</Badge>
-                      )}
-                      {unread && <span className="h-2 w-2 rounded-full bg-primary" aria-label="Unread" />}
+                      {c.inbox_status === "waiting_client" && <StatusPill tone="neutral">{inboxStatusLabel(c.inbox_status)}</StatusPill>}
+                      {c.priority_level !== "normal" && <StatusPill tone={c.priority_level === "urgent" ? "danger" : "warning"}>{priorityLabel(c.priority_level)}</StatusPill>}
+                      {computeSlaState(c, slaSettings).phase === "overdue" && <StatusPill tone="danger">Overdue</StatusPill>}
+                      {unread && <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-info-solid" aria-label="Unread" />}
                     </div>
                   </div>
                 </button>
