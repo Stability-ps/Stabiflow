@@ -9,14 +9,16 @@
 // Requires .env.test.local (gitignored) - see .env.test.local.example.
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, ANON_KEY, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, ANON_KEY, cleanupTenant, createTestTenant, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 
 let tenantA: TestTenant;
 let tenantB: TestTenant;
 
 beforeAll(async () => {
   tenantA = await createTestTenant("a");
+  await enableModules(tenantA.workspaceId, "module.campaigns");
   tenantB = await createTestTenant("b");
+  await enableModules(tenantB.workspaceId, "module.campaigns");
 });
 
 afterAll(async () => {
