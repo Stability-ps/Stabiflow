@@ -7,7 +7,7 @@
 // successful Meta delivery; that failure is caught and recorded, never
 // left to crash the webhook).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, getTestEnv, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, getTestEnv, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedWhatsAppSetup } from "./inboxHelpers";
 
 const APP_SECRET = getTestEnv("INTEGRATIONS_META_APP_SECRET");
@@ -42,6 +42,7 @@ describe("Inbox webhook message processing (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("inbox-webhook");
+    await enableModules(workspace.workspaceId, "module.whatsapp");
     number = await seedWhatsAppSetup(workspace.workspaceId);
     await admin.rpc("set_workspace_integration_secret", {
       p_integration_id: (await admin.from("workspace_whatsapp_numbers").select("integration_id").eq("id", number.id).single()).data!.integration_id,

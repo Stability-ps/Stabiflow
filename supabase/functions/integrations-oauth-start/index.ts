@@ -39,6 +39,24 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Forbidden" }, 403);
   }
 
+  // Plan/feature access is authoritative server-side, not just the route
+  // FeatureGate. Connecting happens on the Integrations page
+  // (module.integrations); WhatsApp additionally needs module.whatsapp.
+  // is_feature_enabled is the UI's evaluator (plans, Admin targets,
+  // grandfathering). Non-members were already refused above, so this never
+  // reveals another workspace's plan.
+  const requiredModules = provider === "whatsapp" ? ["module.integrations", "module.whatsapp"] : ["module.integrations"];
+  for (const flagKey of requiredModules) {
+    const { data: enabled, error: featureError } = await callerSb.rpc("is_feature_enabled", { p_workspace_id: workspaceId, p_flag_key: flagKey });
+    if (featureError) return json(req, { error: "Forbidden" }, 403);
+    if (enabled !== true) {
+      const message = provider === "whatsapp"
+        ? "WhatsApp is part of the Growth plan. Upgrade in Billing & plans to connect it."
+        : "Facebook and Instagram connections are part of the Growth plan. Upgrade in Billing & plans to connect them.";
+      return json(req, { error: message, code: "MODULE_NOT_IN_PLAN" }, 403);
+    }
+  }
+
   // INTEGRATIONS_META_MOCK_MODE alone cannot tell "the automated test
   // suite is calling this" apart from "a real production user clicked
   // Connect Meta" - both hit the same deployed function. A real request

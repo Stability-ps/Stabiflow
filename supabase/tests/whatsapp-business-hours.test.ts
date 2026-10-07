@@ -16,7 +16,7 @@
 // No real WhatsApp / Meta / OpenAI call: the number credential is a mock
 // token (send -> failure path) and the local edge runtime has no OpenAI key.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 
 const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/whatsapp-webhook`;
@@ -108,6 +108,7 @@ describe("Phase 12 - business-time helpers (direct RPC, deterministic)", () => {
   let ws: TestTenant;
   beforeAll(async () => {
     ws = await createTestTenant("bh-calc");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     await configureBusinessHours(ws.workspaceId, { tz: "Africa/Johannesburg", days: MON_FRI_8_17 });
   });
   afterAll(async () => { await cleanupTenant(ws); });
@@ -157,6 +158,7 @@ describe("Phase 12 - business-time helpers (direct RPC, deterministic)", () => {
 
   it("DST-observing timezone: business minutes computed with IANA conversion", async () => {
     const dst = await createTestTenant("bh-dst");
+    await enableModules(dst.workspaceId, "module.whatsapp");
     await configureBusinessHours(dst.workspaceId, { tz: "America/New_York", days: MON_FRI_8_17 });
     // Winter Mon 2026-01-05: 08:00 EST = 13:00Z. 08:00->10:00 EST = 120 min.
     expect(await bizMinutes(dst.workspaceId, "2026-01-05T13:00:00Z", "2026-01-05T15:00:00Z")).toBe(120);
@@ -181,6 +183,7 @@ describe("Phase 12 - business-time helpers (direct RPC, deterministic)", () => {
     expect(k3).not.toBe(k1);
     // an all-closed workspace -> the sentinel
     const closedWs = await createTestTenant("bh-closed");
+    await enableModules(closedWs.workspaceId, "module.whatsapp");
     await configureBusinessHours(closedWs.workspaceId, { tz: "Africa/Johannesburg", days: ALWAYS_CLOSED });
     expect(await closedKey(closedWs.workspaceId, "2026-06-15T09:00:00Z")).toBe("always_closed");
     await cleanupTenant(closedWs);
@@ -204,6 +207,7 @@ describe("Phase 12 - sla_sweep business-time integration", () => {
   let numberId: string;
   beforeAll(async () => {
     ws = await createTestTenant("bh-sla");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     numberId = (await seedWhatsAppSetup(ws.workspaceId)).id;
     await admin.from("workspace_settings").update({ handoff_sla_minutes: 10, handoff_sla_enabled: true }).eq("workspace_id", ws.workspaceId);
   });
@@ -270,6 +274,7 @@ describe("Phase 12 - outside-hours acknowledgement (webhook)", () => {
   let numberId: string;
   beforeAll(async () => {
     ws = await createTestTenant("bh-ack");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     const setup = await seedWhatsAppSetup(ws.workspaceId);
     numberId = setup.id;
     phoneNumberId = setup.phone_number_id;
@@ -354,7 +359,9 @@ describe("Phase 12 - settings security & backward compatibility", () => {
   let other: TestTenant;
   beforeAll(async () => {
     ws = await createTestTenant("bh-sec");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     other = await createTestTenant("bh-sec-other");
+    await enableModules(other.workspaceId, "module.whatsapp");
   });
   afterAll(async () => { await cleanupTenant(ws); await cleanupTenant(other); });
 

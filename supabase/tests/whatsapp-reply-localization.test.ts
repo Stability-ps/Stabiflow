@@ -8,7 +8,7 @@
 // and candidate-rejection logic is covered by the pure-helper unit tests
 // in supabase/functions/_shared/inbox/replyLocalization.test.ts.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 
 const WEBHOOK_URL = `${SUPABASE_URL}/functions/v1/whatsapp-webhook`;
@@ -52,7 +52,9 @@ describe("Phase 13 - WhatsApp reply localization", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("loc");
+    await enableModules(ws.workspaceId, "module.whatsapp");
     other = await createTestTenant("loc-other");
+    await enableModules(other.workspaceId, "module.whatsapp");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     phoneNumberId = num.phone_number_id;
     await admin.rpc("set_workspace_integration_secret", {

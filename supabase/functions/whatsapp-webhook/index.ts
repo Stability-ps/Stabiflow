@@ -546,6 +546,20 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     dedupeKey: `message.received:${event.messageId}`,
   });
 
+  // Plan gate for every AI path below (voice transcription and AI replies).
+  // The inbound message is already stored and its events emitted, and the
+  // non-AI paths (greeting, outside-hours ack, handover, unsupported-type
+  // notice) still run; only paid AI work is skipped when the workspace's
+  // plan does not include WhatsApp. Same evaluator as the UI. Checked before
+  // any AI budget lookup or whatsapp_ai_turns reservation. An error counts
+  // as "not enabled".
+  const { data: whatsappModuleOn, error: whatsappModuleError } = await sb.rpc("is_feature_enabled", {
+    p_workspace_id: numberRow.workspace_id,
+    p_flag_key: "module.whatsapp",
+  });
+  if (whatsappModuleError) console.error("whatsapp-webhook: module.whatsapp check failed - no AI this turn", whatsappModuleError.message);
+  const aiAllowedByPlan = !whatsappModuleError && whatsappModuleOn === true;
+
   // Phase 10: transcribe a stored customer voice note ONCE. Deliberately
   // runs for human-controlled conversations too (background staff
   // transcription) - the AI-reply gate further down is unchanged, so a
@@ -562,7 +576,7 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
       .maybeSingle();
     const transcribeModel = Deno.env.get("OPENAI_TRANSCRIBE_MODEL")?.trim() || "gpt-4o-mini-transcribe";
     const transcribeKey = Deno.env.get("OPENAI_API_KEY")?.trim();
-    if (voiceSettings?.ai_voice_transcription_enabled === true && transcribeKey) {
+    if (aiAllowedByPlan && voiceSettings?.ai_voice_transcription_enabled === true && transcribeKey) {
       const voiceBudget = await resolveInboxAiBudget(sb, numberRow.workspace_id, INBOX_AI_BUDGET_FEATURES);
       if (!voiceBudget.allowed) {
         // Over the workspace's Inbox AI allowance - NO provider call. An
@@ -696,6 +710,10 @@ async function processMessageEvent(sb: AnySupabaseClient, event: InboundMessageE
     await storeOutbound(sb, cred, numberRow.workspace_id, conversation.id, event.waId, HANDOFF_ACK, "system");
     return;
   }
+
+  // Not on a plan that includes WhatsApp: no AI reply, nothing reserved.
+  // The message stays in the inbox for staff.
+  if (!aiAllowedByPlan) return;
 
   // Phase 7: Inbox AI cost governance. Runs AFTER the human-control gate and
   // the no-AI fast paths (greeting, explicit human request) above, and
