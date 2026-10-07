@@ -58,9 +58,19 @@ describe("Dashboard operational states", () => {
     mocks.campaigns = [];
     mocks.conversations = [];
     renderOverview();
-    expect(screen.getByText("Launch your first campaign to see performance here.").parentElement).toHaveClass("py-8");
-    expect(screen.getByText(/StabiFlow is connected and ready/).parentElement).toHaveClass("py-8");
-    expect(screen.getByText(/needs campaign and conversion data/).parentElement).toHaveClass("py-8");
+    // Home empty states were tightened to py-4 (b11ec47) and Flow AI became
+    // an inline recommendations strip rather than an EmptyState (062ccf0).
+    expect(screen.getByText("Launch your first campaign to see performance here.").parentElement).toHaveClass("py-4");
+    expect(screen.getByText(/StabiFlow is connected and ready/).parentElement).toHaveClass("py-4");
+    expect(screen.getByText(/No recommendations yet\. As StabiFlow collects campaign and conversion data/)).toBeInTheDocument();
+  });
+
+  it("REGRESSION: never renders a literal \\n escape as page text", () => {
+    mocks.integrations = [{ provider: "meta", status: "connected" }, { provider: "whatsapp", status: "connected" }];
+    mocks.campaigns = [];
+    mocks.conversations = [];
+    const { container } = renderOverview();
+    expect(container.textContent).not.toContain("\\n");
   });
 
   it("shows real campaign and conversation rows when authoritative data exists", () => {

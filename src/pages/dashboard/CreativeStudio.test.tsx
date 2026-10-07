@@ -58,6 +58,12 @@ function openAdvanced() {
   fireEvent.click(screen.getByRole("button", { name: /show generation details/i }));
 }
 
+// fb180b0 (AI-first brief) keeps the reference-image grid closed until the
+// user chooses "Add reference"; the selection flow itself is unchanged.
+function openReferencePicker() {
+  fireEvent.click(screen.getByRole("button", { name: "Add reference" }));
+}
+
 describe("Creative Studio - one-page form (regression)", () => {
   afterEach(() => {
     cleanup();
@@ -67,14 +73,15 @@ describe("Creative Studio - one-page form (regression)", () => {
   it("explains the required field and disables the primary Generate Ads button", () => {
     mocks.assets = [];
     renderStudio();
-    const textarea = screen.getByLabelText(/product\/service/i);
+    const textarea = screen.getByLabelText(/What do you want to create/i);
     expect(textarea).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText(/describe the product or service before generating ads/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tell StabiFlow what you want to promote before generating ads/i)).toBeInTheDocument();
   });
 
   it("shows a clear selected media card and allows removal", () => {
     mocks.assets = [{ id: "asset-1", title: "summer-sale.jpg", storage_path: "private/summer-sale.jpg", width_px: 1200, height_px: 900 }];
     renderStudio();
+    openReferencePicker();
     fireEvent.click(screen.getByRole("button", { name: "Select summer-sale.jpg" }));
     expect(screen.getByText("Selected media")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Selected summer-sale.jpg" })).toHaveAttribute("aria-pressed", "true");
@@ -96,7 +103,7 @@ describe("Creative Studio - one-page form (regression)", () => {
       variants: [{ headline: "H", primaryText: "P", description: "D", cta: "Go" }],
     });
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A weekend baking course" } });
+    fireEvent.change(screen.getByLabelText(/What do you want to create/i), { target: { value: "A weekend baking course" } });
     fireEvent.click(screen.getByRole("button", { name: /show standalone copy ideas/i }));
     fireEvent.click(screen.getByRole("button", { name: /generate copy ideas/i }));
     await waitFor(() => expect(creativeStudioMock.generateCreativeCopy).toHaveBeenCalledTimes(1));
@@ -125,7 +132,7 @@ describe("Creative Studio - one-click Generate Ads orchestration entry point", (
     mocks.assets = [];
     creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.change(screen.getByLabelText(/What do you want to create/i), { target: { value: "A bakery in Cape Town" } });
     openAdvanced();
     fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
     await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
@@ -138,7 +145,7 @@ describe("Creative Studio - one-click Generate Ads orchestration entry point", (
     mocks.assets = [];
     creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.change(screen.getByLabelText(/What do you want to create/i), { target: { value: "A bakery in Cape Town" } });
     openAdvanced();
     fireEvent.click(screen.getByRole("button", { name: /generate visual concepts/i }));
     await waitFor(() => expect(creativeStudioMock.generateVisualConcepts).toHaveBeenCalledTimes(1));
@@ -156,6 +163,7 @@ describe("Creative Studio - reference-ads asset purpose + controls (approved pla
   it("shows the purpose selector for an UNCLASSIFIED asset (asset_role null) - never gated on classification", () => {
     mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: null }];
     renderStudio();
+    openReferencePicker();
     fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
     expect(screen.getByText("How should StabiFlow use this image?")).toBeInTheDocument();
     expect(screen.queryByText(/Media Library classifies this as/)).not.toBeInTheDocument();
@@ -164,6 +172,7 @@ describe("Creative Studio - reference-ads asset purpose + controls (approved pla
   it("suggests (but does not force) the purpose from an already-classified asset", () => {
     mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "reference_creative" }];
     renderStudio();
+    openReferencePicker();
     fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
     expect(screen.getByText(/Media Library classifies this as "Reference advert"/)).toBeInTheDocument();
     expect(screen.getByText("How should StabiFlow use this reference?")).toBeInTheDocument();
@@ -173,7 +182,8 @@ describe("Creative Studio - reference-ads asset purpose + controls (approved pla
     mocks.assets = [{ id: "asset-1", title: "old-ad.jpg", storage_path: "p", width_px: 1200, height_px: 900, asset_role: "reference_creative" }];
     creativeStudioMock.generateVisualConcepts.mockRejectedValue(new Error("stop after the call is made"));
     renderStudio();
-    fireEvent.change(screen.getByLabelText(/product\/service/i), { target: { value: "A bakery in Cape Town" } });
+    fireEvent.change(screen.getByLabelText(/What do you want to create/i), { target: { value: "A bakery in Cape Town" } });
+    openReferencePicker();
     fireEvent.click(screen.getByRole("button", { name: "Select old-ad.jpg" }));
     expect(screen.getByText("How should StabiFlow use this reference?")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Keep similar colours"));

@@ -71,8 +71,10 @@ describe("ConversationList (Phase 14)", () => {
   it("shows active filter chips and a Clear all that resets filters + search", () => {
     const activeFilters: InboxConversationFilters = { ...EMPTY_INBOX_FILTERS, priority: "high", unreadOnly: true };
     const { onFiltersChange, onSearchInputChange } = renderList({ filters: activeFilters, filtersActive: true });
-    expect(screen.getByText(/high priority/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Unread$/)).toBeInTheDocument();
+    // "Unread" is also a quick-view toggle (83c01e3), so assert the removable chips.
+    expect(screen.getByRole("button", { name: "Remove filter High priority" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove filter Unread" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unread" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByText(/clear all/i));
     expect(onFiltersChange).toHaveBeenCalledWith(EMPTY_INBOX_FILTERS);
     expect(onSearchInputChange).toHaveBeenCalledWith("");

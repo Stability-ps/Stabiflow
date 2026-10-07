@@ -19,7 +19,7 @@ vi.mock("@/lib/businessStudio", async (orig) => ({
 vi.mock("@/lib/businessIdentity", async (orig) => ({
   ...(await orig<typeof import("@/lib/businessIdentity")>()),
   fetchBusinessIdentity: vi.fn().mockResolvedValue({
-    identity: { trading_name: "Acme", core_values: [] }, contacts: [], locations: [], socialLinks: [], offerings: [], team: [], projects: [], certifications: [], identifiers: [],
+    identity: { trading_name: "Acme", core_values: [] }, contacts: [], locations: [], socialLinks: [], offerings: [], team: [], projects: [], certifications: [], identifiers: [], sectionPreferences: [],
   }),
 }));
 
