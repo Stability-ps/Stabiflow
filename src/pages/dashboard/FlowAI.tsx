@@ -64,7 +64,7 @@ export default function FlowAI() {
   const handleStarterPrompt = (prompt: string) => sendMessage(prompt);
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-8rem)] w-full max-w-[1500px] gap-4 overflow-hidden rounded-3xl border border-violet-100/80 bg-card/85 p-3 shadow-[0_18px_60px_-42px_hsl(260_60%_40%/0.28)] backdrop-blur-sm sm:p-4">
+    <div className="operational-page flex h-[calc(100vh-8rem)] gap-4 overflow-hidden rounded-xl border border-border/80 bg-card p-3 shadow-[0_8px_24px_hsl(222_47%_11%/0.04)] sm:p-4">
       <aside className="w-64 shrink-0 space-y-2 overflow-y-auto rounded-2xl border border-border/60 bg-muted/20 p-3">
         <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => setSelectedConversationId(null)}>
           <Plus className="h-4 w-4" /> New conversation
