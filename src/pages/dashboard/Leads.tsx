@@ -71,10 +71,10 @@ export default function Leads() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-8rem)] w-full max-w-[1600px] flex-col">
-      <div className="mb-4 flex flex-col gap-4 rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/70 p-5 shadow-[0_18px_60px_-44px_hsl(213_82%_45%/0.35)] sm:flex-row sm:items-center sm:justify-between">
+    <div className="operational-page flex h-[calc(100vh-8rem)] flex-col">
+      <div className="operational-header">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Sales workspace</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Leads</h1>
+          <p className="operational-section-label">Sales workspace</p><h1 className="operational-title">Leads</h1>
           <p className="text-sm text-muted-foreground">Leads, qualification, and your configurable pipeline stages.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -91,7 +91,7 @@ export default function Leads() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-[0_16px_50px_-40px_hsl(213_45%_30%/0.35)]">
+      <div className="operational-panel flex-1">
         {view === "board" ? (
           <LeadBoard
             workspaceId={currentWorkspaceId}
