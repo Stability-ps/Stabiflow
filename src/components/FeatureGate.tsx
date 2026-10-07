@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import type { FeatureFlagKey } from "@/lib/featureFlags";
+import { MODULE_LOCK_INFO } from "@/lib/moduleLockInfo";
 
 /**
  * Route-level gate for a feature-flagged module. A direct link to a hidden
@@ -21,23 +22,21 @@ export function FeatureGate({ flag, children }: { flag: FeatureFlagKey; children
     );
   }
   if (!isEnabled(flag)) {
-    const isAutomations = flag === "module.automations";
+    const info = MODULE_LOCK_INFO[flag];
     return (
       <EmptyState
         icon={Lock}
-        title={isAutomations ? "Automations are a Growth feature" : "Not available on your workspace yet"}
+        title={info ? `${info.name} ${info.name.endsWith("s") ? "are" : "is"} part of the ${info.plans}` : "Not available on your workspace yet"}
         description={
-          isAutomations
-            ? "Automations are included with Growth and Pro workspaces. Upgrade to create, enable and run automated workflows. Existing automation data is kept safely if your plan changes."
+          info
+            ? `${info.what} Upgrade in Billing & plans to switch it on. Your data is safe - nothing has been removed.`
             : "This part of StabiFlow isn't switched on for your workspace. Your data is safe - nothing has been removed."
         }
         action={
           <div className="flex flex-wrap justify-center gap-2">
-            {isAutomations && (
-              <Button asChild>
-                <Link to="/app/billing">View plans</Link>
-              </Button>
-            )}
+            <Button asChild>
+              <Link to="/app/billing">See plans</Link>
+            </Button>
             <Button asChild variant="outline">
               <Link to="/app">Back to home</Link>
             </Button>

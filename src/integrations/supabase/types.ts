@@ -4628,6 +4628,8 @@ export type Database = {
       }
       leads: {
         Row: {
+          archived_at: string | null
+          archived_by: string | null
           assigned_to: string | null
           company_name: string | null
           contact_name: string | null
@@ -4660,6 +4662,8 @@ export type Database = {
           workspace_id: string
         }
         Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
           assigned_to?: string | null
           company_name?: string | null
           contact_name?: string | null
@@ -4692,6 +4696,8 @@ export type Database = {
           workspace_id: string
         }
         Update: {
+          archived_at?: string | null
+          archived_by?: string | null
           assigned_to?: string | null
           company_name?: string | null
           contact_name?: string | null

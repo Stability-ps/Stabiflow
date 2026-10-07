@@ -23,7 +23,7 @@ export function LeadBoard({ workspaceId, leads, pipelines, selectedPipelineId, o
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null);
 
   const activeStages = (stages || []).filter((s) => s.is_active).sort((a, b) => a.sort_order - b.sort_order);
-  const boardLeads = leads.filter((l) => l.pipeline_id === selectedPipelineId && l.status === "active");
+  const boardLeads = leads.filter((l) => l.pipeline_id === selectedPipelineId && l.status === "active" && !l.archived_at);
   const totalValue = boardLeads.reduce((sum, lead) => sum + (Number(lead.estimated_value) || 0), 0);
   const overdueCount = boardLeads.filter((lead) => lead.next_follow_up_at && new Date(lead.next_follow_up_at).getTime() < Date.now()).length;
 

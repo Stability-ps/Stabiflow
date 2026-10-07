@@ -129,6 +129,20 @@ export async function fetchEntitlements(workspaceId: string): Promise<WorkspaceE
   return (data ?? []) as WorkspaceEntitlement[];
 }
 
+// Display names for entitlement keys ("team_seats" -> "Team members").
+export async function fetchEntitlementNames(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from("entitlement_definitions").select("key, name");
+  if (error) throw new Error(error.message);
+  return Object.fromEntries((data ?? []).map((d) => [d.key, d.name]));
+}
+
+export function entitlementLabel(key: string, names: Record<string, string> | undefined): string {
+  const name = names?.[key];
+  if (name) return name;
+  const words = key.replace(/[._]/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export type SubscriptionPrice = { amount_minor: number; currency: string; billing_interval: BillingInterval };
 
 export type WorkspaceBillingState = {

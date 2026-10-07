@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -157,6 +157,14 @@ describe("legacy /app/inbox compatibility", () => {
   it("redirects the section index /app/whatsapp to the Inbox child", () => {
     renderArea("/app/whatsapp");
     expect(screen.getByRole("navigation", { name: "WhatsApp sections" })).toBeInTheDocument();
+  });
+
+  it("links every Messages section, including Analytics, from the section tabs", () => {
+    renderArea("/app/whatsapp");
+    const nav = screen.getByRole("navigation", { name: "WhatsApp sections" });
+    for (const [label, href] of [["Inbox", "/app/whatsapp/inbox"], ["Contacts", "/app/whatsapp/contacts"], ["Templates", "/app/whatsapp/templates"], ["Intake", "/app/whatsapp/intake"], ["Analytics", "/app/whatsapp/analytics"]]) {
+      expect(within(nav).getByRole("link", { name: label })).toHaveAttribute("href", href);
+    }
   });
 });
 

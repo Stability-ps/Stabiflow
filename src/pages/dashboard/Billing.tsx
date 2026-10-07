@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
-  annualSavingPercent, cancelSubscription, fetchBillingState, fetchCatalog, fetchEntitlements, formatMoney, intervalLabel, isOurReference,
+  annualSavingPercent, cancelSubscription, entitlementLabel, fetchBillingState, fetchCatalog, fetchEntitlementNames, fetchEntitlements, formatMoney, intervalLabel, isOurReference,
   startCheckout, verifyPayment, type BillingInterval, type CatalogPlan,
 } from "@/lib/billing";
 import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
@@ -73,6 +73,8 @@ export default function Billing() {
     queryFn: () => fetchEntitlements(currentWorkspaceId as string),
     enabled: !!currentWorkspaceId,
   });
+
+  const entitlementNames = useQuery({ queryKey: ["entitlement-names"], queryFn: fetchEntitlementNames, staleTime: 30 * 60_000 });
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ["billing-state", currentWorkspaceId] });
@@ -290,7 +292,7 @@ export default function Billing() {
                     {e.enabled ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
                   </span>
                   <span className={`min-w-0 flex-1 truncate ${e.enabled ? "text-slate-700" : "text-slate-400"}`}>
-                    {e.entitlement_key.replace(/[._]/g, " ")}
+                    {entitlementLabel(e.entitlement_key, entitlementNames.data)}
                   </span>
                   <span className={`shrink-0 text-xs font-medium ${e.enabled ? "text-emerald-700" : "text-slate-400"}`}>
                     {e.kind === "boolean"

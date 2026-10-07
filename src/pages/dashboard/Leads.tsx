@@ -119,6 +119,7 @@ export default function Leads() {
             canCreateOpportunity={canCreateOpportunity}
             canCloseOpportunity={canCloseOpportunity}
             canRecordRevenue={canRecordRevenue}
+            canArchive={roleHasPermission(role, "lead.delete")}
             opportunityLabel={opportunityLabel}
             autoOpenOpportunityForm={autoOpenOpportunityForm}
           />

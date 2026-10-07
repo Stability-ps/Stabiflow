@@ -171,6 +171,9 @@ Deno.serve(async (req: Request) => {
       results.push({ id: concept.id, visual_status: "ready", visual_error: null });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // No visual was delivered, so give the generation back.
+      const { error: refundError } = await serviceSb.rpc("refund_entitlement", { p_workspace_id: workspaceId, p_key: "creative_generations", p_amount: 1 });
+      if (refundError) console.error("creative-studio-visuals: refund failed", refundError.message);
       await callerSb
         .from("creative_studio_concepts")
         .update({ visual_status: "failed", visual_error: message.slice(0, 500) })

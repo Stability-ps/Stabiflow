@@ -15,6 +15,10 @@ const TABS: Array<{ label: string; to: string; external?: boolean }> = [
   { label: "Contacts", to: "/app/whatsapp/contacts" },
   { label: "Templates", to: "/app/whatsapp/templates" },
   { label: "Intake", to: "/app/whatsapp/intake" },
+  // Operational metrics (response time, handover, resolution). Its sidebar
+  // link was removed with the duplicate Messages navigation and nothing
+  // else linked to it, so it lives with the other Messages tabs.
+  { label: "Analytics", to: "/app/whatsapp/analytics" },
 ];
 
 export default function WhatsAppLayout() {

@@ -80,23 +80,6 @@ Deno.serve(async (req: Request) => {
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 
-  // Reserve one monthly Creative Studio generation before any provider call.
-  // consume_entitlement is atomic, so concurrent requests cannot race past
-  // the plan allowance.
-  const serviceSb = createServiceClient();
-  const { data: creativeAllowed, error: creativeQuotaError } = await serviceSb.rpc("consume_entitlement", {
-    p_workspace_id: workspaceId,
-    p_key: "creative_generations",
-    p_amount: 1,
-  });
-  if (creativeQuotaError) {
-    console.error("creative-studio-concepts: quota check failed", creativeQuotaError.message);
-    return json(req, { error: "Unable to verify your Creative Studio allowance. Try again shortly." }, 503);
-  }
-  if (creativeAllowed !== true) {
-    return json(req, { error: "Monthly Creative Studio generation limit reached. Upgrade your plan or wait for the next monthly reset.", code: "USAGE_LIMIT_REACHED" }, 429);
-  }
-
   const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
   const model = Deno.env.get("OPENAI_FLOW_AI_MODEL")?.trim();
   if (!apiKey || !model) {
@@ -174,20 +157,46 @@ Deno.serve(async (req: Request) => {
   // failure here degrades gracefully to "no reference guidance" rather
   // than blocking copy/concept generation (same posture as the rest of
   // Creative Studio's optional AI enrichments).
-  let referenceStyle: ReferenceStyle | null = null;
-  if (
-    sourceAsset &&
+  const analyzeReference =
+    !!sourceAsset &&
     shouldAnalyzeReference({
       purpose: assetPurpose,
       sourceMediaAssetId: sourceAsset.id,
       existingReferenceStyle: null,
       existingReferenceSourceAssetId: null,
-    })
-  ) {
+    });
+  if (sourceAsset && analyzeReference) {
     const eligibility = isReferenceImageEligible(sourceAsset.mime_type, sourceAsset.file_size_bytes);
     if (!eligibility.eligible) {
       return json(req, { error: eligibility.reason }, 400);
     }
+  }
+
+  // Reserve one monthly Creative Studio generation before any provider call,
+  // after every request check, so a rejected request never costs a
+  // generation. consume_entitlement is atomic, so concurrent requests cannot
+  // race past the plan allowance. Any failure after this point refunds it.
+  const serviceSb = createServiceClient();
+  const { data: creativeAllowed, error: creativeQuotaError } = await serviceSb.rpc("consume_entitlement", {
+    p_workspace_id: workspaceId,
+    p_key: "creative_generations",
+    p_amount: 1,
+  });
+  if (creativeQuotaError) {
+    console.error("creative-studio-concepts: quota check failed", creativeQuotaError.message);
+    return json(req, { error: "Unable to verify your Creative Studio allowance. Try again shortly." }, 503);
+  }
+  if (creativeAllowed !== true) {
+    return json(req, { error: "Monthly Creative Studio generation limit reached. Upgrade your plan or wait for the next monthly reset.", code: "USAGE_LIMIT_REACHED" }, 429);
+  }
+
+  const refundGeneration = async () => {
+    const { error } = await serviceSb.rpc("refund_entitlement", { p_workspace_id: workspaceId, p_key: "creative_generations", p_amount: 1 });
+    if (error) console.error("creative-studio-concepts: refund failed", error.message);
+  };
+
+  let referenceStyle: ReferenceStyle | null = null;
+  if (sourceAsset && analyzeReference) {
     try {
       const { data: bytes, error: downloadErr } = await callerSb.storage.from(CONTENT_MEDIA_BUCKET).download(sourceAsset.storage_path);
       if (downloadErr || !bytes) throw new Error(downloadErr?.message ?? "download failed");
@@ -208,7 +217,8 @@ Deno.serve(async (req: Request) => {
     concepts = applyCopyOverrides(concepts, { headline: userHeadline, body: userBodyText, cta: userCta });
   } catch (err) {
     console.error("creative-studio-concepts: generation failed", err instanceof Error ? err.message : err);
-    return json(req, { error: "Unable to generate visual concepts right now. Try again shortly." }, 502);
+    await refundGeneration();
+    return json(req, { error: "Unable to generate visual concepts right now. Try again shortly No generation was used." }, 502);
   }
 
   const { data: batch, error: batchErr } = await callerSb
@@ -235,6 +245,7 @@ Deno.serve(async (req: Request) => {
     .single();
   if (batchErr || !batch) {
     console.error("creative-studio-concepts: batch insert failed", batchErr?.message);
+    await refundGeneration();
     return json(req, { error: "Could not start a creative batch." }, 500);
   }
 
@@ -264,6 +275,7 @@ Deno.serve(async (req: Request) => {
   if (conceptErr || !inserted) {
     console.error("creative-studio-concepts: concept insert failed", conceptErr?.message);
     await callerSb.from("creative_studio_batches").delete().eq("id", batch.id);
+    await refundGeneration();
     return json(req, { error: "Could not save the generated concepts." }, 500);
   }
 

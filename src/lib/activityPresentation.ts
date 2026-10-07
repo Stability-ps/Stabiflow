@@ -34,6 +34,8 @@ const ACTIVITY_LABELS: Record<string, string> = {
   lead_marked_lost: "Lead marked as lost",
   lead_qualification_changed: "Lead qualification updated",
   lead_reopened: "Lead reopened",
+  lead_archived: "Lead archived",
+  lead_restored: "Lead restored from archive",
   lead_stage_changed: "Lead moved to a new stage",
   create_manual: "Lead created manually",
   move_stage: "Moved to a new stage",

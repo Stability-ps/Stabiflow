@@ -2,7 +2,7 @@
 // never a real OpenAI call, per direction to avoid consuming real API
 // usage merely to make the test suite pass.
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { streamFlowAiResponse } from "./openaiClient.ts";
+import { streamFlowAiResponse, toStrictParameters } from "./openaiClient.ts";
 
 function sseResponse(frames: { event?: string; data: unknown }[], status = 200): Response {
   const body = frames.map((f) => `${f.event ? `event: ${f.event}\n` : ""}data: ${JSON.stringify(f.data)}\n\n`).join("");
@@ -88,4 +88,25 @@ Deno.test("streamFlowAiResponse never includes the API key anywhere in a yielded
       assertEquals(JSON.stringify(evt).includes(secretKey), false);
     }
   });
+});
+
+Deno.test("toStrictParameters makes optional filters nullable, requires every key and drops numeric bounds", () => {
+  const strict = toStrictParameters({
+    type: "object", additionalProperties: false,
+    properties: { status: { type: "string", enum: ["active", "lost"] }, limit: { type: "integer", minimum: 1, maximum: 50 }, date_from: { type: "string" } },
+  });
+  assertEquals(strict.required, ["status", "limit", "date_from"]);
+  const p = strict.properties as Record<string, Record<string, unknown>>;
+  assertEquals(p.status.type, ["string", "null"]);
+  assertEquals(p.status.enum, ["active", "lost", null]);
+  assertEquals(p.limit.type, ["integer", "null"]);
+  assertEquals(p.limit.minimum, undefined);
+  assertEquals(strict.additionalProperties, false);
+});
+
+Deno.test("toStrictParameters keeps originally-required properties non-nullable", () => {
+  const strict = toStrictParameters({ type: "object", additionalProperties: false, required: ["date_from"], properties: { date_from: { type: "string" }, attribution_model: { type: "string", enum: ["last_touch"] } } });
+  const p = strict.properties as Record<string, Record<string, unknown>>;
+  assertEquals(p.date_from.type, "string");
+  assertEquals(p.attribution_model.type, ["string", "null"]);
 });

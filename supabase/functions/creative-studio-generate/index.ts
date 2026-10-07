@@ -52,9 +52,17 @@ Deno.serve(async (req: Request) => {
   const statusGate = await assertWorkspaceActive(callerSb, workspaceId);
   if (!statusGate.allowed) return json(req, workspaceSuspendedBody(statusGate.status), 403);
 
-  // Reserve one monthly Creative Studio generation before any provider call.
-  // consume_entitlement is atomic, so concurrent requests cannot race past
-  // the plan allowance.
+  const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+  const model = Deno.env.get("OPENAI_FLOW_AI_MODEL")?.trim();
+  if (!apiKey || !model) {
+    console.error("creative-studio-generate: OPENAI_API_KEY/OPENAI_FLOW_AI_MODEL not configured");
+    return json(req, { error: "Creative Studio is not configured yet. Contact support." }, 503);
+  }
+
+  // Reserve one monthly Creative Studio generation before the provider call,
+  // after the configuration check, so a request that cannot run never costs
+  // a generation. consume_entitlement is atomic, so concurrent requests
+  // cannot race past the plan allowance. A failed generation refunds it.
   const serviceSb = createServiceClient();
   const { data: creativeAllowed, error: creativeQuotaError } = await serviceSb.rpc("consume_entitlement", {
     p_workspace_id: workspaceId,
@@ -69,13 +77,6 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Monthly Creative Studio generation limit reached. Upgrade your plan or wait for the next monthly reset.", code: "USAGE_LIMIT_REACHED" }, 429);
   }
 
-  const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
-  const model = Deno.env.get("OPENAI_FLOW_AI_MODEL")?.trim();
-  if (!apiKey || !model) {
-    console.error("creative-studio-generate: OPENAI_API_KEY/OPENAI_FLOW_AI_MODEL not configured");
-    return json(req, { error: "Creative Studio is not configured yet. Contact support." }, 503);
-  }
-
   const input: CreativeStudioInput = {
     businessContext,
     audience: typeof body.audience === "string" ? body.audience.trim().slice(0, 300) : undefined,
@@ -88,6 +89,8 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, variants });
   } catch (err) {
     console.error("creative-studio-generate: generation failed", err instanceof Error ? err.message : err);
-    return json(req, { error: "Unable to generate copy right now. Try again shortly." }, 502);
+    const { error: refundError } = await serviceSb.rpc("refund_entitlement", { p_workspace_id: workspaceId, p_key: "creative_generations", p_amount: 1 });
+    if (refundError) console.error("creative-studio-generate: refund failed", refundError.message);
+    return json(req, { error: "Unable to generate copy right now. Try again shortly. No generation was used." }, 502);
   }
 });

@@ -18,7 +18,7 @@ export const messages: GuideChapter = {
       title: "How Messages works",
       blocks: [
         { type: "p", text: "Messages connects your WhatsApp Business number to StabiFlow so your whole team can see and answer customer conversations from one shared inbox - on a computer or a phone. Conversations can be handled by AI and automations, by people, or a mix of both, and every chat can become a lead and then a customer." },
-        { type: "p", text: "Messages has four tabs - Inbox, Contacts, Templates and Intake - and a settings button (the gear icon) for WhatsApp Settings." },
+        { type: "p", text: "Messages has five tabs - Inbox, Contacts, Templates, Intake and Analytics - and a settings button (the gear icon) for WhatsApp Settings." },
         { type: "callout", tone: "important", text: "Messages needs WhatsApp Business connected in Integrations. Until then, the page shows Connect WhatsApp Business." },
         { type: "screenshot", shot: { src: "whatsapp-inbox.webp", alt: "Messages showing Connect WhatsApp Business, before a WhatsApp number is connected", caption: "Before WhatsApp Business is connected, every Messages tab shows this. Connect it to unlock the inbox, contacts, templates and intake." } },
       ],
@@ -183,7 +183,7 @@ export const messages: GuideChapter = {
       title: "E. Messages analytics",
       keywords: ["response time", "handoff rate", "resolution", "intake completion"],
       blocks: [
-        { type: "p", text: "Messages analytics shows how your conversations are being handled: number of conversations, median human response time, handover rate, median resolution time, intake completion and the split between AI and human handling. Open it at /app/whatsapp/analytics (link below). The main Analytics page also shows how WhatsApp conversations convert into leads and customers." },
+        { type: "p", text: "Messages analytics shows how your conversations are being handled: number of conversations, median human response time, handover rate, median resolution time, intake completion and the split between AI and human handling. Open it from the Analytics tab in Messages. The main Analytics page also shows how WhatsApp conversations convert into leads and customers." },
       ],
     },
     {

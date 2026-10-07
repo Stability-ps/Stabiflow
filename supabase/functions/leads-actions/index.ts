@@ -32,6 +32,8 @@ const VALID_ACTIONS = new Set([
   "complete_follow_up",
   "mark_lead_lost",
   "reopen_lead",
+  "archive_lead",
+  "restore_lead",
   "add_note",
   "create_opportunity",
   "move_opportunity_stage",
@@ -796,6 +798,28 @@ Deno.serve(async (req: Request) => {
     const { error } = await serviceSb.from("leads").update({ status: "active", lost_at: null }).eq("id", leadId);
     if (error) return json(req, { error: "Unable to reopen this lead" }, 500);
     await logActivity(serviceSb, workspaceId, actorId, "lead_reopened", "lead", leadId, {});
+    return json(req, { ok: true });
+  }
+
+  // --- archive ------------------------------------------------------------
+  // Archiving hides a lead from active views; nothing is deleted. It needs
+  // lead.delete (owner/admin/manager) - the same people who could remove a
+  // lead - and keeps status (active/converted/lost) as it was.
+
+  if (action === "archive_lead" || action === "restore_lead") {
+    if (!(await hasWorkspacePermission(callerSb, workspaceId, "lead.delete"))) return json(req, { error: "Forbidden" }, 403);
+    const leadId = body.lead_id;
+    if (typeof leadId !== "string" || !leadId) return json(req, { error: "lead_id is required" }, 400);
+    const { data: lead } = await serviceSb.from("leads").select("id, archived_at").eq("id", leadId).eq("workspace_id", workspaceId).maybeSingle();
+    if (!lead) return json(req, { error: "Lead not found" }, 404);
+
+    const archive = action === "archive_lead";
+    if (archive === !!lead.archived_at) return json(req, { ok: true, unchanged: true });
+    const { error } = await serviceSb.from("leads")
+      .update(archive ? { archived_at: nowIso, archived_by: actorId } : { archived_at: null, archived_by: null })
+      .eq("id", leadId);
+    if (error) return json(req, { error: archive ? "Unable to archive this lead" : "Unable to restore this lead" }, 500);
+    await logActivity(serviceSb, workspaceId, actorId, archive ? "lead_archived" : "lead_restored", "lead", leadId, {});
     return json(req, { ok: true });
   }
 
