@@ -197,6 +197,46 @@ export async function fetchBillingState(workspaceId: string): Promise<WorkspaceB
   };
 }
 
+/**
+ * What the workspace is on, for compact surfaces (the sidebar workspace
+ * switcher). Mirrors the Billing page's rule - active/grace/cancelled
+ * subscription first, otherwise the highest-tier paid purchase, otherwise
+ * Free - but only once billing state has actually loaded. Loading or a failed
+ * load is never reported as "Free".
+ */
+export type PlanSummary =
+  | { status: "loading" }
+  | { status: "unavailable" }
+  | { status: "free" }
+  | { status: "paid"; name: string | null };
+
+export function summarizePlan(state: Pick<WorkspaceBillingState, "subscription" | "purchases"> | undefined, opts: { isLoading: boolean; isError: boolean }): PlanSummary {
+  if (state) {
+    if (state.subscription) return { status: "paid", name: state.subscription.plan?.name ?? null };
+    const highest = state.purchases.reduce<WorkspaceBillingState["purchases"][number] | null>(
+      (best, p) => (!best || (p.plan?.tier_rank ?? 0) > (best.plan?.tier_rank ?? 0) ? p : best),
+      null,
+    );
+    if (highest) return { status: "paid", name: highest.plan?.name ?? null };
+    return { status: "free" };
+  }
+  if (opts.isError) return { status: "unavailable" };
+  return { status: "loading" };
+}
+
+export function planSummaryLabel(summary: PlanSummary): string {
+  switch (summary.status) {
+    case "loading":
+      return "Checking plan…";
+    case "unavailable":
+      return "Plan unavailable";
+    case "free":
+      return "Free plan";
+    case "paid":
+      return summary.name ? `${summary.name} plan` : "Paid plan";
+  }
+}
+
 export function startCheckout(workspaceId: string, priceId: string) {
   return invoke<{ ok: true; reference: string; authorization_url: string }>("billing-checkout", { workspace_id: workspaceId, price_id: priceId });
 }

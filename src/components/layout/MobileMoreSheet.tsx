@@ -1,17 +1,21 @@
 import type { MouseEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronRight, CircleHelp, Download, LogOut, Share2, X } from "lucide-react";
+import { ChevronRight, CircleHelp, Download, Lock, LogOut, Share2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { GUIDE_PATH, isMobileNavItemActive, type MobileNavItem } from "@/lib/navigation";
+import { GUIDE_PATH, isMobileNavItemActive, NAV_ITEMS, type MobileNavItem } from "@/lib/navigation";
+import { MODULE_LOCK_INFO } from "@/lib/moduleLockInfo";
+import type { FeatureFlagKey } from "@/lib/featureFlags";
+
+const NAV_FLAG_BY_PATH = Object.fromEntries(NAV_ITEMS.filter((i) => i.flag).map((i) => [i.path, i.flag])) as Record<string, FeatureFlagKey>;
 import { useAuth } from "@/hooks/useAuth";
 import { useOverlayHistory } from "@/hooks/useOverlayHistory";
 import { BottomSheet, BottomSheetContent } from "@/components/ui/bottom-sheet";
 import { useWorkspaceSwitch } from "@/hooks/useWorkspaceSwitch";
 import { usePwaInstall } from "@/hooks/usePwaInstall";
 
-type Props = { open: boolean; onOpenChange: (open: boolean) => void; items: MobileNavItem[] };
+type Props = { open: boolean; onOpenChange: (open: boolean) => void; items: MobileNavItem[]; lockedItems?: MobileNavItem[] };
 
-export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
+export function MobileMoreSheet({ open, onOpenChange, items, lockedItems = [] }: Props) {
   const { pathname } = useLocation();
   const { signOut } = useAuth();
   const { currentMembership, memberships } = useWorkspaceSwitch();
@@ -40,7 +44,7 @@ export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
                     className={cn(
                       "flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-center text-xs font-medium text-foreground/80",
                       "hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      active && "bg-primary/10 text-foreground",
+                      active && "bg-selected text-foreground [&>svg]:text-primary",
                     )}
                   >
                     <item.icon className="h-5 w-5" aria-hidden="true" />
@@ -50,6 +54,32 @@ export function MobileMoreSheet({ open, onOpenChange, items }: Props) {
               );
             })}
           </ul>
+          {lockedItems.length > 0 ? (
+            <div className="mt-3 border-t px-1 pt-3">
+              <p className="px-1 pb-1 text-overline uppercase text-muted-foreground">Not in your plan</p>
+              <ul className="grid grid-cols-3 gap-1">
+                {lockedItems.map((item) => {
+                  const info = MODULE_LOCK_INFO[NAV_FLAG_BY_PATH[item.path]];
+                  const explanation = info ? `Included in the ${info.plans}` : "Not included in your current plan";
+                  return (
+                    <li key={item.key}>
+                      <Link
+                        to={item.path}
+                        onClick={go(item.path)}
+                        aria-label={`${item.label} (locked). ${explanation}. View upgrade options`}
+                        data-locked="true"
+                        className="relative flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-2 text-center text-xs font-medium text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <item.icon className="h-5 w-5 text-locked" aria-hidden="true" />
+                        <span className="line-clamp-2 leading-tight">{item.label}</span>
+                        <Lock className="absolute right-2 top-2 h-3 w-3 text-muted-foreground" aria-hidden="true" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
         </nav>
         {pwa.canInstall ? (
           <div className="mt-3 border-t px-2 pt-3">

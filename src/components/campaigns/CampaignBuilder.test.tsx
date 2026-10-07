@@ -177,7 +177,7 @@ describe("CampaignBuilder regression coverage", () => {
   it("uses the shared light design token for Primary Text", () => {
     renderBuilder();
     completeThroughCreative();
-    expect(screen.getByLabelText("Primary text")).toHaveClass("bg-background", "text-foreground");
+    expect(screen.getByLabelText("Primary text")).toHaveClass("bg-card", "text-foreground");
     expect(screen.getByLabelText("Primary text")).not.toHaveClass("bg-white/92");
   });
 });

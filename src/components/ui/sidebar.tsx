@@ -13,10 +13,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const SIDEBAR_COOKIE_NAME = "sidebar:state";
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH = "16rem";
+const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const SIDEBAR_WIDTH = "15.5rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
-const SIDEBAR_WIDTH_ICON = "3rem";
+const SIDEBAR_WIDTH_ICON = "3.5rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 
 type SidebarContext = {
@@ -30,6 +30,12 @@ type SidebarContext = {
 };
 
 const SidebarContext = React.createContext<SidebarContext | null>(null);
+
+function readSidebarOpenCookie(): boolean | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${SIDEBAR_COOKIE_NAME.replace(":", "\\:")}=(true|false)`));
+  return match ? match[1] === "true" : null;
+}
 
 function useSidebar() {
   const context = React.useContext(SidebarContext);
@@ -53,7 +59,9 @@ const SidebarProvider = React.forwardRef<
 
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
-  const [_open, _setOpen] = React.useState(defaultOpen);
+  // Restore the last desktop choice (the cookie written below); fall back
+  // to defaultOpen when there is none.
+  const [_open, _setOpen] = React.useState(() => readSidebarOpenCookie() ?? defaultOpen);
   const open = openProp ?? _open;
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
@@ -219,12 +227,16 @@ Sidebar.displayName = "Sidebar";
 
 const SidebarTrigger = React.forwardRef<React.ElementRef<typeof Button>, React.ComponentProps<typeof Button>>(
   ({ className, onClick, children, ...props }, ref) => {
-    const { toggleSidebar } = useSidebar();
+    const { toggleSidebar, state, isMobile } = useSidebar();
+    const label = state === "expanded" ? "Collapse sidebar" : "Expand sidebar";
 
     return (
       <Button
         ref={ref}
         data-sidebar="trigger"
+        aria-expanded={isMobile ? undefined : state === "expanded"}
+        aria-keyshortcuts="Meta+B Control+B"
+        title={`${label} (Ctrl/⌘ B)`}
         variant="ghost"
         size="icon"
         className={cn("h-9 w-9", className)}
@@ -235,7 +247,7 @@ const SidebarTrigger = React.forwardRef<React.ElementRef<typeof Button>, React.C
         {...props}
       >
         {children ?? <PanelLeft />}
-        <span className="sr-only">Toggle Sidebar</span>
+        <span className="sr-only">{label}</span>
       </Button>
     );
   },
