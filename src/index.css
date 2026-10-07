@@ -2,94 +2,162 @@
 @tailwind components;
 @tailwind utilities;
 
-/* StabiFlow premium UI foundation: restrained blue/cyan brand accents, soft
-   surfaces, generous radius and subtle depth. Keep product pages functional
-   while the shared primitives carry a consistent modern identity. */
+/* Inter (variable, Latin subset) self-hosted from public/fonts. SIL Open Font
+   License 1.1 - https://github.com/rsms/inter. Self-hosting keeps the PWA
+   working offline and avoids a third-party font request. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --control-h: 2.25rem;
+    --control-h-sm: 2rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   StabiFlow design tokens - the code side of the Figma "StabiFlow Design
+   System" (Color collection, Light/Dark). One token system: shadcn names are
+   kept (--background, --card, --primary ...) and the extra semantic roles are
+   added alongside. Values are HSL channels for hsl(var(--x) / alpha).
+   --------------------------------------------------------------------------- */
 @layer base {
   :root {
     color-scheme: light;
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    /* Surfaces */
+    --background: 220 20% 97%;          /* bg/canvas      gray/50  */
+    --card: 0 0% 100%;                  /* bg/surface     white    */
+    --card-foreground: 220 26% 9%;
+    --popover: 0 0% 100%;               /* bg/surface-raised       */
+    --popover-foreground: 220 26% 9%;
+    --muted: 216 17% 94%;               /* bg/subtle      gray/100 */
+    --accent: 216 17% 94%;              /* bg/hover - neutral hover for menus, ghost buttons */
+    --accent-foreground: 220 26% 9%;
+    --selected: 222 100% 97%;           /* bg/selected    blue/50  */
+    --selected-foreground: 227 73% 42%;
+    --secondary: 216 17% 94%;
+    --secondary-foreground: 220 26% 9%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    /* Text */
+    --foreground: 220 26% 9%;           /* text/primary   gray/900 */
+    --muted-foreground: 220 12% 44%;    /* text/secondary gray/500 - 5.0:1 on canvas */
+    --subtle-foreground: 218 13% 65%;   /* text/tertiary  gray/400 - placeholders/decoration only */
 
-    --primary: 213 82% 52%;
+    /* Action */
+    --primary: 226 75% 51%;             /* blue/600 - white text 6.4:1 */
+    --primary-hover: 227 73% 42%;       /* blue/700 */
     --primary-foreground: 0 0% 100%;
+    --link: 226 75% 51%;
 
-    --secondary: 210 50% 96%;
-    --secondary-foreground: 222 47% 11%;
+    /* Lines & focus */
+    --border: 217 17% 91%;              /* border/default gray/200 */
+    --input: 217 15% 83%;               /* border/strong  gray/300 */
+    --ring: 225 88% 58%;                /* border/focus   blue/500 */
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    /* Semantic: text (AA on their soft surface), soft surface, solid fill */
+    --success: 142 72% 29%;
+    --success-soft: 145 81% 96%;
+    --success-solid: 142 76% 36%;
+    --warning: 26 90% 37%;
+    --warning-soft: 39 100% 96%;
+    --warning-solid: 38 92% 50%;
+    --destructive: 0 72% 51%;           /* solid fill + text on white */
+    --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 74% 42%;    /* text on destructive-soft */
+    --destructive-soft: 0 86% 97%;
+    --info: 227 73% 42%;
+    --info-soft: 222 100% 97%;
+    --info-solid: 226 75% 51%;
+    --brand: 172 82% 26%;               /* teal - reserved for StabiFlow/AI moments */
+    --brand-soft: 163 69% 95%;
 
-    --accent: 202 70% 95%;
-    --accent-foreground: 222 47% 11%;
+    /* Locked (plan-gated) and disabled */
+    --locked: 218 13% 65%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
+    /* Shape */
+    --radius: 0.5rem;                   /* controls 8px; panels use rounded-xl (12px) */
 
-    --border: 214 32% 89%;
-    --input: 214 32% 89%;
-    --ring: 213 82% 52%;
+    /* Motion */
+    --duration-fast: 120ms;
+    --duration: 180ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-    --radius: 0.85rem;
-
-    --sidebar-background: 210 45% 97%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 213 82% 52%;
+    /* Shell */
+    --sidebar-background: 240 14% 99%;  /* gray/25 */
+    --sidebar-foreground: 220 12% 44%;
+    --sidebar-primary: 226 75% 51%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 204 70% 94%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 89%;
-    --sidebar-ring: 213 82% 52%;
+    --sidebar-accent: 0 0% 100%;        /* raised active row */
+    --sidebar-accent-foreground: 220 26% 9%;
+    --sidebar-border: 217 17% 91%;
+    --sidebar-ring: 225 88% 58%;
+    --header-height: 3.5rem;
+
+    /* Control heights: 44px touch targets on phones, 36/32px from md up. */
+    --control-h: 2.75rem;
+    --control-h-sm: 2.25rem;
 
     /* Admin chart accent: #2a7de1, validated against the light card surface. */
     --admin-chart: 213 75% 52%;
   }
 
+  /* Dark values mirror the Figma Dark mode. No in-app theme switch exists
+     yet, so nothing applies .dark today; kept in sync for when one does. */
   .dark {
     color-scheme: dark;
-    --background: 222 47% 8%;
-    --foreground: 210 40% 98%;
-
-    --card: 222 40% 10%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222 40% 10%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 11%;
-
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 63% 45%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 213 27% 84%;
-
-    --sidebar-background: 222 47% 9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 210 40% 98%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 217 33% 15%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 18%;
-    --sidebar-ring: 213 27% 84%;
-
+    --background: 220 29% 6%;
+    --card: 220 26% 9%;
+    --card-foreground: 220 20% 97%;
+    --popover: 220 25% 12%;
+    --popover-foreground: 220 20% 97%;
+    --muted: 220 23% 15%;
+    --accent: 220 23% 15%;
+    --accent-foreground: 220 20% 97%;
+    --selected: 226 60% 17%;
+    --selected-foreground: 225 100% 77%;
+    --secondary: 220 23% 15%;
+    --secondary-foreground: 220 20% 97%;
+    --foreground: 220 20% 97%;
+    --muted-foreground: 218 13% 65%;
+    --subtle-foreground: 220 12% 44%;
+    --primary: 225 94% 67%;
+    --primary-hover: 225 100% 77%;
+    --primary-foreground: 220 29% 6%;
+    --link: 225 100% 77%;
+    --border: 220 23% 15%;
+    --input: 220 17% 25%;
+    --ring: 225 94% 67%;
+    --success: 142 69% 58%;
+    --success-soft: 147 59% 15%;
+    --success-solid: 142 71% 45%;
+    --warning: 43 96% 56%;
+    --warning-soft: 30 75% 16%;
+    --warning-solid: 43 96% 56%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 91% 71%;
+    --destructive-soft: 0 57% 18%;
+    --info: 225 100% 77%;
+    --info-soft: 226 60% 17%;
+    --info-solid: 225 94% 67%;
+    --brand: 169 64% 50%;
+    --brand-soft: 173 71% 14%;
+    --locked: 220 12% 44%;
+    --sidebar-background: 220 29% 6%;
+    --sidebar-foreground: 218 13% 65%;
+    --sidebar-primary: 225 94% 67%;
+    --sidebar-primary-foreground: 220 29% 6%;
+    --sidebar-accent: 220 25% 12%;
+    --sidebar-accent-foreground: 220 20% 97%;
+    --sidebar-border: 220 23% 15%;
+    --sidebar-ring: 225 94% 67%;
     /* #3b8ae6, validated against the dark card surface. */
     --admin-chart: 213 77% 57%;
   }
@@ -99,20 +167,28 @@
   * {
     @apply border-border;
   }
+  html {
+    font-family: theme(fontFamily.sans);
+    font-feature-settings: "cv11", "ss03";
+  }
   body {
     @apply bg-background text-foreground antialiased;
-    background-image: radial-gradient(circle at 72% -10%, hsl(199 90% 96% / 0.7), transparent 32rem);
   }
 
   ::selection {
-    background: hsl(202 90% 85%);
-    color: hsl(222 47% 11%);
+    background: hsl(var(--selected));
+    color: hsl(var(--foreground));
   }
 
   input,
   textarea,
   select {
     color: hsl(var(--foreground));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--muted-foreground) / 0.8);
   }
 
   input:-webkit-autofill,
@@ -224,36 +300,17 @@ html {
 }
 
 
-/* Premium shared surfaces. These intentionally target the shadcn data slots
-   so existing screens inherit the polish without rewriting their workflows. */
+/* Shared overlays: one restrained elevation for menus and dialogs. */
 @layer components {
-  [data-sidebar="sidebar"] {
-    background-image: linear-gradient(180deg, hsl(var(--sidebar-background)), hsl(210 40% 98%));
-  }
-
-  [data-sidebar="menu-button"][data-active="true"] {
-    box-shadow: inset 3px 0 0 hsl(var(--primary)), 0 1px 2px hsl(215 25% 20% / 0.04);
-  }
-
-
-  [data-sidebar="menu-button"] svg {
-    transition: color 180ms ease;
-  }
-
-  [data-sidebar="menu-button"]:hover svg {
-    color: hsl(var(--primary));
-  }
-
   [data-radix-popper-content-wrapper] [role="menu"],
   [role="dialog"] {
-    box-shadow: 0 18px 55px hsl(222 47% 11% / 0.12);
+    box-shadow: 0 8px 24px -4px hsl(220 26% 9% / 0.12), 0 2px 6px hsl(220 26% 9% / 0.05);
   }
 
+  /* Legacy alias kept for older screens; now the plain Panel surface. */
   .premium-surface {
-    border: 1px solid hsl(var(--border) / 0.8);
-    background: hsl(var(--card) / 0.88);
-    box-shadow: 0 1px 2px hsl(222 47% 11% / 0.03), 0 12px 36px hsl(213 45% 30% / 0.05);
-    backdrop-filter: blur(12px);
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
   }
 }
 
@@ -310,21 +367,20 @@ html {
 
 
 /* ---------------------------------------------------------------------------
-   Operational workspace UI
-   Dense, calm work surfaces inspired by Acapolite's staff console while
-   keeping StabiFlow's own brand and all existing workflows intact.
+   Page-level layout helpers used by existing screens. Re-based on the design
+   tokens so those screens inherit the new system without page rewrites.
    --------------------------------------------------------------------------- */
 @layer components {
   .operational-page {
-    @apply mx-auto w-full max-w-[1680px];
+    @apply mx-auto w-full max-w-[1280px];
   }
 
   .operational-header {
-    @apply mb-4 flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between;
+    @apply mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
   }
 
   .operational-title {
-    @apply text-2xl font-semibold tracking-tight sm:text-[1.75rem];
+    @apply text-title-page text-foreground;
   }
 
   .operational-subtitle {
@@ -336,78 +392,26 @@ html {
   }
 
   .operational-panel {
-    @apply overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_8px_24px_hsl(222_47%_11%/0.04)];
+    @apply overflow-hidden rounded-xl border border-border bg-card;
   }
 
   .operational-panel-header {
-    @apply flex min-h-12 items-center justify-between gap-3 border-b border-border/70 px-4 py-3;
+    @apply flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-3;
   }
 
   .operational-section-label {
-    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground;
+    @apply text-overline uppercase text-muted-foreground;
   }
 
   .operational-metric {
-    @apply rounded-xl border border-border/75 bg-card px-4 py-3 shadow-[0_4px_16px_hsl(222_47%_11%/0.035)];
+    @apply rounded-xl border border-border bg-card px-4 py-3;
   }
 
   .operational-chip {
-    @apply inline-flex items-center rounded-full border border-border/80 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground;
+    @apply inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground;
   }
 
   .operational-split {
-    @apply grid min-h-0 flex-1 overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_8px_24px_hsl(222_47%_11%/0.04)];
-  }
-
-  /* Desktop StabiFlow shell: dark, stable navigation like the staff console. */
-  @media (min-width: 768px) {
-    [data-sidebar="sidebar"] {
-      background: hsl(222 30% 13%);
-      color: hsl(210 40% 96%);
-      border-color: hsl(220 20% 20%);
-      background-image: none;
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"] {
-      color: hsl(215 24% 88%);
-      opacity: 1;
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-sub-button"] {
-      color: hsl(215 22% 82%);
-      opacity: 1;
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-sub-button"]:hover,
-    [data-sidebar="sidebar"] [data-sidebar="menu-sub-button"][data-active="true"] {
-      background: hsl(220 24% 18%);
-      color: white;
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"] > span:first-of-type {
-      border-color: hsl(220 18% 29%);
-      background: hsl(220 24% 17% / 0.9);
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"][data-active="true"] > span:first-of-type {
-      border-color: hsl(222 30% 20% / 0.15);
-      background: hsl(0 0% 100% / 0.55);
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover {
-      background: hsl(220 24% 18%);
-      color: white;
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"][data-active="true"] {
-      background: hsl(42 92% 57%);
-      color: hsl(222 47% 11%);
-      box-shadow: none;
-    }
-
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"][data-active="true"] svg,
-    [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover svg {
-      color: currentColor;
-    }
+    @apply grid min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card;
   }
 }
