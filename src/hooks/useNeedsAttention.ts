@@ -101,7 +101,7 @@ export function useNeedsAttention(workspaceId: string | null): NeedsAttentionRes
           ? supabase
               .from("leads")
               .select("id, contact_name, company_name, human_reference, created_at")
-              .eq("workspace_id", wid).eq("status", "active").is("assigned_to", null)
+              .eq("workspace_id", wid).eq("status", "active").is("assigned_to", null).is("archived_at", null)
               .eq("qualification_status", "unqualified")
               .lt("created_at", new Date(Date.now() - 86_400_000).toISOString())
               .order("created_at", { ascending: true }).limit(15)

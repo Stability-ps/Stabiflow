@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mail, MessageCircle, Phone, Trophy, XCircle } from "lucide-react";
+import { Archive, ArchiveRestore, Mail, MessageCircle, Phone, Trophy, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import { opportunityStatusLabel } from "@/lib/opportunityLifecycle";
 import { openOpportunityActionLabel, pluralizeLabel } from "@/lib/terminology";
 import {
   addCrmNote, assignLead, completeLeadFollowUp, createOpportunity, markLeadLost, markOpportunityLost, markOpportunityWon,
-  moveLeadStage, reopenLead, reopenOpportunity, setLeadFollowUp, setLeadQualification, signLeadAttachment,
+  moveLeadStage, reopenLead, reopenOpportunity, restoreLead, setLeadFollowUp, setLeadQualification, signLeadAttachment, archiveLead,
 } from "@/lib/leads";
 import { Paperclip } from "lucide-react";
 import { AttributionSourceSummary } from "@/components/attribution/AttributionSourceSummary";
@@ -99,7 +99,7 @@ function WonOpportunityRevenue({ workspaceId, opportunityId, leadId, canRecordRe
   );
 }
 
-export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAttachments, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, opportunityLabel, autoOpenOpportunityForm }: {
+export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAttachments, canCreateOpportunity, canCloseOpportunity, canRecordRevenue, canArchive = false, opportunityLabel, autoOpenOpportunityForm }: {
   workspaceId: string;
   leadId: string;
   canEdit: boolean;
@@ -108,6 +108,8 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
   canCreateOpportunity: boolean;
   canCloseOpportunity: boolean;
   canRecordRevenue: boolean;
+  /** lead.delete - archive/restore (owner, admin, manager). */
+  canArchive?: boolean;
   opportunityLabel: string;
   autoOpenOpportunityForm?: boolean;
 }) {
@@ -125,6 +127,7 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
   const [qualificationReason, setQualificationReason] = useState("");
   const [noteText, setNoteText] = useState("");
   const [showLostDialog, setShowLostDialog] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [lostReason, setLostReason] = useState("");
   const [newOpportunityTitle, setNewOpportunityTitle] = useState("");
   const [customerSheetId, setCustomerSheetId] = useState<string | null>(null);
@@ -240,6 +243,20 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
     }
   };
 
+  const handleArchive = async (archive: boolean) => {
+    setBusy(true);
+    try {
+      await (archive ? archiveLead(workspaceId, leadId) : restoreLead(workspaceId, leadId));
+      invalidate();
+      toast.success(archive ? "Lead archived" : "Lead restored");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : archive ? "Unable to archive this lead" : "Unable to restore this lead");
+    } finally {
+      setBusy(false);
+      setShowArchiveDialog(false);
+    }
+  };
+
   const handleReopenLead = async () => {
     setBusy(true);
     try {
@@ -326,6 +343,7 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
         <div className="flex items-center gap-2">
           <SheetTitle>{lead.contact_name || lead.human_reference}</SheetTitle>
           <Badge variant="secondary" className={LEAD_STATUS_TONE[lead.status]}>{lead.status}</Badge>
+          {lead.archived_at && <Badge variant="outline">Archived</Badge>}
         </div>
         <SheetDescription>{lead.human_reference}</SheetDescription>
         {leadCustomer && (
@@ -459,13 +477,24 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
           </section>
         )}
 
-        {canEdit && (
-          <section className="flex gap-2">
-            {lead.status === "lost" ? (
+        {lead.archived_at && (
+          <p className="rounded-lg border bg-muted/40 p-3 text-sm" role="note">
+            Archived on {new Date(lead.archived_at).toLocaleDateString()}. It is hidden from active lead views; its history is kept.
+          </p>
+        )}
+
+        {(canEdit || canArchive) && (
+          <section className="flex flex-wrap gap-2">
+            {!canEdit || lead.archived_at ? null : lead.status === "lost" ? (
               <Button size="sm" variant="outline" onClick={handleReopenLead} disabled={busy}>Reopen lead</Button>
             ) : lead.status === "active" ? (
               <Button size="sm" variant="outline" onClick={() => setShowLostDialog(true)} disabled={busy}><XCircle className="mr-1.5 h-3.5 w-3.5" /> Mark lead lost</Button>
             ) : null}
+            {canArchive && (lead.archived_at ? (
+              <Button size="sm" variant="outline" onClick={() => handleArchive(false)} disabled={busy}><ArchiveRestore className="mr-1.5 h-3.5 w-3.5" /> Restore lead</Button>
+            ) : (
+              <Button size="sm" variant="ghost" onClick={() => setShowArchiveDialog(true)} disabled={busy}><Archive className="mr-1.5 h-3.5 w-3.5" /> Archive lead</Button>
+            ))}
           </section>
         )}
 
@@ -549,6 +578,19 @@ export function LeadDetail({ workspaceId, leadId, canEdit, canAssign, canViewAtt
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleMarkLost}>Mark lost</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive this lead?</AlertDialogTitle>
+            <AlertDialogDescription>The lead will be removed from active views but its history will be retained. You can restore it from the Archived filter.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleArchive(true)} disabled={busy}>Archive</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

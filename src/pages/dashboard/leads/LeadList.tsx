@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { qualificationStatusLabel } from "@/lib/qualification";
 import type { LeadRow } from "@/hooks/useLeads";
 
-export type LeadListFilter = "all" | "active" | "qualified" | "follow_up" | "overdue" | "converted" | "lost";
+export type LeadListFilter = "all" | "active" | "qualified" | "follow_up" | "overdue" | "converted" | "lost" | "archived";
 
 const STATUS_TONE: Record<string, string> = {
   active: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
@@ -23,6 +23,9 @@ export function LeadList({ leads, onSelect, filter, onFilterChange, search, onSe
   onSearchChange: (value: string) => void;
 }) {
   const filtered = leads.filter((l) => {
+    // Archived leads appear only under "Archived" - every other view is active work.
+    if (filter === "archived") return !!l.archived_at;
+    if (l.archived_at) return false;
     if (filter === "active" && l.status !== "active") return false;
     if (filter === "converted" && l.status !== "converted") return false;
     if (filter === "lost" && l.status !== "lost") return false;
@@ -53,6 +56,7 @@ export function LeadList({ leads, onSelect, filter, onFilterChange, search, onSe
             <SelectItem value="overdue">Overdue</SelectItem>
             <SelectItem value="converted">Converted</SelectItem>
             <SelectItem value="lost">Lost</SelectItem>
+            <SelectItem value="archived">Archived</SelectItem>
           </SelectContent>
         </Select>
       </div>

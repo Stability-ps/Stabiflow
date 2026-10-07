@@ -145,6 +145,14 @@ export function completeLeadFollowUp(workspaceId: string, leadId: string) {
   return runLeadsAction<{ ok: true }>(workspaceId, "complete_follow_up", { lead_id: leadId });
 }
 
+export function archiveLead(workspaceId: string, leadId: string) {
+  return runLeadsAction<{ ok: true; unchanged?: boolean }>(workspaceId, "archive_lead", { lead_id: leadId });
+}
+
+export function restoreLead(workspaceId: string, leadId: string) {
+  return runLeadsAction<{ ok: true; unchanged?: boolean }>(workspaceId, "restore_lead", { lead_id: leadId });
+}
+
 export function markLeadLost(workspaceId: string, leadId: string, lostReason?: string) {
   return runLeadsAction<{ ok: true }>(workspaceId, "mark_lead_lost", { lead_id: leadId, lost_reason: lostReason });
 }
