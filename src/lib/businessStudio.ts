@@ -86,6 +86,14 @@ export const improveWording = (workspaceId: string, tone: string) => invoke<{ su
 export const draftProfile = (workspaceId: string) => invoke<{ suggestions: number }>({ action: "draft_profile", workspace_id: workspaceId });
 export const fetchPreview = (workspaceId: string) =>
   invoke<{ content: ProfileContent; templates: ProfileTemplate[]; accessMode: "teaser" | "purchased" | "full"; canExportPdf: boolean; canUsePremium: boolean }>({ action: "preview", workspace_id: workspaceId });
+/** Whether website scanning and AI profile tools are available ("full").
+ * Older business-studio deployments don't return accessMode; fall back to
+ * canExportPdf, which is false exactly for the Free plan. */
+export async function fetchStudioAccess(workspaceId: string): Promise<"teaser" | "purchased" | "full"> {
+  const p = await fetchPreview(workspaceId);
+  return p.accessMode ?? (p.canExportPdf ? "full" : "teaser");
+}
+
 export const generateDocument = (workspaceId: string, templateKey: string, title?: string) =>
   invoke<{ document: Pick<BusinessDocument, "id" | "title" | "template_key" | "watermarked" | "page_count" | "created_at">; url: string | null }>({
     action: "generate_document", workspace_id: workspaceId, template_key: templateKey, title,

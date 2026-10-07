@@ -20,7 +20,7 @@ import {
   setBusinessSectionPreference, type BusinessIdentity, type BusinessIdentityBundle,
 } from "@/lib/businessIdentity";
 import type { BrandProfile } from "@/lib/brandProfiles";
-import { draftProfile, fetchPreview, scanWebsite } from "@/lib/businessStudio";
+import { draftProfile, fetchStudioAccess, scanWebsite } from "@/lib/businessStudio";
 
 const EMPLOYEE_RANGES = ["1", "2-10", "11-50", "51-200", "201-500", "501-1000", "1000+"];
 
@@ -99,7 +99,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
 
   const completeness = useMemo(() => computeCompleteness(bundle), [bundle]);
   // Same rule as Business Studio: AI scanning/drafting needs a subscription.
-  const access = useQuery({ queryKey: ["bs-access", currentWorkspaceId], queryFn: async () => (await fetchPreview(currentWorkspaceId)).accessMode, staleTime: 60_000 });
+  const access = useQuery({ queryKey: ["bs-access", currentWorkspaceId], queryFn: () => fetchStudioAccess(currentWorkspaceId), staleTime: 60_000 });
   const aiLocked = !!access.data && access.data !== "full";
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["business-identity", currentWorkspaceId] });
 

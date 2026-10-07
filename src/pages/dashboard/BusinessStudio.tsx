@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { computeCompleteness, fetchBusinessIdentity, updateBusinessIdentity } from "@/lib/businessIdentity";
 import { fetchCatalog, formatMoney, startCheckout } from "@/lib/billing";
 import {
-  BusinessStudioError, extractFromText, fetchPendingProposals, fetchPreview, generateDocument, improveWording, scanWebsite, type ScanResult,
+  BusinessStudioError, extractFromText, fetchPendingProposals, fetchPreview, fetchStudioAccess, generateDocument, improveWording, scanWebsite, type ScanResult,
 } from "@/lib/businessStudio";
 import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
@@ -42,7 +42,7 @@ export default function BusinessStudio() {
   // Website scanning, reading an existing profile and AI wording need a
   // subscription (the server's "full" access). Say so up front instead of
   // letting the click fail.
-  const access = useQuery({ queryKey: ["bs-access", ws], queryFn: async () => (await fetchPreview(ws as string)).accessMode, enabled: !!ws, staleTime: 60_000 });
+  const access = useQuery({ queryKey: ["bs-access", ws], queryFn: () => fetchStudioAccess(ws as string), enabled: !!ws, staleTime: 60_000 });
   const toolsLocked = !!access.data && access.data !== "full";
 
   const completeness = useMemo(() => (identity.data ? computeCompleteness(identity.data) : null), [identity.data]);
