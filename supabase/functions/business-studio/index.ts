@@ -34,6 +34,14 @@ async function entitlements(sb: AnySupabaseClient, workspaceId: string): Promise
   return Object.fromEntries(((data ?? []) as Ent[]).map((e) => [e.entitlement_key, e]));
 }
 
+/** Gives back allowance taken for work that then failed (see refund_entitlement). */
+async function refundAll(sb: AnySupabaseClient, workspaceId: string, keys: string[]) {
+  for (const key of keys.splice(0)) {
+    const { error } = await sb.rpc("refund_entitlement", { p_workspace_id: workspaceId, p_key: key, p_amount: 1 });
+    if (error) console.error("business-studio: refund failed", key, error.message);
+  }
+}
+
 async function consume(sb: AnySupabaseClient, workspaceId: string, key: string): Promise<boolean> {
   const { data, error } = await sb.rpc("consume_entitlement", { p_workspace_id: workspaceId, p_key: key, p_amount: 1 });
   if (error) throw new Error(`consume ${key}: ${error.message}`);
@@ -84,6 +92,14 @@ Deno.serve(async (req: Request) => {
   if (isMember !== true) return json(req, { error: "Forbidden" }, 403);
   const isAdmin = await hasWorkspaceRole(callerSb, workspaceId, "admin");
   const sb = createServiceClient();
+  // Allowance taken during this request; refunded if the work then fails,
+  // so a failed scan or AI call never costs the customer a credit.
+  const charged: string[] = [];
+  const charge = async (key: string) => {
+    const ok = await consume(sb, workspaceId, key);
+    if (ok) charged.push(key);
+    return ok;
+  };
 
   try {
     // -- Preview (read-only) -------------------------------------------------------
@@ -129,11 +145,14 @@ Deno.serve(async (req: Request) => {
       }
       const ents = await entitlements(sb, workspaceId);
       if (!ents["business_studio.access"]?.enabled) return json(req, { error: "Business Studio is not available on your plan" }, 403);
-      if (!(await consume(sb, workspaceId, "website_scans"))) {
+      if (!(await charge("website_scans"))) {
         return json(req, { error: "You've used all your website scans for this month. Upgrade your plan for more.", code: "limit_reached" }, 402);
       }
       const outcome = await runScan(sb, { workspaceId, url, purpose: "onboarding", userId, ai: aiCredential() });
-      if (outcome.status !== "completed") return json(req, { ok: false, error: outcome.error, scan_id: outcome.scanId }, 422);
+      if (outcome.status !== "completed") {
+        await refundAll(sb, workspaceId, charged);
+        return json(req, { ok: false, error: outcome.error, scan_id: outcome.scanId }, 422);
+      }
       return json(req, { ok: true, ...outcome });
     }
 
@@ -145,7 +164,7 @@ Deno.serve(async (req: Request) => {
       const text = typeof body.text === "string" ? body.text.trim() : "";
       if (text.length < 80) return json(req, { error: "Paste at least a few sentences from your existing profile" }, 400);
       if (text.length > 20_000) return json(req, { error: "That text is too long - paste up to 20 000 characters" }, 400);
-      if (!(await consume(sb, workspaceId, "ai_credits"))) {
+      if (!(await charge("ai_credits"))) {
         return json(req, { error: "You've used all your AI credits for this month.", code: "limit_reached" }, 402);
       }
       const outcome = await runTextExtraction(sb, { workspaceId, text, userId, ai: cred });
@@ -172,7 +191,7 @@ Deno.serve(async (req: Request) => {
       if (!source.trading_name && !source.industry && !source.short_description && !source.long_description && source.offerings.length === 0) {
         return json(req, { error: "Scan your website or add some business information first so AI has reliable source material." }, 400);
       }
-      if (!(await consume(sb, workspaceId, "ai_credits"))) {
+      if (!(await charge("ai_credits"))) {
         return json(req, { error: "You've used all your AI credits for this month.", code: "limit_reached" }, 402);
       }
       const started = Date.now();
@@ -225,7 +244,7 @@ Deno.serve(async (req: Request) => {
       const fields: Partial<Record<WordingField, string>> = {};
       for (const f of WORDING_FIELDS) if (typeof identity?.[f] === "string" && identity[f].trim()) fields[f] = identity[f];
       if (Object.keys(fields).length === 0) return json(req, { error: "Add a description, tagline, mission or vision first - AI only improves text you've written" }, 400);
-      if (!(await consume(sb, workspaceId, "ai_credits"))) {
+      if (!(await charge("ai_credits"))) {
         return json(req, { error: "You've used all your AI credits for this month.", code: "limit_reached" }, 402);
       }
       const started = Date.now();
@@ -235,7 +254,8 @@ Deno.serve(async (req: Request) => {
       } catch (e) {
         await sb.from("ai_usage_events").insert({ workspace_id: workspaceId, user_id: userId, feature: "business_studio_wording", provider: "openai", model: cred.model, status: "error" });
         console.error("improve_wording failed", e instanceof Error ? e.message : e);
-        return json(req, { error: "AI writing failed. Please try again." }, 502);
+        await refundAll(sb, workspaceId, charged);
+        return json(req, { error: "AI writing failed. Please try again. No AI credit was used." }, 502);
       }
       await sb.from("ai_usage_events").insert({
         workspace_id: workspaceId, user_id: userId, feature: "business_studio_wording", provider: "openai", model: cred.model,
@@ -300,6 +320,7 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Unknown action" }, 400);
   } catch (e) {
     console.error("business-studio failed", action, e instanceof Error ? e.message : e);
+    await refundAll(sb, workspaceId, charged);
     const code = (e as Error & { code?: string })?.code;
     if (code === "upgrade_required") return json(req, { error: e instanceof Error ? e.message : "Upgrade required", code }, 402);
     return json(req, { error: "Something went wrong. Please try again." }, 500);

@@ -1,5 +1,5 @@
 // AI credits are only spent on AI work that actually runs
-// (content-ai-caption ordering + 20261024070000_refund_entitlement).
+// (content-ai-caption / creative-studio-* ordering + 20261024070000_refund_entitlement).
 // LOCAL Supabase, real function, no OpenAI key configured locally.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { admin, cleanupTenant, createTestTenant, type TestTenant } from "./helpers";
@@ -8,8 +8,8 @@ let tenant: TestTenant;
 let assetId: string;
 const period = () => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString().slice(0, 10);
 
-async function used(workspaceId: string) {
-  const { data } = await admin.from("entitlement_usage").select("used").eq("workspace_id", workspaceId).eq("entitlement_key", "ai_credits").eq("period_start", period()).maybeSingle();
+async function used(workspaceId: string, key = "ai_credits") {
+  const { data } = await admin.from("entitlement_usage").select("used").eq("workspace_id", workspaceId).eq("entitlement_key", key).eq("period_start", period()).maybeSingle();
   return Number(data?.used ?? 0);
 }
 
@@ -32,6 +32,16 @@ describe("content-ai-caption credit handling", () => {
     const { error } = await tenant.client.functions.invoke("content-ai-caption", { body: { workspace_id: tenant.workspaceId, media_asset_id: assetId } });
     expect((error as { context?: { status?: number } } | null)?.context?.status).toBe(503);
     expect(await used(tenant.workspaceId)).toBe(before);
+  });
+});
+
+describe("creative-studio credit handling", () => {
+  it("does not consume a generation when AI is not configured", async () => {
+    await admin.from("workspace_entitlement_overrides").upsert({ workspace_id: tenant.workspaceId, entitlement_key: "creative_generations", limit_value: 5, reason: "ai credit safety test" }, { onConflict: "workspace_id,entitlement_key" });
+    const before = await used(tenant.workspaceId, "creative_generations");
+    const { error } = await tenant.client.functions.invoke("creative-studio-generate", { body: { workspace_id: tenant.workspaceId, business_context: "A bakery in Durban" } });
+    expect((error as { context?: { status?: number } } | null)?.context?.status).toBe(503);
+    expect(await used(tenant.workspaceId, "creative_generations")).toBe(before);
   });
 });
 
