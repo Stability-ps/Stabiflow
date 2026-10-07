@@ -99,7 +99,7 @@ export const automations: GuideChapter = {
       id: "plans",
       title: "Plans and run allowances",
       blocks: [
-        { type: "p", text: "Automations are part of the Growth plan and also need an active StabiFlow subscription. Each plan includes a monthly number of automation runs; check Billing & plans for your allowance. Without access, the page shows \"Automations are a Growth feature\" or \"Unlock Automations\" with a View plans button." },
+        { type: "p", text: "Automations are part of the Growth plan and also need an active StabiFlow subscription. Each plan includes a monthly number of automation runs; check Billing & plans for your allowance. Without access, the page shows \"Automations are part of the Growth plan\" or \"Unlock Automations\" with a button to the plans." },
         { type: "screenshot", shot: { src: "automations.webp", alt: "Unlock Automations screen with a View plans button", caption: "What you see when your workspace has no subscription that includes Automations." } },
         { type: "p", text: "Owners, admins and managers can create, edit, enable and delete automations. Other roles can view automations and their run history." },
       ],

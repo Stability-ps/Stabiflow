@@ -27,7 +27,7 @@ export async function signIn(page: Page) {
 
 // A plan-gated module either renders, or shows StabiFlow's friendly lock -
 // both are correct for a given workspace. The QA account can be on any plan.
-const LOCKED = "Not available on your workspace yet|Automations are a Growth feature|Unlock Automations";
+const LOCKED = "(is|are) part of the (Business and Growth plans|Growth plan)|Not available on your workspace yet|Unlock Automations";
 const orLocked = (re: RegExp) => new RegExp(`${re.source}|${LOCKED}`, "i");
 
 export const authenticatedRoutes = [
