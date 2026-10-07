@@ -1,6 +1,4 @@
 import { useMemo, useState } from "react";
-import { format, isToday, isYesterday } from "date-fns";
-import { toZonedTime } from "date-fns-tz";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight, BarChart3, Building2, DollarSign, FileText, Megaphone, MessageSquare, Plus, Sparkles, TrendingUp, UserPlus, Users, Wallet,
@@ -98,10 +96,25 @@ export default function Overview() {
   const showOnboardingFirst = !onboardingComplete && !hasRealActivity;
 
   const formatDashboardTime = (value: string) => {
-    const zoned = toZonedTime(new Date(value), timezone);
-    if (isToday(zoned)) return `Today, ${format(zoned, "HH:mm")}`;
-    if (isYesterday(zoned)) return `Yesterday, ${format(zoned, "HH:mm")}`;
-    return format(zoned, "d MMM, HH:mm");
+    const date = new Date(value);
+    const parts = new Intl.DateTimeFormat(undefined, {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+    const localDay = `${get("year")}-${get("month")}-${get("day")}`;
+    const todayParts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const yesterday = new Date(now.getTime() - 86_400_000);
+    const yesterdayParts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(yesterday);
+    const time = `${get("hour")}:${get("minute")}`;
+    if (localDay === todayParts) return `Today, ${time}`;
+    if (localDay === yesterdayParts) return `Yesterday, ${time}`;
+    return new Intl.DateTimeFormat(undefined, { timeZone: timezone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(date);
   };
 
   const kpiGrid = (
