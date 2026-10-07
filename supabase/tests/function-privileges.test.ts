@@ -9,7 +9,7 @@
 //   * the public profile / legal-version functions stay anon-callable
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createClient } from "@supabase/supabase-js";
-import { ANON_KEY, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { ANON_KEY, cleanupTenant, createTestTenant, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
 
 const anon = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
 const range = { p_date_from: "2026-01-01T00:00:00Z", p_date_to: "2027-01-01T00:00:00Z" };
@@ -19,7 +19,9 @@ let other: TestTenant;
 
 beforeAll(async () => {
   owner = await createTestTenant("fn-priv-owner");
+  await enableModules(owner.workspaceId, "module.leads");
   other = await createTestTenant("fn-priv-other");
+  await enableModules(other.workspaceId, "module.leads");
 });
 
 afterAll(async () => {

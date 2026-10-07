@@ -5,7 +5,7 @@
 // has_workspace_role('admin') to has_workspace_permission(..., 'integration.manage')
 // for writes, and the workspace-consistency triggers - both proven here.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, enableModules, type TestTenant } from "./helpers";
 import { seedFacebookPage } from "./contentHelpers";
 import { seedInstagramAccount, seedWhatsAppNumber, seedWorkspaceIntegration } from "./integrationHelpers";
 import { seedMetaAdAccount } from "./campaignHelpers";
@@ -22,7 +22,9 @@ describe("Integrations tenant isolation (release blocker)", () => {
 
   beforeAll(async () => {
     workspaceA = await createTestTenant("integrations-a");
+    await enableModules(workspaceA.workspaceId, "module.integrations");
     workspaceB = await createTestTenant("integrations-b");
+    await enableModules(workspaceB.workspaceId, "module.integrations");
     integrationAId = await seedWorkspaceIntegration(workspaceA.workspaceId, "meta", { status: "disconnected" });
     integrationBId = await seedWorkspaceIntegration(workspaceB.workspaceId);
     pageBId = await seedFacebookPage(workspaceB.workspaceId, integrationBId);
