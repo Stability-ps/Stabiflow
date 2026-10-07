@@ -20,6 +20,7 @@ import { fetchCampaignInsights } from "../_shared/ad-providers/metaMarketingApi.
 import { sanitizeAdErrorForStorage } from "../_shared/ad-providers/metaAdsErrorClassifier.ts";
 import { normalizeInsightsRow } from "../_shared/adMetrics.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, JSON_HEADERS } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 // deno-lint-ignore no-explicit-any
 type AnySupabaseClient = any;
@@ -144,6 +145,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, campaign.workspace_id, "campaign.metrics.view"))) {
     return json({ error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, campaign.workspace_id, "module.campaigns");
+  if (moduleRefusal) return json(moduleRefusal.body, moduleRefusal.status);
   if (!campaign.external_campaign_id) {
     return json({ error: "This campaign has not been published yet - no metrics are available." }, 409);
   }

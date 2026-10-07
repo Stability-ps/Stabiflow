@@ -24,6 +24,7 @@ import { loadReadinessInput, CAMPAIGN_COLUMNS } from "../_shared/adCampaignLoade
 import { claimCampaignForPublish, executeCampaignPublish, REAL_META_PROVIDER, type MetaAdsProvider, type PublishStep } from "../_shared/adPublishExecution.ts";
 import * as mockMetaProvider from "../_shared/ad-providers/metaMarketingApiMock.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 import { assertWorkspaceActive, workspaceSuspendedBody } from "../_shared/workspaceStatus.ts";
 import { emitDomainEvent } from "../_shared/automations/emitDomainEvent.ts";
 
@@ -59,6 +60,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(callerSb, existing.workspace_id, "campaign.publish"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, existing.workspace_id, "module.campaigns");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const serviceSb = createServiceClient();
 

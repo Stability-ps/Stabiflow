@@ -28,6 +28,7 @@
 import { claimScheduledPost, executePublish, PUBLISHABLE_POST_COLUMNS, type PublishablePost } from "../_shared/contentPublishExecution.ts";
 import { computeEffectiveAutoPublish, envKillSwitchAllowsPublishing } from "../_shared/contentSchedulerSettings.ts";
 import { createServiceClient, envVar, JSON_HEADERS } from "../_shared/contentAuth.ts";
+import { modulesEnabledFor } from "../_shared/modulePlan.ts";
 
 const BATCH_LIMIT = 20;
 const CANDIDATE_FETCH_LIMIT = 60; // over-fetch before workspace/series filtering narrows it down
@@ -87,11 +88,16 @@ async function claimDuePosts(sb: ReturnType<typeof createServiceClient>, nowIso:
   // campaign_id was NOT NULL) would have done.
   const eligibleBySeries = ((candidates || []) as CandidateRow[]).filter((c) => c.series_id === null || c.series?.status === "active");
   const candidateWorkspaceIds = eligibleBySeries.map((c) => c.workspace_id);
-  const [enabledWorkspaces, activeWorkspaces] = await Promise.all([
+  // A workspace whose plan no longer includes Content keeps its scheduled
+  // posts (nothing is deleted) but none are sent to Meta until it does.
+  const [enabledWorkspaces, activeWorkspaces, contentWorkspaces] = await Promise.all([
     workspacesWithAutoPublishEnabled(sb, candidateWorkspaceIds),
     workspacesCurrentlyActive(sb, candidateWorkspaceIds),
+    modulesEnabledFor(sb, candidateWorkspaceIds, "module.content"),
   ]);
-  const eligible = eligibleBySeries.filter((c) => enabledWorkspaces.has(c.workspace_id) && activeWorkspaces.has(c.workspace_id)).slice(0, BATCH_LIMIT);
+  const eligible = eligibleBySeries
+    .filter((c) => enabledWorkspaces.has(c.workspace_id) && activeWorkspaces.has(c.workspace_id) && contentWorkspaces.has(c.workspace_id))
+    .slice(0, BATCH_LIMIT);
 
   const claimed: PublishablePost[] = [];
   for (const candidate of eligible) {

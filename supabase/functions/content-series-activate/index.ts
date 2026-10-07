@@ -21,6 +21,7 @@ import { computeScheduleDates, nextOccurrenceAtOrAfter } from "../_shared/conten
 import { buildIdempotencyKey } from "../_shared/contentIdempotency.ts";
 import { platformKeyForContentPlatform, validateAssetForPlatform } from "../_shared/contentPlatformRules.ts";
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 type PlatformVariantRow = { id: string; media_asset_id: string; platform: string; storage_path: string; width_px: number; height_px: number; mime_type: string; file_size_bytes: number };
 type ValidationIssue = { series_item_id: string; platform: string; failures: unknown[] };
@@ -65,6 +66,10 @@ Deno.serve(async (req: Request) => {
 
   const requiredPermission = action === "preview" ? "content.view" : "content.create";
   if (!(await hasWorkspacePermission(sb, workspaceId, requiredPermission))) return json(req, { error: "Forbidden" }, 403);
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(sb, workspaceId, "module.content");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const { data: series, error: seriesError } = await sb.from("content_series").select("*").eq("id", seriesId).maybeSingle();
   if (seriesError) return json(req, { error: "Unable to load series" }, 500);

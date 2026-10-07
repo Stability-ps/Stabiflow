@@ -7,6 +7,7 @@
 import { checkCampaignReadiness, isReady } from "../_shared/adReadiness.ts";
 import { loadReadinessInput, CAMPAIGN_COLUMNS } from "../_shared/adCampaignLoader.ts";
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -34,6 +35,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(sb, campaign.workspace_id, "campaign.view"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(sb, campaign.workspace_id, "module.campaigns");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const input = await loadReadinessInput(sb, campaign);
   const issues = checkCampaignReadiness(input);

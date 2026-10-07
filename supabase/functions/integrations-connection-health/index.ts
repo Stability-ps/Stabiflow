@@ -18,6 +18,7 @@ import { summarizeStatus } from "../_shared/integration-providers/connectionHeal
 import { isBlockedMockRequest, resolveMockMode } from "../_shared/integration-providers/testHarness.ts";
 import type { IntegrationErrorCategory } from "../_shared/integration-providers/types.ts";
 import { bearerToken, createCallerClient, createServiceClient, envVar, getCallerUserId, hasWorkspacePermission, json, optionalEnvVar } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 type ResourceHealth = { type: string; id: string; label: string; healthy: boolean; category?: IntegrationErrorCategory; message?: string };
 
@@ -66,6 +67,10 @@ Deno.serve(async (req: Request) => {
   if (repairWebhook && !(await hasWorkspacePermission(callerSb, workspaceId, "integration.manage"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.integrations");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
   if (repairWebhook && isBlockedMockRequest(req)) {
     return json(req, { error: "meta_not_enabled", message: "Meta production connection is not enabled yet." }, 403);
   }

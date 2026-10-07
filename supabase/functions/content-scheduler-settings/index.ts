@@ -17,6 +17,7 @@
 // can show whether it's currently blocking publishing.
 import { decideSetAutoPublish, envKillSwitchAllowsPublishing } from "../_shared/contentSchedulerSettings.ts";
 import { bearerToken, createCallerClient, createServiceClient, getCallerUserId, hasWorkspaceRole, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: { "Access-Control-Allow-Origin": req.headers.get("origin") || "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
@@ -38,6 +39,10 @@ Deno.serve(async (req: Request) => {
   const workspaceId = body.workspace_id;
   if (!workspaceId) return json(req, { error: "workspace_id is required" }, 400);
   if (!(await hasWorkspaceRole(callerSb, workspaceId, "admin"))) return json(req, { error: "Forbidden" }, 403);
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(callerSb, workspaceId, "module.content");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const envAllows = envKillSwitchAllowsPublishing();
   const serviceSb = createServiceClient();
