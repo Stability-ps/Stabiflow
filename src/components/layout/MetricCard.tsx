@@ -5,9 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 // permission) behind this metric yet - renders emptyMessage in that case.
 // A real, currently-zero value is passed as the STRING "0" (or "$0.00"),
 // which renders as a real number - never conflated with "unavailable".
-export function MetricCard({ icon: Icon, label, emptyMessage, value }: { icon: LucideIcon; label: string; emptyMessage: string; value?: string }) {
+export function MetricCard({ icon: Icon, label, emptyMessage, value, onClick }: { icon: LucideIcon; label: string; emptyMessage: string; value?: string; onClick?: () => void }) {
   return (
-    <Card className="border-border/70 shadow-sm transition-shadow hover:shadow-md">
+    <Card
+      role={onClick ? "link" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); } } : undefined}
+      className={`border-border/70 shadow-sm transition-all ${onClick ? "cursor-pointer hover:-translate-y-0.5 hover:border-primary/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" : ""}`}
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4">
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/70"><Icon className="h-4 w-4 text-muted-foreground" /></span>
