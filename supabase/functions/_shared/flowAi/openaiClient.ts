@@ -19,6 +19,34 @@ export type FlowAiInputItem =
   | { type: "function_call"; call_id: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: string };
 
+/**
+ * Function tools run in OpenAI strict mode (the Responses API default),
+ * where the model must supply EVERY property. Left as plain optional
+ * properties, that forced it to invent a status, qualification and date
+ * range on every lookup. Here every originally-optional property becomes
+ * nullable ("null = no filter") so the model can genuinely leave a filter
+ * out. Numeric bounds are dropped for strict-mode compatibility; our own
+ * validateToolArgs still enforces them against the original schema, and
+ * dispatchTool already treats null as "not set".
+ */
+export function toStrictParameters(schema: Record<string, unknown>): Record<string, unknown> {
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const required = new Set((schema.required as string[] | undefined) ?? []);
+  const out: Record<string, Record<string, unknown>> = {};
+  for (const [key, prop] of Object.entries(props)) {
+    const { minimum: _min, maximum: _max, ...rest } = prop;
+    if (required.has(key)) { out[key] = rest; continue; }
+    const type = rest.type as string;
+    out[key] = {
+      ...rest,
+      type: [type, "null"],
+      ...(Array.isArray(rest.enum) ? { enum: [...(rest.enum as unknown[]), null] } : {}),
+      description: `${rest.description ? `${rest.description} ` : ""}Optional: use null unless the person asked for this filter.`,
+    };
+  }
+  return { type: "object", additionalProperties: false, properties: out, required: Object.keys(out) };
+}
+
 export type FlowAiToolSpec = { name: string; description: string; parameters: Record<string, unknown> };
 
 export type FlowAiFunctionCall = { callId: string; name: string; arguments: string };
@@ -86,7 +114,7 @@ export async function* streamFlowAiResponse(opts: {
         stream: true,
         instructions: opts.instructions,
         input: opts.input,
-        tools: opts.tools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: t.parameters })),
+        tools: opts.tools.map((t) => ({ type: "function", name: t.name, description: t.description, parameters: toStrictParameters(t.parameters), strict: true })),
       }),
     });
   } catch (err) {
