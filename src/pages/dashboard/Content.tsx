@@ -11,10 +11,10 @@ const CONTENT_TABS = [
 
 export default function Content() {
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6">
-      <div className="rounded-3xl border border-fuchsia-100/80 bg-gradient-to-br from-white via-white to-fuchsia-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(300_50%_40%/0.25)] sm:p-6">
+    <div className="operational-page space-y-4">
+      <div className="operational-header">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Content workspace</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Content</h1>
+        <h1 className="operational-title">Content</h1>
         <p className="text-muted-foreground">Calendar, scheduled posts, drafts, and your Media Library.</p>
       </div>
       <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
