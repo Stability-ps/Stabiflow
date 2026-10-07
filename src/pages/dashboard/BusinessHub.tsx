@@ -67,7 +67,7 @@ export default function BusinessHub() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-44px_hsl(213_82%_45%/0.4)]">
+      <div className="operational-panel p-5">
         <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-sky-200/25 blur-3xl" />
         <div className="relative">
         <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business workspace</p>

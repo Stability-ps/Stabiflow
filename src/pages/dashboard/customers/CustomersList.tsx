@@ -21,10 +21,10 @@ export default function CustomersList() {
   }
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-5">
-      <div className="rounded-3xl border border-emerald-100/80 bg-gradient-to-br from-white via-white to-emerald-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(155_45%_35%/0.25)] sm:p-6">
+    <div className="operational-page space-y-4">
+      <div className="operational-header">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Customer workspace</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Customers</h1>
+        <h1 className="operational-title">Customers</h1>
         <p className="text-sm text-muted-foreground">Everyone who became a customer, with their conversations, opportunities and revenue in one place.</p>
       </div>
 
