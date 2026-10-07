@@ -327,6 +327,15 @@ describe("WhatsApp Templates child", () => {
     expect(screen.getByText(/your order shipped/i)).toBeInTheDocument();
   });
 
+  it("keeps the table's visually-hidden header inside its scroll container on phones", () => {
+    // An absolutely positioned sr-only header escapes a non-positioned
+    // overflow-x-auto wrapper and widens the whole page (seen in production at 390px).
+    state.templates = [{ id: "t1", name: "order_update", language: "en_US", category: "UTILITY", provider_status: "APPROVED", components: [{ type: "BODY", text: "Hi" }] }];
+    renderArea("/app/whatsapp/templates");
+    const wrapper = screen.getByRole("table").parentElement!;
+    expect(wrapper).toHaveClass("overflow-x-auto", "relative");
+  });
+
   it("shows a sync explanation when no templates exist", () => {
     state.templates = [];
     renderArea("/app/whatsapp/templates");

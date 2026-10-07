@@ -215,7 +215,7 @@ export default function WhatsAppIntake() {
                     No questions yet. Add what StabiFlow should learn from a new enquiry. The order controls which missing question AI asks first.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-lg border">
+                  <div className="relative overflow-x-auto rounded-lg border">
                     <table className="w-full text-sm">
                       <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
                         <tr>

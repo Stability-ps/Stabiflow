@@ -187,7 +187,7 @@ export default function WhatsAppTemplates() {
           </div>
           <div className="mt-2 border-t pt-2 text-xs text-muted-foreground">{filteredLibrary.length.toLocaleString()} of {(library || []).length.toLocaleString()} templates</div>
         </div>
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="relative overflow-x-auto rounded-lg border">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground"><tr><th className="px-4 py-2">Template</th><th className="px-4 py-2">Industry</th><th className="px-4 py-2">Category</th><th className="px-4 py-2">Message</th><th className="px-4 py-2"><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>{libraryVisible.map((t) => <tr key={t.id} className="border-b last:border-b-0 hover:bg-muted/30"><td className="px-4 py-3 font-medium"><button type="button" className="text-left hover:underline" onClick={() => setSelectedLibraryTemplateId(t.id)}>{t.name}</button></td><td className="px-4 py-3 text-muted-foreground">{t.industry}</td><td className="px-4 py-3"><Badge variant="outline">{t.category}</Badge></td><td className="max-w-xl px-4 py-3 text-muted-foreground"><span className="line-clamp-2">{t.body}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" aria-label={favorites.has(t.id) ? "Remove saved template" : "Save template"} onClick={async () => { await toggleFavorite(t.id); toast.success(favorites.has(t.id) ? "Removed from saved templates" : "Template saved"); }}><Heart className={`h-4 w-4 ${favorites.has(t.id) ? "fill-current" : ""}`} /></Button><Button variant="ghost" size="sm" onClick={() => { setSelectedLibraryTemplateId(t.id); setVariableValues({}); }}>Preview</Button><Button variant="ghost" size="sm" className="gap-1.5" onClick={async () => { await navigator.clipboard.writeText(t.body); toast.success("Template copied"); }}><Copy className="h-4 w-4" />Copy</Button></div></td></tr>)}</tbody>
@@ -335,7 +335,7 @@ export default function WhatsAppTemplates() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border">
+      <div className="relative overflow-x-auto rounded-lg border">
         <table className="w-full text-sm">
           <caption className="sr-only">WhatsApp message templates</caption>
           <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
