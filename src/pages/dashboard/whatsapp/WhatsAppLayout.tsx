@@ -74,15 +74,32 @@ export default function WhatsAppLayout() {
   };
 
   return (
-    <div className="operational-page space-y-3">
-      <div className="operational-header">
-        <div>
-          <p className="operational-section-label">Customer conversations</p><h1 className="operational-title">Messages</h1>
-          <p className="hidden text-sm text-muted-foreground sm:block">Conversations, contacts, templates and intake for your connected WhatsApp Business number.</p>
-        </div>
+    <div className="mx-auto w-full max-w-[1440px] space-y-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="text-title-page text-foreground">Messages</h1>
+        <nav aria-label="WhatsApp sections" className="order-3 flex w-full max-w-full gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5 sm:order-none sm:w-fit">
+          {TABS.map((tab) => (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              end
+              title={tab.external ? `Open ${tab.label}, filtered to WhatsApp` : undefined}
+              className={({ isActive }) =>
+                cn(
+                  "inline-flex min-h-9 shrink-0 items-center rounded-md px-3 text-sm font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive && !tab.external ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+                )
+              }
+            >
+              {tab.label}
+              {tab.external && <span aria-hidden="true" className="ml-1 text-xs opacity-60">&#8599;</span>}
+            </NavLink>
+          ))}
+        </nav>
         {canManageIntegration && (
-          <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0" onClick={() => navigate("/app/whatsapp/settings")} aria-label="Message settings">
-            <Settings className="h-5 w-5" />
+          <Button variant="ghost" size="sm" className="ml-auto shrink-0 text-muted-foreground hover:text-foreground" onClick={() => navigate("/app/whatsapp/settings")} aria-label="Message settings">
+            <Settings aria-hidden="true" />
+            <span className="hidden lg:inline">Message settings</span>
           </Button>
         )}
       </div>
@@ -90,38 +107,16 @@ export default function WhatsAppLayout() {
       {/* Keep the inbox conversation-first. Healthy production wiring belongs
           in Settings; only actionable problems interrupt the inbox. */}
       {!primary || webhook.actionable ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg border border-warning-solid/40 bg-warning-soft px-3 py-2 text-sm text-warning">
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{!primary ? "WhatsApp needs attention - no active number is configured." : "WhatsApp needs attention - inbound message delivery is not confirmed."}</span>
           {canManageIntegration && (
-            <Button size="sm" variant="outline" className="ml-auto h-8" onClick={() => navigate("/app/whatsapp/settings")}>
+            <Button size="sm" variant="outline" className="ml-auto" onClick={() => navigate("/app/whatsapp/settings")}>
               Fix
             </Button>
           )}
         </div>
       ) : null}
-
-      <nav aria-label="WhatsApp sections" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg border border-border/70 bg-card p-1">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            end
-            title={tab.external ? `Open ${tab.label}, filtered to WhatsApp` : undefined}
-            className={({ isActive }) =>
-              cn(
-                "shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-all",
-                isActive && !tab.external
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-              )
-            }
-          >
-            {tab.label}
-            {tab.external && <span aria-hidden="true" className="ml-1 text-xs opacity-60">&#8599;</span>}
-          </NavLink>
-        ))}
-      </nav>
 
       <Outlet context={context} />
     </div>

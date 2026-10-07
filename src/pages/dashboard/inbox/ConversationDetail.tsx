@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { AlertTriangle, ArrowLeft, Bot, Briefcase, CheckCircle2, Paperclip, Send, Sparkles, UserCheck, UserPlus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, Briefcase, CheckCircle2, Clock, MessageCircle, PanelRight, Paperclip, Send, Sparkles, UserCheck, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,6 +12,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { StatusPill } from "@/components/ui/status-pill";
+import { useMediaQuery } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceMembers } from "@/hooks/useWorkspaceMembers";
 import { getInboxMediaUrl, useInboxInternalNotes, useInboxMessages, type InboxMessageRow } from "@/hooks/useInboxMessages";
@@ -74,11 +76,26 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
   }, [message.media_storage_path]);
 
   const senderLabel = isInbound ? null : message.sender_type === "ai" ? "AI" : message.sender_type === "system" ? "System" : message.staff_sender_name || "Staff";
+  // Customer (left, white) / staff (right, brand blue) / AI (right, teal
+  // tint) / system (right, neutral). Failed delivery adds a red ring.
+  const tone = isInbound ? "in" : message.sender_type === "ai" ? "ai" : message.sender_type === "system" ? "system" : "staff";
+  const failed = !isInbound && (retryState === "delivery_failed" || deliveryTone(message.delivery_status) === "error");
+  const bubbleClass = {
+    in: "border border-border bg-card text-foreground",
+    ai: "bg-brand-soft text-foreground",
+    system: "bg-muted text-foreground",
+    staff: "bg-primary text-primary-foreground",
+  }[tone];
+  const subtle = tone === "staff" ? "text-primary-foreground/80" : "text-muted-foreground";
+  const errorText = tone === "staff" ? "font-medium text-white" : "font-medium text-destructive-strong";
+  const time = new Date(message.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className={`flex ${isInbound ? "justify-start" : "justify-end"}`}>
-      <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${isInbound ? "bg-muted" : "bg-primary text-primary-foreground"}`}>
-        {senderLabel && <p className="mb-0.5 text-xs opacity-70">{senderLabel}</p>}
+      <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm sm:max-w-[75%] ${isInbound ? "rounded-bl-md" : "rounded-br-md"} ${bubbleClass} ${failed ? "ring-2 ring-destructive ring-offset-1 ring-offset-background" : ""}`}>
+        <p className={`mb-0.5 text-xs ${subtle}`}>
+          {senderLabel ?? "Customer"} · <time dateTime={message.created_at}>{time}</time>
+        </p>
         {message.media_storage_path && (
           <div className="mb-1">
             {mediaUrl ? (
@@ -86,7 +103,7 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
                 <img src={mediaUrl} alt={message.media_filename || "attachment"} className="max-h-48 rounded" />
               ) : isAudio ? (
                 <span className="block">
-                  <span className="mb-0.5 block text-[11px] opacity-70">{message.message_type === "voice" ? "Voice note" : "Audio message"}</span>
+                  <span className="mb-0.5 block text-xs text-muted-foreground">{message.message_type === "voice" ? "Voice note" : "Audio message"}</span>
                   <audio controls preload="metadata" src={mediaUrl} className="max-w-full" />
                 </span>
               ) : (
@@ -97,11 +114,11 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
             )}
             {isInbound && aiMediaBadge(message.ai_media_status) && (
               <span
-                className={`mt-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                className={`mt-1 inline-block rounded px-1.5 py-0.5 text-xs font-medium ${
                   aiMediaBadge(message.ai_media_status)!.tone === "ok"
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    ? "bg-success-soft text-success"
                     : aiMediaBadge(message.ai_media_status)!.tone === "warn"
-                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                    ? "bg-warning-soft text-warning"
                     : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -114,15 +131,15 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
         {isAudio && isInbound && (
           <>
             {message.transcript && (
-              <div className="mt-1 rounded border-l-2 border-muted-foreground/30 bg-background/40 px-2 py-1">
-                <p className="text-[10px] font-medium uppercase tracking-wide opacity-60">Transcript</p>
+              <div className="mt-1 rounded border-l-2 border-input bg-muted/60 px-2 py-1">
+                <p className="text-overline uppercase text-muted-foreground">Transcript</p>
                 <p className="whitespace-pre-wrap text-sm">{message.transcript}</p>
               </div>
             )}
             {transHint && (
               <p
                 className={`mt-1 text-[11px] ${
-                  transHint.tone === "warn" ? "text-amber-700 dark:text-amber-400" : "opacity-70"
+                  transHint.tone === "warn" ? "text-warning" : "text-muted-foreground"
                 }`}
               >
                 {transHint.label}
@@ -142,7 +159,7 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
         )}
         {showRetryLabel ? (
           <div className="mt-1 flex items-center gap-2">
-            <span className={`text-[11px] ${retryState === "delivery_failed" ? "text-red-200" : retryState === "retry_scheduled" ? "text-amber-200" : "opacity-70"}`}>
+            <span className={`text-xs ${retryState === "delivery_failed" ? errorText : subtle}`}>
               {outboundDeliveryLabel(message)}
               {message.dead_lettered_at && message.dead_letter_reason ? ` · ${message.dead_letter_reason.replace(/_/g, " ")}` : ""}
             </span>
@@ -151,7 +168,7 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
                 type="button"
                 onClick={() => onRetry(message.id)}
                 disabled={retrying}
-                className="text-[11px] font-medium underline underline-offset-2 disabled:opacity-50"
+                className={`text-xs font-medium underline underline-offset-2 disabled:opacity-50 ${tone === "staff" ? "text-white" : "text-link"}`}
               >
                 {retrying ? "Retrying..." : "Retry"}
               </button>
@@ -159,7 +176,7 @@ function MessageBubble({ message, canManage, onRetry, retrying, onRetryTranscrip
           </div>
         ) : (
           !isInbound && message.delivery_status && (
-            <p className={`mt-1 text-[11px] ${deliveryTone(message.delivery_status) === "error" ? "text-red-200" : "opacity-70"}`}>{deliveryLabel(message.delivery_status)}</p>
+            <p className={`mt-1 text-xs ${deliveryTone(message.delivery_status) === "error" ? errorText : subtle}`}>{deliveryLabel(message.delivery_status)}</p>
           )
         )}
       </div>
@@ -239,6 +256,10 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
   }, [intakeSchema, intakeFields, conversation.lead_id, conversation.intake_payload, lead]);
 
   const [replyText, setReplyText] = useState("");
+  const [composerMode, setComposerMode] = useState<"reply" | "note">("reply");
+  const isWide = useMediaQuery("(min-width: 1280px)");
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [confirmResolve, setConfirmResolve] = useState(false);
@@ -611,66 +632,77 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
     }
   };
 
-  return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b p-3">
-        {onBack && <Button variant="ghost" size="icon" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>}
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{conversation.display_name || conversation.phone_number}</p>
-          <p className="truncate text-xs text-muted-foreground">{conversation.phone_number}</p>
-        </div>
-        <HandoverBadge conversation={conversation} assigneeName={conversation.assigned_staff_name} />
-        {conversation.inbox_status === "waiting_client" && <Badge variant="secondary">{inboxStatusLabel(conversation.inbox_status)}</Badge>}
-        {conversation.priority_level !== "normal" && <Badge variant="secondary">{priorityLabel(conversation.priority_level)}</Badge>}
-        <Badge variant={windowState === "open" ? "outline" : "destructive"}>{messagingWindowLabel(windowState)}</Badge>
-        {slaState.applicable && (
-          <Badge variant={slaState.phase === "overdue" ? "destructive" : "outline"}>
-            {slaState.phase === "overdue"
-              ? `Overdue by ${slaState.minutesOverdue} min`
-              : slaState.phase === "due_soon"
-                ? `Human response due in ${slaState.minutesRemaining} min`
-                : `Waiting for staff · due in ${slaState.minutesRemaining} min`}
-            {conversation.assigned_staff_name ? ` · ${conversation.assigned_staff_name}` : ""}
-          </Badge>
-        )}
-      </div>
+  const timelineItems = [
+    ...(messages ?? []).map((m) => ({ kind: "message" as const, at: m.created_at, m })),
+    ...(timeline ?? []).map((e) => ({ kind: "event" as const, at: e.at, e })),
+    ...(notes ?? []).map((n) => ({ kind: "note" as const, at: n.created_at, n })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
 
-      <div className="border-b p-2">
+  const openDetails = () => (isWide ? setDetailsOpen((v) => !v) : setDetailsSheetOpen(true));
+  const detailsLabel = isWide && detailsOpen ? "Hide details" : "Details";
+
+  // Secondary context lives in the details panel (xl) / drawer (smaller), so
+  // the conversation itself stays the focus.
+  const sectionClass = "space-y-2 border-b border-border px-4 py-3.5";
+  const sectionTitle = (title: string, action?: ReactNode) => (
+    <div className="flex items-center gap-2">
+      <h4 className="flex-1 text-overline uppercase text-muted-foreground">{title}</h4>
+      {action}
+    </div>
+  );
+  const detailsContent = (
+    <div className="text-sm">
+      <section className={sectionClass} aria-label="Contact">
+        {sectionTitle("Contact")}
+        <dl className="grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1.5">
+          <dt className="text-muted-foreground">WhatsApp</dt><dd className="min-w-0 break-words text-foreground">{conversation.phone_number}</dd>
+          <dt className="text-muted-foreground">Status</dt><dd className="text-foreground">{inboxStatusLabel(conversation.inbox_status)}</dd>
+          <dt className="text-muted-foreground">Priority</dt><dd className="text-foreground">{priorityLabel(conversation.priority_level)}</dd>
+          <dt className="text-muted-foreground">Assigned</dt><dd className="text-foreground">{conversation.assigned_staff_name || "Unassigned"}</dd>
+        </dl>
+      </section>
+
+      <section className={sectionClass} aria-label="Source">
+        {sectionTitle("Source")}
         <AttributionSourceSummary workspaceId={workspaceId} targetType="conversation" targetId={conversation.id} compact fallbackLabel="Direct WhatsApp - no ad referral." />
-      </div>
+      </section>
 
       {roleHasPermission(role, "opportunity.view") && (
-        <ConversationCustomerPanel workspaceId={workspaceId} conversation={conversation} canManage={canManage} onChanged={invalidate} />
+        <section className={sectionClass} aria-label="Customer">
+          {sectionTitle("Customer")}
+          <ConversationCustomerPanel workspaceId={workspaceId} conversation={conversation} canManage={canManage} onChanged={invalidate} />
+        </section>
       )}
 
       {(canCreateLead || canViewLead) && (
-        <div className="space-y-2 border-b bg-muted/20 p-2">
+        <section className={sectionClass} aria-label="Lead">
+          {sectionTitle("Lead")}
           {conversation.lead_id ? (
             <>
               <div className="flex flex-wrap items-center gap-1.5">
-                <Badge variant="secondary">Lead {lead?.human_reference || "..."}</Badge>
-                {lead && <Badge variant="secondary" className="capitalize">{lead.status}</Badge>}
+                <StatusPill tone="info" dot={false}>Lead {lead?.human_reference || "..."}</StatusPill>
+                {lead && <StatusPill tone="neutral" dot={false} className="capitalize">{lead.status}</StatusPill>}
                 {lead && lead.qualification_status !== "unqualified" && (
-                  <Badge variant="secondary">{qualificationStatusLabel(lead.qualification_status)}</Badge>
+                  <StatusPill tone="success" dot={false}>{qualificationStatusLabel(lead.qualification_status)}</StatusPill>
                 )}
-                {leadStageName && <Badge variant="outline">{leadStageName}</Badge>}
-                {ownerName && <Badge variant="outline">Owner: {ownerName}</Badge>}
+                {leadStageName && <StatusPill tone="neutral" dot={false}>{leadStageName}</StatusPill>}
+                {ownerName && <StatusPill tone="neutral" dot={false}>Owner: {ownerName}</StatusPill>}
                 {latestOpportunity && (
-                  <Badge variant="outline" className="capitalize">{opportunityLabel}: {latestOpportunity.status}</Badge>
+                  <StatusPill tone="neutral" dot={false} className="capitalize">{opportunityLabel}: {latestOpportunity.status}</StatusPill>
                 )}
-                {lead?.status === "converted" && <Badge variant="secondary">Customer</Badge>}
+                {lead?.status === "converted" && <StatusPill tone="success" dot={false}>Customer</StatusPill>}
               </div>
 
               {(learnedSummary || learnedIntake.length > 0) && (
-                <div className="rounded-md border bg-background p-2 text-xs">
+                <div className="rounded-lg bg-muted/60 p-2.5 text-xs">
                   <p className="mb-1 font-medium text-muted-foreground">What we've learned</p>
-                  {learnedSummary && <p className="whitespace-pre-wrap">{learnedSummary}</p>}
+                  {learnedSummary && <p className="whitespace-pre-wrap text-foreground">{learnedSummary}</p>}
                   {learnedIntake.length > 0 && (
-                    <dl className="mt-1 grid grid-cols-[minmax(0,8rem)_1fr] gap-x-2 gap-y-0.5">
+                    <dl className="mt-1 grid grid-cols-[minmax(0,7rem)_1fr] gap-x-2 gap-y-0.5">
                       {learnedIntake.map((r) => (
                         <div key={r.key} className="contents">
                           <dt className="truncate text-muted-foreground">{r.label}</dt>
-                          <dd className="min-w-0 break-words">{r.value}</dd>
+                          <dd className="min-w-0 break-words text-foreground">{r.value}</dd>
                         </div>
                       ))}
                     </dl>
@@ -679,22 +711,22 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
               )}
 
               <div className="flex flex-wrap gap-1.5">
-                {canViewLead && <Button size="sm" variant="ghost" className="h-7" onClick={() => goToLead(conversation.lead_id as string)}>Open lead</Button>}
+                {canViewLead && <Button size="sm" variant="outline" onClick={() => goToLead(conversation.lead_id as string)}>Open lead</Button>}
                 {latestOpportunity
-                  ? canViewLead && <Button size="sm" variant="ghost" className="h-7" onClick={() => goToLead(conversation.lead_id as string, true)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button>
-                  : canCreateOpportunity && <Button size="sm" variant="outline" className="h-7" onClick={openOppDialog}><Briefcase className="mr-1.5 h-3.5 w-3.5" /> Create {opportunityLabel.toLowerCase()}</Button>}
+                  ? canViewLead && <Button size="sm" variant="ghost" onClick={() => goToLead(conversation.lead_id as string, true)}>{openOpportunityActionLabel({ opportunity_label: opportunityLabel })}</Button>
+                  : canCreateOpportunity && <Button size="sm" variant="ghost" onClick={openOppDialog}><Briefcase aria-hidden="true" /> Create {opportunityLabel.toLowerCase()}</Button>}
               </div>
             </>
           ) : canCreateLead ? (
             leadDuplicates ? (
               <div className="w-full space-y-2 text-xs">
-                <p className="font-medium">Possible existing lead</p>
+                <p className="font-medium text-foreground">Possible existing lead</p>
                 {leadDuplicates.map((d) => (
-                  <div key={d.id} className="flex items-center justify-between rounded-md border bg-background p-2">
-                    <span>{d.contact_name || d.phone || d.human_reference} ({d.human_reference})</span>
-                    <div className="flex gap-1.5">
-                      <Button size="sm" variant="ghost" className="h-7" onClick={() => goToLead(d.id)}>Open existing</Button>
-                      <Button size="sm" variant="outline" className="h-7" disabled={creatingLead} onClick={() => handleLinkExisting(d.id)}>Link conversation</Button>
+                  <div key={d.id} className="space-y-1.5 rounded-lg border border-border p-2">
+                    <span className="block text-foreground">{d.contact_name || d.phone || d.human_reference} ({d.human_reference})</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button size="sm" variant="ghost" onClick={() => goToLead(d.id)}>Open existing</Button>
+                      <Button size="sm" variant="outline" disabled={creatingLead} onClick={() => handleLinkExisting(d.id)}>Link conversation</Button>
                     </div>
                   </div>
                 ))}
@@ -702,64 +734,75 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
                   <input type="checkbox" checked={copyContextOnLink} onChange={(e) => setCopyContextOnLink(e.target.checked)} />
                   Also copy the AI summary &amp; any documents to that lead
                 </label>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" className="h-7" onClick={() => setLeadDuplicates(null)}>Cancel</Button>
-                  <Button size="sm" variant="outline" className="h-7" disabled={creatingLead} onClick={() => handleCreateLead(true)}>Create new anyway</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setLeadDuplicates(null)}>Cancel</Button>
+                  <Button size="sm" variant="outline" disabled={creatingLead} onClick={() => handleCreateLead(true)}>Create new anyway</Button>
                 </div>
               </div>
             ) : (
-              <Button size="sm" variant="outline" disabled={creatingLead} onClick={() => handleCreateLead(false)}><UserPlus className="mr-1.5 h-3.5 w-3.5" /> Create lead</Button>
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">This conversation isn't linked to a lead yet.</p>
+                <Button size="sm" variant="outline" disabled={creatingLead} onClick={() => handleCreateLead(false)}><UserPlus aria-hidden="true" /> Create lead</Button>
+              </div>
             )
-          ) : null}
-        </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Not linked to a lead.</p>
+          )}
+        </section>
       )}
 
       {canManage && (
-        <div className="border-b bg-muted/30 p-3">
-          <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-            {conversation.ai_enabled ? <Bot className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
-            {aiStatusText}
-          </p>
-
-          {intakeEval && (
-            <div className="mb-2 rounded-md border bg-background p-2 text-xs">
-              <div className="mb-1 flex items-center justify-between">
-                <span className="font-medium text-muted-foreground">What we've learned</span>
-                <span className="text-muted-foreground">
-                  {intakeEval.requiredCollected} of {intakeEval.requiredTotal} required details collected
-                  {conversation.intake_completed_at && " · complete"}
-                </span>
-              </div>
-              <ul className="space-y-0.5">
+        <section className={sectionClass} aria-label="Intake">
+          {sectionTitle(
+            "What we've learned",
+            intakeSchema ? (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-link" disabled={askingInfo || !intakeEval?.nextField} onClick={handleAskNextQuestion}>
+                <Sparkles aria-hidden="true" /> Ask next question
+              </Button>
+            ) : (
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-link" disabled={!conversation.intake_missing_fields?.length} onClick={handleAskMissingInfo}>
+                <Sparkles aria-hidden="true" /> Ask missing info
+              </Button>
+            ),
+          )}
+          {intakeEval ? (
+            <>
+              <p className="text-xs text-muted-foreground">
+                {intakeEval.requiredCollected} of {intakeEval.requiredTotal} required details collected
+                {conversation.intake_completed_at && " · complete"}
+              </p>
+              <ul className="space-y-1 text-xs">
                 {intakeEval.rows.map((r) => (
                   <li key={r.key} className="flex items-baseline gap-1.5">
                     <span aria-hidden className={
-                      r.status === "collected" ? "text-emerald-600" : r.status === "needs_clarification" ? "text-amber-600" : "text-muted-foreground"
+                      r.status === "collected" ? "text-success" : r.status === "needs_clarification" ? "text-warning" : "text-muted-foreground"
                     }>
                       {r.status === "collected" ? "✓" : r.status === "needs_clarification" ? "!" : "○"}
                     </span>
-                    <span className="text-muted-foreground">{r.label}{r.required ? "" : " (optional)"}</span>
+                    <span className="shrink-0 text-muted-foreground">{r.label}{r.required ? "" : " (optional)"}</span>
                     {editingKey === r.key ? (
-                      <span className="flex min-w-0 flex-1 items-center gap-1">
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                         <input
                           autoFocus
                           value={editingValue}
                           onChange={(e) => setEditingValue(e.target.value)}
                           onKeyDown={(e) => { if (e.key === "Enter") handleCorrectAnswer(r.key, editingValue); if (e.key === "Escape") setEditingKey(null); }}
-                          className="min-w-0 flex-1 rounded border bg-background px-1 py-0.5 text-xs"
+                          aria-label={`Correct ${r.label}`}
+                          className="min-w-0 flex-1 rounded-md border border-input bg-card px-1.5 py-1 text-xs"
                         />
-                        <button className="text-emerald-600" onClick={() => handleCorrectAnswer(r.key, editingValue)}>Save</button>
+                        <button className="font-medium text-link" onClick={() => handleCorrectAnswer(r.key, editingValue)}>Save</button>
                         <button className="text-muted-foreground" onClick={() => setEditingKey(null)}>Cancel</button>
                       </span>
                     ) : (
-                      <span className="min-w-0 flex-1 break-words">
+                      <span className="min-w-0 flex-1 break-words text-foreground">
                         {r.status === "collected"
                           ? (Array.isArray(r.value) ? r.value.join(", ") : String(r.value))
                           : r.status === "needs_clarification"
-                            ? <span className="text-amber-600">Needs clarification</span>
+                            ? <span className="text-warning">Needs clarification</span>
                             : <span className="text-muted-foreground">Missing</span>}
                         <button
                           className="ml-1.5 text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                          aria-label={`Edit ${r.label}`}
                           onClick={() => { setEditingKey(r.key); setEditingValue(r.status === "collected" && !Array.isArray(r.value) ? String(r.value) : ""); }}
                         >
                           edit
@@ -769,61 +812,109 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
                   </li>
                 ))}
               </ul>
-            </div>
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {conversation.intake_missing_fields?.length
+                ? `Still needed: ${conversation.intake_missing_fields.join(", ")}.`
+                : "No intake form applies to this conversation."}
+            </p>
           )}
+        </section>
+      )}
+    </div>
+  );
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={conversation.assigned_staff_id || ""} onValueChange={handleAssign} disabled={busy}>
-              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue placeholder="Assign to..." /></SelectTrigger>
-              <SelectContent>
-                {(members || []).map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.profile?.full_name || "Unnamed"}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            {handover !== "closed" && !(handover === "human_active" && conversation.assigned_staff_id === user?.id) && (
-              <Button size="sm" variant={handover === "handover_requested" ? "default" : "outline"} disabled={busy} onClick={handleTakeOver}>Take over</Button>
+  return (
+    <div className="flex h-full min-w-0">
+      <section aria-label={`Conversation with ${conversation.display_name || conversation.phone_number}`} className="flex min-w-0 flex-1 flex-col">
+      <header className="flex items-start gap-2 border-b border-border px-2 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
+        {onBack && <Button variant="ghost" size="icon" className="shrink-0 lg:hidden" onClick={onBack} aria-label="Back to conversations"><ArrowLeft aria-hidden="true" /></Button>}
+        <span className="mt-0.5 hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-selected text-xs font-semibold text-selected-foreground sm:flex" aria-hidden="true">
+          {(conversation.display_name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase() || <MessageCircle className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-title-card text-foreground">{conversation.display_name || conversation.phone_number}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {conversation.display_name && <span className="mr-1 hidden text-xs text-muted-foreground sm:inline">{conversation.phone_number}</span>}
+            <HandoverBadge conversation={conversation} assigneeName={conversation.assigned_staff_name} />
+            {conversation.inbox_status === "waiting_client" && <StatusPill tone="neutral">{inboxStatusLabel(conversation.inbox_status)}</StatusPill>}
+            {conversation.priority_level !== "normal" && <StatusPill tone={conversation.priority_level === "urgent" ? "danger" : "warning"}>{priorityLabel(conversation.priority_level)}</StatusPill>}
+            <StatusPill tone={windowState === "open" ? "success" : windowState === "closed" ? "neutral" : "warning"}>{messagingWindowLabel(windowState)}</StatusPill>
+            {slaState.applicable && (
+              <StatusPill tone={slaState.phase === "overdue" ? "danger" : slaState.phase === "due_soon" ? "warning" : "neutral"}>
+                {slaState.phase === "overdue"
+                  ? `Overdue by ${slaState.minutesOverdue} min`
+                  : slaState.phase === "due_soon"
+                    ? `Human response due in ${slaState.minutesRemaining} min`
+                    : `Waiting for staff · due in ${slaState.minutesRemaining} min`}
+                {conversation.assigned_staff_name ? ` · ${conversation.assigned_staff_name}` : ""}
+              </StatusPill>
             )}
-            {handover === "bot_active" && (
-              <Button size="sm" variant="outline" disabled={busy} onClick={handlePauseAI}>Pause AI</Button>
-            )}
-            {handover !== "bot_active" && (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirmReturnToAI(true)}>Return to automation</Button>
-            )}
-            {intakeSchema ? (
-              <Button size="sm" variant="outline" disabled={askingInfo || !intakeEval?.nextField} onClick={handleAskNextQuestion}>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask next question
-              </Button>
-            ) : (
-              <Button size="sm" variant="outline" disabled={!conversation.intake_missing_fields?.length} onClick={handleAskMissingInfo}>
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Ask missing info
-              </Button>
-            )}
-            {conversation.inbox_status === "resolved" ? (
-              <Button size="sm" variant="outline" disabled={busy} onClick={handleReopen}>Reopen chat</Button>
-            ) : (
-              <Button size="sm" variant="outline" disabled={busy || conversation.ai_enabled} onClick={() => setConfirmResolve(true)}>
-                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Resolve
-              </Button>
-            )}
+          </div>
+        </div>
+        <Button variant="outline" size="sm" className="shrink-0" onClick={openDetails} aria-expanded={isWide ? detailsOpen : detailsSheetOpen} aria-label={detailsLabel}>
+          <PanelRight aria-hidden="true" /><span className="hidden sm:inline">{detailsLabel}</span>
+        </Button>
+      </header>
+
+      {canManage && (
+        <div className="space-y-2 border-b border-border bg-background/60 px-2 py-2 sm:px-4">
+          <p className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground" title={aiStatusText}>
+            {conversation.ai_enabled ? <Bot className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <UserCheck className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+            <span className="line-clamp-2 min-w-0 sm:line-clamp-none">{aiStatusText}</span>
+          </p>
+          {/* One row of actions; scrolls sideways on narrow screens rather
+              than stacking over the chat. */}
+          <div className="-mx-2 flex items-center gap-2 overflow-x-auto px-2 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+          <Select value={conversation.assigned_staff_id || ""} onValueChange={handleAssign} disabled={busy}>
+            <SelectTrigger className="h-[var(--control-h-sm)] w-40 shrink-0 text-xs" aria-label="Assign conversation"><SelectValue placeholder="Assign to..." /></SelectTrigger>
+            <SelectContent>
+              {(members || []).map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.profile?.full_name || "Unnamed"}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {handover !== "closed" && !(handover === "human_active" && conversation.assigned_staff_id === user?.id) && (
+            <Button size="sm" variant={handover === "handover_requested" ? "default" : "outline"} disabled={busy} onClick={handleTakeOver}>Take over</Button>
+          )}
+          {handover === "bot_active" && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={handlePauseAI}>Pause AI</Button>
+          )}
+          {handover !== "bot_active" && (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setConfirmReturnToAI(true)}>Return to automation</Button>
+          )}
+          {conversation.inbox_status === "resolved" ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={handleReopen}>Reopen chat</Button>
+          ) : (
+            <Button size="sm" variant="outline" disabled={busy || conversation.ai_enabled} onClick={() => setConfirmResolve(true)}>
+              <CheckCircle2 aria-hidden="true" /> Resolve
+            </Button>
+          )}
           </div>
         </div>
       )}
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto bg-background/60 px-3 py-4 sm:px-5" role="log" aria-label="Messages" aria-live="polite">
         {messagesLoading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : !messages?.length ? (
-          <p className="text-sm text-muted-foreground">No messages yet.</p>
+          <div className="space-y-3" role="status" aria-label="Loading messages">
+            <div className="h-12 w-2/3 animate-pulse rounded-2xl bg-muted" />
+            <div className="ml-auto h-12 w-1/2 animate-pulse rounded-2xl bg-muted" />
+          </div>
+        ) : !messages?.length && !notes?.length ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">No messages yet.</p>
         ) : (
-          [
-            ...messages.map((m) => ({ kind: "message" as const, at: m.created_at, m })),
-            ...(timeline ?? []).map((e) => ({ kind: "event" as const, at: e.at, e })),
-          ]
-            .sort((a, b) => a.at.localeCompare(b.at))
-            .map((item) => item.kind === "event" ? (
+          timelineItems.map((item) =>
+            item.kind === "event" ? (
               <div key={`ev-${item.e.id}`} className="flex justify-center" role="note">
-                <span className={`rounded-full px-2.5 py-0.5 text-[11px] ${item.e.tone === "handover" ? "bg-amber-50 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300" : item.e.tone === "crm" ? "bg-sky-50 text-sky-900 dark:bg-sky-950/50 dark:text-sky-300" : "bg-muted text-muted-foreground"}`}>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs ${item.e.tone === "handover" ? "bg-warning-soft text-warning" : item.e.tone === "crm" ? "bg-info-soft text-info" : "bg-muted text-muted-foreground"}`}>
                   {item.e.text} · {new Date(item.e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
+              </div>
+            ) : item.kind === "note" ? (
+              <div key={`note-${item.n.id}`} role="note" aria-label="Internal note" className="mx-auto max-w-[min(36rem,100%)] rounded-xl border border-dashed border-warning-solid/70 bg-warning-soft px-3 py-2">
+                <p className="text-xs font-medium text-warning">
+                  Internal note · {item.n.author_name} · {new Date(item.n.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · not sent to the customer
+                </p>
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{item.n.body}</p>
               </div>
             ) : (
               <MessageBubble
@@ -835,68 +926,101 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
                 onRetryTranscription={handleRetryTranscription}
                 transcribing={transcribingMessageId === item.m.id}
               />
-            ))
+            ),
+          )
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {notes && notes.length > 0 && (
-        <div className="max-h-32 overflow-y-auto border-t bg-amber-50 p-3 dark:bg-amber-950/20">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">Internal notes</p>
-          {notes.map((n) => (
-            <p key={n.id} className="text-xs"><span className="font-medium">{n.author_name}:</span> {n.body}</p>
-          ))}
-        </div>
-      )}
+      {canManage ? (
+        <div className="space-y-2 border-t border-border bg-card px-2 py-2.5 sm:px-4 sm:py-3">
+          <div role="tablist" aria-label="Composer mode" className="flex gap-4 text-sm">
+            {(["reply", "note"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={composerMode === mode}
+                onClick={() => setComposerMode(mode)}
+                className={`-mb-px border-b-2 pb-1 font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${composerMode === mode ? (mode === "note" ? "border-warning-solid text-foreground" : "border-primary text-foreground") : "border-transparent text-muted-foreground hover:text-foreground"}`}
+              >
+                {mode === "reply" ? "Reply" : "Internal note"}
+              </button>
+            ))}
+          </div>
 
-      {canManage && (
-        <div className="space-y-2 border-t p-3">
-          {windowOpen ? (
-            <div className="flex gap-2">
-              <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)} placeholder="Type a reply..." className="min-h-[60px]" maxLength={1000} />
-              <Button onClick={handleSend} disabled={sending || !replyText.trim()} className="self-end" aria-label="Send reply"><Send className="h-4 w-4" /></Button>
+          {composerMode === "note" ? (
+            <div className="space-y-2">
+              <div className="flex items-end gap-2 rounded-xl border border-dashed border-warning-solid/70 bg-warning-soft p-2">
+                <Textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Add an internal note (not sent to the customer)"
+                  aria-label="Internal note"
+                  className="min-h-[44px] flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddNote(); } }}
+                />
+                <Button size="sm" variant="outline" onClick={handleAddNote} disabled={!noteText.trim()}>Add note</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Only your team can see notes.</p>
             </div>
-          ) : null}
-          {windowOpen ? (
-            <AgentAssistMenu workspaceId={workspaceId} conversationId={conversation.id} draft={replyText} onDraft={(t) => setReplyText(t.slice(0, 1000))} disabled={sending} />
+          ) : windowOpen ? (
+            <>
+              <div className="flex items-end gap-2 rounded-xl border border-input bg-card p-2 focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/20">
+                <Textarea
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  placeholder="Write a reply on WhatsApp…"
+                  aria-label="Reply"
+                  className="min-h-[44px] flex-1 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
+                  maxLength={1000}
+                />
+                <Button onClick={handleSend} disabled={sending || !replyText.trim()} aria-label="Send reply"><Send aria-hidden="true" /><span className="hidden sm:inline">Send</span></Button>
+              </div>
+              <AgentAssistMenu workspaceId={workspaceId} conversationId={conversation.id} draft={replyText} onDraft={(t) => setReplyText(t.slice(0, 1000))} disabled={sending} />
+            </>
           ) : (
-            <div className="space-y-2 rounded-md border border-dashed p-3">
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                24-hour messaging window closed - a normal reply can't be sent until the customer messages again, or you send an approved template below.
-              </p>
+            <div className="space-y-2">
+              <div className="rounded-xl bg-muted p-3" role="status">
+                <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                  <Clock className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> The 24-hour reply window has closed
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  24-hour messaging window closed - a normal reply can't be sent until the customer messages again, or you send an approved template below.
+                </p>
+              </div>
               {usableTemplates.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No approved templates are available for this workspace yet. Connect WhatsApp and sync templates under Integrations.</p>
               ) : (
                 <>
                   <Select value={selectedTemplateId} onValueChange={handleSelectTemplate}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Choose an approved template..." /></SelectTrigger>
+                    <SelectTrigger aria-label="Approved template"><SelectValue placeholder="Choose an approved template..." /></SelectTrigger>
                     <SelectContent>
                       {usableTemplates.map((t) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.language})</SelectItem>)}
                     </SelectContent>
                   </Select>
                   {selectedTemplate && templateParams.map((value, i) => (
-                    <input
+                    <Input
                       key={i}
                       value={value}
                       onChange={(e) => setTemplateParams(templateParams.map((p, j) => (j === i ? e.target.value : p)))}
                       placeholder={`Parameter ${i + 1}`}
-                      className="w-full rounded-md border bg-background px-2 py-1 text-xs"
+                      aria-label={`Template parameter ${i + 1}`}
                     />
                   ))}
                   {selectedTemplate && (
-                    <Button size="sm" onClick={handleSendTemplate} disabled={sendingTemplate || templateParams.some((p) => !p.trim())}>
-                      <Send className="mr-1.5 h-3.5 w-3.5" /> Send template
+                    <Button className="w-full sm:w-auto" onClick={handleSendTemplate} disabled={sendingTemplate || templateParams.some((p) => !p.trim())}>
+                      <Send aria-hidden="true" /> Send template
                     </Button>
                   )}
                 </>
               )}
             </div>
           )}
-          <div className="flex gap-2">
-            <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add an internal note (not sent to the customer)" className="flex-1 rounded-md border bg-background px-2 py-1 text-xs" onKeyDown={(e) => e.key === "Enter" && handleAddNote()} />
-            <Button variant="ghost" size="sm" onClick={handleAddNote} disabled={!noteText.trim()}>Add note</Button>
-          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" /> You have view-only access to this inbox.
         </div>
       )}
 
@@ -947,11 +1071,6 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
         </AlertDialogContent>
       </AlertDialog>
 
-      {!canManage && (
-        <div className="flex items-center gap-2 border-t p-3 text-xs text-muted-foreground">
-          <AlertTriangle className="h-3.5 w-3.5" /> You have view-only access to this inbox.
-        </div>
-      )}
 
       <Dialog open={oppDialogOpen} onOpenChange={setOppDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -995,6 +1114,29 @@ export function ConversationDetail({ workspaceId, conversation, canManage, onBac
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </section>
+
+      {isWide ? (
+        detailsOpen && (
+          <aside aria-label="Conversation details" className="hidden w-[19rem] shrink-0 flex-col overflow-hidden border-l border-border bg-card xl:flex">
+            <div className="flex min-h-12 items-center gap-2 border-b border-border px-4 py-2">
+              <h3 className="flex-1 text-title-card text-foreground">Details</h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => setDetailsOpen(false)} aria-label="Close details"><X aria-hidden="true" /></Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">{detailsContent}</div>
+          </aside>
+        )
+      ) : (
+        <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
+          <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-sm">
+            <SheetHeader className="border-b border-border px-4 py-3 text-left">
+              <SheetTitle className="text-title-card">Details</SheetTitle>
+              <SheetDescription className="text-xs">{conversation.display_name || conversation.phone_number}</SheetDescription>
+            </SheetHeader>
+            <div className="min-h-0 flex-1 overflow-y-auto">{detailsContent}</div>
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }
@@ -1038,22 +1180,22 @@ function ConversationCustomerPanel({ workspaceId, conversation, canManage, onCha
 
   if (conversation.customer_id) {
     return (
-      <div className="space-y-1.5 border-b bg-muted/20 p-2 text-xs">
+      <div className="space-y-2 text-xs">
         <div className="flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary">Customer</Badge>
-          <span className="font-medium">{customer?.name || "..."}</span>
+          <StatusPill tone="success" dot={false}>Customer</StatusPill>
+          <span className="text-sm font-medium text-foreground">{customer?.name || "..."}</span>
           {customer && <span className="text-muted-foreground">since {new Date(customer.customer_since).toLocaleDateString()}</span>}
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <Button size="sm" variant="ghost" className="h-7" onClick={() => navigate(`/app/customers/${conversation.customer_id}`)}>Open Customer 360</Button>
-          {canManage && <Button size="sm" variant="ghost" className="h-7" onClick={() => setPicking((v) => !v)}>Change</Button>}
-          {canManage && <Button size="sm" variant="ghost" className="h-7 text-destructive" disabled={busy} onClick={doUnlink}>Unlink</Button>}
+          <Button size="sm" variant="outline" onClick={() => navigate(`/app/customers/${conversation.customer_id}`)}>Open Customer 360</Button>
+          {canManage && <Button size="sm" variant="ghost" onClick={() => setPicking((v) => !v)}>Change</Button>}
+          {canManage && <Button size="sm" variant="ghost" className="text-destructive" disabled={busy} onClick={doUnlink}>Unlink</Button>}
         </div>
         {picking && (
-          <div className="space-y-1 rounded-md border bg-background p-2">
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers..." className="w-full rounded border bg-background px-2 py-1 text-xs" />
+          <div className="space-y-1 rounded-lg border border-border p-2">
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers..." aria-label="Search customers" className="h-[var(--control-h-sm)] text-xs" />
             {(searchResults || []).slice(0, 6).map((c) => (
-              <button key={c.id} disabled={busy} className="flex w-full items-center justify-between rounded px-1.5 py-1 text-left hover:bg-muted" onClick={() => doLink(c.id, true)}>
+              <button key={c.id} disabled={busy} className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1.5 text-left hover:bg-accent" onClick={() => doLink(c.id, true)}>
                 <span>{c.name}</span><span className="text-muted-foreground">{c.phone || c.email || ""}</span>
               </button>
             ))}
@@ -1067,37 +1209,38 @@ function ConversationCustomerPanel({ workspaceId, conversation, canManage, onCha
   const possible = (candidates || []).filter((c) => c.match_tier === "possible");
 
   return (
-    <div className="space-y-1.5 border-b bg-muted/20 p-2 text-xs">
+    <div className="space-y-2 text-xs">
+      {exact.length === 0 && possible.length === 0 && <p className="text-muted-foreground">Not linked to a customer.</p>}
       {exact.length > 0 && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
-          <p className="font-medium">Existing customer found</p>
+        <div className="rounded-lg bg-success-soft p-2">
+          <p className="font-medium text-success">Existing customer found</p>
           {exact.map((c) => (
             <div key={c.customer_id} className="mt-1 flex items-center justify-between gap-2">
               <span>{c.name} <span className="text-muted-foreground">- {c.match_reason}</span></span>
-              {canManage && <Button size="sm" variant="outline" className="h-7" disabled={busy} onClick={() => doLink(c.customer_id)}>Link</Button>}
+              {canManage && <Button size="sm" variant="outline" disabled={busy} onClick={() => doLink(c.customer_id)}>Link</Button>}
             </div>
           ))}
         </div>
       )}
       {possible.length > 0 && (
-        <div className="rounded-md border p-2">
+        <div className="rounded-lg border border-border p-2">
           <p className="font-medium text-muted-foreground">Possible match{possible.length > 1 ? "es" : ""}</p>
           {possible.map((c) => (
             <div key={c.customer_id} className="mt-1 flex items-center justify-between gap-2">
               <span>{c.name} <span className="text-muted-foreground">- {c.match_reason}</span></span>
-              {canManage && <Button size="sm" variant="ghost" className="h-7" disabled={busy} onClick={() => doLink(c.customer_id)}>Link anyway</Button>}
+              {canManage && <Button size="sm" variant="ghost" disabled={busy} onClick={() => doLink(c.customer_id)}>Link anyway</Button>}
             </div>
           ))}
         </div>
       )}
       {canManage && (
         <div>
-          <Button size="sm" variant="ghost" className="h-7" onClick={() => setPicking((v) => !v)}>Link customer</Button>
+          <Button size="sm" variant="outline" onClick={() => setPicking((v) => !v)}>Link customer</Button>
           {picking && (
-            <div className="mt-1 space-y-1 rounded-md border bg-background p-2">
-              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers..." className="w-full rounded border bg-background px-2 py-1 text-xs" />
+            <div className="mt-1 space-y-1 rounded-lg border border-border p-2">
+              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers..." aria-label="Search customers" className="h-[var(--control-h-sm)] text-xs" />
               {(searchResults || []).slice(0, 6).map((c) => (
-                <button key={c.id} disabled={busy} className="flex w-full items-center justify-between rounded px-1.5 py-1 text-left hover:bg-muted" onClick={() => doLink(c.id)}>
+                <button key={c.id} disabled={busy} className="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1.5 text-left hover:bg-accent" onClick={() => doLink(c.id)}>
                   <span>{c.name}</span><span className="text-muted-foreground">{c.phone || c.email || ""}</span>
                 </button>
               ))}
