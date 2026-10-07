@@ -78,3 +78,41 @@ describe("public functions", () => {
     expect(profile.error).toBeNull();
   });
 });
+
+// 20261026070000: the workspace helper functions are signed-in only. (The
+// replayed trigger-function revoke is verified with SQL on a fresh database:
+// PostgREST never exposes trigger functions, so an API test cannot tell.)
+describe("workspace helper functions are not anon-callable", () => {
+  const helpers: [string, Record<string, unknown>][] = [
+    ["is_workspace_member", {}],
+    ["has_workspace_permission", { p_permission: "lead.view" }],
+    ["has_workspace_role", { p_min_role: "viewer" }],
+    ["can_grant_workspace_role", { p_new_role: "owner" }],
+    ["can_manage_member_with_role", { p_current_role: "viewer" }],
+  ];
+
+  for (const [fn, args] of helpers) {
+    it(`${fn}: anon gets a permission error, a member still gets an answer`, async () => {
+      const asAnon = await anon.rpc(fn, { p_workspace_id: owner.workspaceId, ...args });
+      expect(asAnon.error?.message).toMatch(/permission denied/i);
+      const asMember = await owner.client.rpc(fn, { p_workspace_id: owner.workspaceId, ...args });
+      expect(asMember.error).toBeNull();
+    });
+  }
+
+  it("anonymous reads of protected tables still return nothing rather than erroring", async () => {
+    for (const table of ["workspaces", "workspace_members", "leads", "customers", "inbox_conversations", "workspace_settings", "content_media_assets"]) {
+      const { data, error } = await anon.from(table).select("*").limit(1);
+      expect(error, `${table} as anon`).toBeNull();
+      expect(data ?? [], `${table} as anon`).toEqual([]);
+    }
+    const { error: storageError } = await anon.storage.from("content-media").list(owner.workspaceId);
+    expect(storageError).toBeNull();
+  });
+
+  it("a member's own RLS reads still work", async () => {
+    const { data, error } = await owner.client.from("workspaces").select("id").eq("id", owner.workspaceId);
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+  });
+});
