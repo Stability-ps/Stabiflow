@@ -55,13 +55,13 @@ Deno.serve(async (req: Request) => {
   if (assetError || !asset) return json(req, { error: "Media asset not found" }, 404);
   if (!String(asset.mime_type || "").startsWith("image/")) return json(req, { error: "AI caption generation currently supports images only." }, 400);
 
-  const serviceSb = createServiceClient();
-  const { data: allowed, error: quotaError } = await serviceSb.rpc("consume_entitlement", {
-    p_workspace_id: workspaceId, p_key: "ai_credits", p_amount: 1,
-  });
-  if (quotaError) return json(req, { error: "Unable to verify your AI allowance. Try again shortly." }, 503);
-  if (allowed !== true) return json(req, { error: "Your monthly AI allowance has been reached.", code: "USAGE_LIMIT_REACHED" }, 429);
+  // Everything that can fail without calling the AI happens BEFORE a credit
+  // is taken, so a misconfiguration or unreadable image never costs one.
+  const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
+  const model = Deno.env.get("OPENAI_FLOW_AI_MODEL")?.trim();
+  if (!apiKey || !model) return json(req, { error: "AI caption generation is not configured yet." }, 503);
 
+  const serviceSb = createServiceClient();
   const [identityRes, offeringsRes, signedRes] = await Promise.all([
     callerSb.from("business_identities").select("trading_name, legal_name, industry, tagline, short_description, long_description").eq("workspace_id", workspaceId).maybeSingle(),
     callerSb.from("business_offerings").select("name, description, kind").eq("workspace_id", workspaceId).limit(12),
@@ -71,6 +71,17 @@ Deno.serve(async (req: Request) => {
   const offerings = offeringsRes.data || [];
   const signedUrl = signedRes.data?.signedUrl;
   if (!signedUrl) return json(req, { error: "Unable to prepare this image for caption generation." }, 500);
+
+  const { data: allowed, error: quotaError } = await serviceSb.rpc("consume_entitlement", {
+    p_workspace_id: workspaceId, p_key: "ai_credits", p_amount: 1,
+  });
+  if (quotaError) return json(req, { error: "Unable to verify your AI allowance. Try again shortly." }, 503);
+  if (allowed !== true) return json(req, { error: "Your monthly AI allowance has been reached.", code: "USAGE_LIMIT_REACHED" }, 429);
+  // The AI call can still fail after this point: give the credit back.
+  const refundCredit = async () => {
+    const { error } = await serviceSb.rpc("refund_entitlement", { p_workspace_id: workspaceId, p_key: "ai_credits", p_amount: 1 });
+    if (error) console.error("content-ai-caption: refund failed", error.message);
+  };
 
   const businessName = identity.trading_name || identity.legal_name || "the business";
   const context = [
@@ -83,10 +94,6 @@ Deno.serve(async (req: Request) => {
     `Target platform: ${targetPlatform}`,
     `Tone: ${tone}`,
   ].filter(Boolean).join("\n");
-
-  const apiKey = Deno.env.get("OPENAI_API_KEY")?.trim();
-  const model = Deno.env.get("OPENAI_FLOW_AI_MODEL")?.trim();
-  if (!apiKey || !model) return json(req, { error: "AI caption generation is not configured yet." }, 503);
 
   try {
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -114,7 +121,8 @@ Deno.serve(async (req: Request) => {
     const raw = await response.text();
     if (!response.ok) {
       console.error("content-ai-caption OpenAI", response.status, raw.slice(0, 400));
-      return json(req, { error: "Unable to generate a caption right now. Try again shortly." }, 502);
+      await refundCredit();
+      return json(req, { error: "Unable to generate a caption right now. Try again shortly. No AI credit was used." }, 502);
     }
     const parsed = JSON.parse(raw);
     const output = extractOutputText(parsed);
@@ -126,6 +134,7 @@ Deno.serve(async (req: Request) => {
     return json(req, { ok: true, suggestion });
   } catch (err) {
     console.error("content-ai-caption failed", err instanceof Error ? err.message : err);
-    return json(req, { error: "Unable to generate a caption right now. Try again shortly." }, 502);
+    await refundCredit();
+    return json(req, { error: "Unable to generate a caption right now. Try again shortly. No AI credit was used." }, 502);
   }
 });
