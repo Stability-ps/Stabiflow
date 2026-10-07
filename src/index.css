@@ -307,3 +307,85 @@ html {
     max-width: 100%;
   }
 }
+
+
+/* ---------------------------------------------------------------------------
+   Operational workspace UI
+   Dense, calm work surfaces inspired by Acapolite's staff console while
+   keeping StabiFlow's own brand and all existing workflows intact.
+   --------------------------------------------------------------------------- */
+@layer components {
+  .operational-page {
+    @apply mx-auto w-full max-w-[1680px];
+  }
+
+  .operational-header {
+    @apply mb-4 flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .operational-title {
+    @apply text-2xl font-semibold tracking-tight sm:text-[1.75rem];
+  }
+
+  .operational-subtitle {
+    @apply mt-1 text-sm text-muted-foreground;
+  }
+
+  .operational-toolbar {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .operational-panel {
+    @apply overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_8px_24px_hsl(222_47%_11%/0.04)];
+  }
+
+  .operational-panel-header {
+    @apply flex min-h-12 items-center justify-between gap-3 border-b border-border/70 px-4 py-3;
+  }
+
+  .operational-section-label {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground;
+  }
+
+  .operational-metric {
+    @apply rounded-xl border border-border/75 bg-card px-4 py-3 shadow-[0_4px_16px_hsl(222_47%_11%/0.035)];
+  }
+
+  .operational-chip {
+    @apply inline-flex items-center rounded-full border border-border/80 bg-background px-2 py-0.5 text-[11px] font-medium text-muted-foreground;
+  }
+
+  .operational-split {
+    @apply grid min-h-0 flex-1 overflow-hidden rounded-xl border border-border/80 bg-card shadow-[0_8px_24px_hsl(222_47%_11%/0.04)];
+  }
+
+  /* Desktop StabiFlow shell: dark, stable navigation like the staff console. */
+  @media (min-width: 768px) {
+    [data-sidebar="sidebar"] {
+      background: hsl(222 30% 13%);
+      color: hsl(210 40% 96%);
+      border-color: hsl(220 20% 20%);
+      background-image: none;
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"] {
+      color: hsl(215 20% 82%);
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover {
+      background: hsl(220 24% 18%);
+      color: white;
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"][data-active="true"] {
+      background: hsl(42 92% 57%);
+      color: hsl(222 47% 11%);
+      box-shadow: none;
+    }
+
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"][data-active="true"] svg,
+    [data-sidebar="sidebar"] [data-sidebar="menu-button"]:hover svg {
+      color: currentColor;
+    }
+  }
+}

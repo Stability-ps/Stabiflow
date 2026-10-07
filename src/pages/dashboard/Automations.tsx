@@ -115,15 +115,15 @@ export default function Automations() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col">
+    <div className="operational-page flex flex-col">
       {fromWhatsApp && (
         <div className="mb-4">
           <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />
         </div>
       )}
-      <div className="mb-5 flex flex-col gap-4 rounded-3xl border border-violet-100/80 bg-gradient-to-br from-white via-white to-violet-50/60 p-5 shadow-[0_18px_60px_-44px_hsl(260_60%_45%/0.3)] sm:flex-row sm:items-center sm:justify-between">
+      <div className="operational-header">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workflow engine</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Automations</h1>
+          <p className="operational-section-label">Workflow engine</p><h1 className="operational-title">Automations</h1>
           <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
           <GuideHelpLink chapter="automations" className="mt-1" />
         </div>
@@ -171,7 +171,7 @@ export default function Automations() {
           }
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-[0_16px_50px_-40px_hsl(260_45%_30%/0.3)]">
+        <div className="operational-panel">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
               <tr>
@@ -183,7 +183,7 @@ export default function Automations() {
             </thead>
             <tbody>
               {visibleAutomations.map((automation) => (
-                <tr key={automation.id} className="border-b last:border-b-0 hover:bg-muted/30">
+                <tr key={automation.id} className="border-b last:border-b-0 hover:bg-muted/40">
                   <td className="px-4 py-2.5 font-medium">{automation.name}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</td>
                   <td className="px-4 py-2.5">
