@@ -4,23 +4,26 @@ import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// Figma "Button": Primary / Secondary (outline) / Ghost / Destructive.
+// Heights come from --control-h / --control-h-sm (44px on phones, 36/32px
+// from md up), so an explicit h-* passed by a caller still wins.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold ring-offset-background transition-all duration-200 ease-out hover:-translate-y-0.5 hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 disabled:hover:translate-y-0 disabled:hover:brightness-100 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:translate-y-0 active:scale-[0.99]",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium ring-offset-background transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-[0_14px_34px_-18px_hsl(var(--primary)/0.6)] hover:-translate-y-0.5 hover:bg-primary/95 hover:shadow-[0_18px_40px_-18px_hsl(var(--primary)/0.55)]",
-        destructive: "bg-destructive text-destructive-foreground shadow-[0_14px_34px_-18px_hsl(var(--destructive)/0.5)] hover:-translate-y-0.5 hover:bg-destructive/90",
-        outline: "border border-input/90 bg-white/90 text-foreground shadow-[0_8px_24px_-22px_rgba(15,23,42,0.35)] hover:-translate-y-0.5 hover:border-primary/25 hover:bg-accent/70 hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground shadow-[0_10px_24px_-20px_rgba(15,23,42,0.22)] hover:-translate-y-0.5 hover:bg-secondary/90",
-        ghost: "text-foreground/80 hover:bg-accent/70 hover:text-foreground hover:shadow-[0_10px_24px_-20px_rgba(15,23,42,0.28)]",
-        link: "text-primary underline-offset-4 hover:translate-y-0 hover:brightness-100 hover:underline",
+        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary-hover",
+        destructive: "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
+        outline: "border border-input bg-card text-foreground shadow-xs hover:bg-accent",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-border",
+        ghost: "text-foreground hover:bg-accent",
+        link: "text-link underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-11 px-4 py-2.5",
-        sm: "h-9 rounded-lg px-3",
-        lg: "h-12 rounded-xl px-8",
-        icon: "h-11 w-11",
+        default: "h-[var(--control-h)] px-4",
+        sm: "h-[var(--control-h-sm)] px-3 text-[13px]",
+        lg: "h-11 px-5",
+        icon: "h-[var(--control-h)] w-[var(--control-h)]",
       },
     },
     defaultVariants: {

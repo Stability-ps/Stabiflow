@@ -1,15 +1,14 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Bell, ChevronDown, ChevronLeft, CircleHelp } from "lucide-react";
+import { Bell, ChevronDown, ChevronLeft, ChevronRight, CircleHelp } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { WorkspaceSwitcher } from "@/components/layout/WorkspaceSwitcher";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { BrandLogo } from "@/components/layout/BrandLogo";
 import { MobileWorkspaceSheet } from "@/components/layout/MobileWorkspaceSheet";
-import { GUIDE_PATH, mobilePageMeta } from "@/lib/navigation";
+import { breadcrumbFor, GUIDE_PATH, mobilePageMeta } from "@/lib/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useAutomations";
 import { markNotificationRead } from "@/lib/automations";
@@ -20,6 +19,7 @@ export function AppHeader() {
   const { pathname } = location;
   const navigate = useNavigate();
   const meta = mobilePageMeta(pathname);
+  const crumbs = breadcrumbFor(pathname);
   const [workspaceSheet, setWorkspaceSheet] = useState(false);
   // Back behaves like a native back: pop the in-app history when there is
   // one (no new entry), otherwise - a deep link / first page of the session,
@@ -41,10 +41,32 @@ export function AppHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-30 shrink-0 border-b border-border/70 bg-background/85 pt-[env(safe-area-inset-top)] shadow-[0_1px_0_hsl(214_32%_91%/0.45)] backdrop-blur-xl supports-[backdrop-filter]:bg-background/72">
-      <div className="flex h-[3.75rem] items-center gap-1 pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] md:gap-3 md:px-4">
-        {/* Desktop/tablet: sidebar toggle + workspace dropdown (unchanged). */}
-        <SidebarTrigger className="hidden md:inline-flex" />
+    <header className="sticky top-0 z-30 shrink-0 border-b border-border bg-card/95 pt-[env(safe-area-inset-top)] backdrop-blur supports-[backdrop-filter]:bg-card/85">
+      <div className="flex h-header items-center gap-1 pl-[max(0.25rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] md:gap-2 md:px-4">
+        {/* Desktop/tablet: sidebar toggle + breadcrumb. The workspace
+            switcher lives at the top of the sidebar. */}
+        <SidebarTrigger className="hidden h-8 w-8 text-muted-foreground md:inline-flex" />
+        <nav aria-label="Breadcrumb" className="hidden min-w-0 flex-1 md:block">
+          <ol className="flex min-w-0 items-center gap-1.5 text-sm">
+            {crumbs.map((crumb, i) => {
+              const last = i === crumbs.length - 1;
+              return (
+                <Fragment key={`${crumb.label}-${i}`}>
+                  {i > 0 ? <li aria-hidden="true"><ChevronRight className="h-3.5 w-3.5 text-subtle-foreground" /></li> : null}
+                  <li className={last ? "min-w-0 truncate font-medium text-foreground" : "shrink-0 text-muted-foreground"}>
+                    {last ? (
+                      <span aria-current="page">{crumb.label}</span>
+                    ) : crumb.to ? (
+                      <Link to={crumb.to} className="rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{crumb.label}</Link>
+                    ) : (
+                      crumb.label
+                    )}
+                  </li>
+                </Fragment>
+              );
+            })}
+          </ol>
+        </nav>
         {/* Phone: contextual back (or brand mark) + page title, with the
             workspace as a quiet secondary line that opens a bottom sheet. */}
         <div className="flex min-w-0 flex-1 items-center gap-1 md:hidden">
@@ -69,17 +91,15 @@ export function AppHeader() {
             </span>
           </button>
         </div>
-        <div className="hidden flex-1 md:block" />
-        <div className="hidden md:block"><WorkspaceSwitcher /></div>
-        <Button asChild variant="ghost" size="icon" className="hidden md:inline-flex" aria-label="Help & guide" title="Help & guide">
-          <Link to={GUIDE_PATH}><CircleHelp className="h-5 w-5" /></Link>
+        <Button asChild variant="ghost" size="icon" className="hidden text-muted-foreground hover:text-foreground md:inline-flex" aria-label="Help & guide" title="Help & guide">
+          <Link to={GUIDE_PATH}><CircleHelp className="!size-[18px]" /></Link>
         </Button>
         <DropdownMenu onOpenChange={handleOpenChange}>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Notifications" className="relative shrink-0 text-muted-foreground">
-              <Bell className="h-4 w-4" />
+            <Button variant="ghost" size="icon" aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"} className="relative shrink-0 text-muted-foreground hover:text-foreground">
+              <Bell className="!size-[18px]" />
               {unreadCount > 0 && (
-                <Badge variant="destructive" className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full p-0 text-[10px]">
+                <Badge variant="destructive" aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-card p-0 px-0.5 text-[10px] leading-none">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </Badge>
               )}

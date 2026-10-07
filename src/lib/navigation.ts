@@ -51,6 +51,62 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Settings", path: "/app/settings", icon: Settings },
 ];
 
+// Desktop sidebar sections (plain labels, not collapsible groups). Items not
+// listed in a section - Home, Billing, Settings - render outside them. The
+// same model feeds the header breadcrumb and the jump-to menu.
+export type NavSection = { key: string; label: string; paths: string[] };
+
+export const NAV_SECTIONS: NavSection[] = [
+  { key: "business", label: "Business", paths: ["/app/business", "/app/business-studio", "/app/documents"] },
+  { key: "marketing", label: "Marketing", paths: ["/app/creative-studio", "/app/content", "/app/campaigns"] },
+  { key: "customers", label: "Customers", paths: ["/app/whatsapp", "/app/leads", "/app/customers"] },
+  { key: "automations", label: "Automations", paths: ["/app/automations", "/app/integrations"] },
+  { key: "insights", label: "Insights", paths: ["/app/analytics", "/app/flow-ai"] },
+];
+
+/** Page-level tabs inside a module - reachable from breadcrumbs and jump-to, never duplicated in the sidebar. */
+export const SUB_DESTINATIONS: { parent: string; label: string; to: string }[] = [
+  { parent: "/app/whatsapp", label: "Inbox", to: "/app/whatsapp/inbox" },
+  { parent: "/app/whatsapp", label: "Contacts", to: "/app/whatsapp/contacts" },
+  { parent: "/app/whatsapp", label: "Templates", to: "/app/whatsapp/templates" },
+  { parent: "/app/whatsapp", label: "Intake", to: "/app/whatsapp/intake" },
+  { parent: "/app/whatsapp", label: "Analytics", to: "/app/whatsapp/analytics" },
+  { parent: "/app/whatsapp", label: "Message settings", to: "/app/whatsapp/settings" },
+  { parent: "/app/content", label: "Calendar", to: "/app/content/calendar" },
+  { parent: "/app/content", label: "Scheduled", to: "/app/content/scheduled" },
+  { parent: "/app/content", label: "Published", to: "/app/content/published" },
+  { parent: "/app/content", label: "Drafts", to: "/app/content/drafts" },
+  { parent: "/app/content", label: "Media library", to: "/app/content/media-library" },
+];
+
+export function navSectionFor(itemPath: string): NavSection | undefined {
+  return NAV_SECTIONS.find((section) => section.paths.includes(itemPath));
+}
+
+export type Crumb = { label: string; to?: string };
+
+/** Desktop header breadcrumb: Section › Page › Sub-page. The last crumb is the current page (no link). */
+export function breadcrumbFor(pathname: string): Crumb[] {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  if (path === "/app") return [{ label: "Home" }];
+  if (path === GUIDE_PATH || path.startsWith(`${GUIDE_PATH}/`)) return path === GUIDE_PATH ? [{ label: "Guide" }] : [{ label: "Guide", to: GUIDE_PATH }, { label: "Chapter" }];
+  if (path === BUSINESS_HUB_PATH) return [{ label: "Business" }];
+  const item = NAV_ITEMS.find((i) => i.path !== "/app" && isNavItemActive(i.path, path));
+  if (!item) return [{ label: mobilePageMeta(path).title }];
+  const crumbs: Crumb[] = [];
+  const section = navSectionFor(item.path);
+  if (section) crumbs.push({ label: section.label });
+  const sub = SUB_DESTINATIONS.find((d) => d.to === path);
+  const detail = DETAIL_ROUTES.find((r) => r.pattern.test(path) && r.meta.parent === item.path);
+  if (sub || detail) {
+    crumbs.push({ label: item.label, to: item.path === "/app/whatsapp" ? "/app/whatsapp/inbox" : item.path });
+    crumbs.push({ label: sub?.label ?? detail!.meta.title });
+  } else {
+    crumbs.push({ label: item.label });
+  }
+  return crumbs;
+}
+
 export function isNavItemActive(itemPath: string, pathname: string): boolean {
   if (itemPath === "/app") return pathname === "/app" || pathname === "/app/";
   // The WhatsApp product area is the one multi-page section: every
@@ -120,6 +176,14 @@ export function mobileNavModel(visible: NavItem[]): { primary: MobileNavItem[]; 
   // tab never changes meaning between workspaces.
   const more = MORE_ORDER.map((p) => byPath.get(p)).filter((i): i is NavItem => !!i).map(toMobile);
   return { primary, more };
+}
+
+/** Plan-locked modules for the More sheet, in the same order as its other destinations. */
+export function mobileLockedItems(locked: NavItem[]): MobileNavItem[] {
+  const byPath = new Map(locked.map((i) => [i.path, i]));
+  const order = [...MORE_ORDER, "/app/whatsapp", "/app/leads"];
+  return order.map((p) => byPath.get(p)).filter((i): i is NavItem => !!i)
+    .map((i) => ({ key: i.path, label: i.label, path: i.path, icon: i.icon }));
 }
 
 export function isMobileNavItemActive(item: MobileNavItem, pathname: string): boolean {

@@ -1,8 +1,7 @@
 import { CircleHelp, LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
-import { adminConsole, AdminApiError, type AdminMe } from "@/lib/adminApi";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,28 +19,21 @@ function initials(name: string | null | undefined, email: string | null | undefi
 export function UserMenu() {
   const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
-  const adminMe = useQuery({
-    queryKey: ["admin-me"],
-    queryFn: () => adminConsole<AdminMe>("me"),
-    enabled: !!user,
-    retry: (count, err) => !(err instanceof AdminApiError && (err.status === 401 || err.status === 403)) && count < 1,
-    staleTime: 60_000,
-  });
-  const canOpenAdmin = !!adminMe.data;
+  const canOpenAdmin = useAdminAccess();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button variant="ghost" size="icon" className="rounded-full" aria-label="Account menu">
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials(profile?.full_name, user?.email)}</AvatarFallback>
+            <AvatarFallback className="bg-selected text-xs font-semibold text-selected-foreground">{initials(profile?.full_name, user?.email)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
-          <p className="truncate text-sm font-medium">{profile?.full_name || "Your account"}</p>
-          <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+          <p className="truncate text-sm font-medium" title={profile?.full_name || undefined}>{profile?.full_name || "Your account"}</p>
+          <p className="truncate text-xs text-muted-foreground" title={user?.email || undefined}>{user?.email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate("/app/settings")}>
