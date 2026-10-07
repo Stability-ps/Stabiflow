@@ -36,7 +36,8 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
 
   const percent = Math.round((completed / total) * 100);
   const remaining = items.filter((item) => !item.complete);
-  const visibleNextSteps = remaining.slice(0, 3);
+  const nearlyComplete = remaining.length <= 3;
+  const visibleNextSteps = nearlyComplete && !expanded ? [] : remaining.slice(0, 3);
 
   const handleDismiss = () => {
     setDismissed(true);
@@ -49,14 +50,14 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
 
   return (
     <Card className="overflow-hidden border-border/70 shadow-sm">
-      <CardHeader className="flex flex-row items-start justify-between space-y-0 bg-muted/20 pb-4">
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 bg-muted/20 pb-3 pt-4">
         <div>
           <CardTitle className="text-lg">Finish setting up StabiFlow</CardTitle>
           <p className="mt-1 text-sm text-muted-foreground">{completed} of {total} complete · {total - completed} remaining</p>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
-            {expanded ? "Show next steps" : "View all steps"}
+            {expanded ? "Show less" : nearlyComplete ? "View remaining" : "View all steps"}
             <ChevronDown className={cn("ml-2 h-4 w-4 transition-transform", expanded && "rotate-180")} />
           </Button>
           <Button variant="ghost" size="icon" onClick={handleDismiss} aria-label="Dismiss">
@@ -64,11 +65,11 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
           </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 pt-4">
+      <CardContent className="space-y-3 pb-4 pt-3">
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${percent}%` }} />
         </div>
-        <div className="grid gap-2 md:grid-cols-3">
+        {visibleNextSteps.length > 0 && <div className="grid gap-2 md:grid-cols-3">
           {visibleNextSteps.map((item) => (
             <button
               key={item.key}
@@ -84,7 +85,8 @@ export function OnboardingChecklist({ workspaceId }: { workspaceId: string | nul
               <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />
             </button>
           ))}
-        </div>
+        </div>}
+        {nearlyComplete && !expanded && <p className="text-xs text-muted-foreground">Almost there — open the remaining steps when you are ready to finish setup.</p>}
         {expanded && (
           <ul className="divide-y rounded-xl border px-3">
             {items.map((item) => (
