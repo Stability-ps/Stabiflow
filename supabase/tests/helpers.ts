@@ -147,6 +147,15 @@ export async function createTestTenant(label: string): Promise<TestTenant> {
   return { userId: identity.userId, email: identity.email, client: identity.client, workspaceId: workspaceId as string };
 }
 
+/** Turns plan-gated modules (e.g. "module.leads") on for a test workspace through a workspace target, the same mechanism Admin uses. Test workspaces start on Free, where advanced modules are off and their edge functions refuse requests. */
+export async function enableModules(workspaceId: string, ...flagKeys: string[]) {
+  const { error } = await admin.from("feature_flag_workspace_targets").upsert(
+    flagKeys.map((flag_key) => ({ flag_key, workspace_id: workspaceId, enabled: true, reason: "integration test" })),
+    { onConflict: "flag_key,workspace_id" },
+  );
+  if (error) throw new Error(`Failed to enable modules: ${error.message}`);
+}
+
 /** Hands out a pooled identity with NO workspace of their own - a blank slate to be seeded into someone else's workspace, or to prove they can't self-serve one. */
 export async function createTestUser(label: string): Promise<{ userId: string; email: string; client: SupabaseClient }> {
   void label; // kept for call-site readability/labeling at the call site, no longer used to derive an email

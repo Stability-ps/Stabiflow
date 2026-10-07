@@ -250,6 +250,19 @@ Deno.serve(async (req: Request) => {
   if (typeof workspaceId !== "string" || !workspaceId) return json(req, { error: "workspace_id is required" }, 400);
   if (typeof action !== "string" || !VALID_ACTIONS.has(action)) return json(req, { error: "Unknown action" }, 400);
 
+  // Plan/feature access is authoritative server-side, not just the route
+  // FeatureGate. is_feature_enabled uses the same evaluator as the UI
+  // (plans, workspace targets, grandfathering). It runs as the caller, so a
+  // non-member gets an error here and only sees "Forbidden".
+  const { data: leadsEnabled, error: featureError } = await callerSb.rpc("is_feature_enabled", {
+    p_workspace_id: workspaceId,
+    p_flag_key: "module.leads",
+  });
+  if (featureError) return json(req, { error: "Forbidden" }, 403);
+  if (leadsEnabled !== true) {
+    return json(req, { error: "Leads are part of the Business and Growth plans. Upgrade in Billing & plans to use them.", code: "MODULE_NOT_IN_PLAN" }, 403);
+  }
+
   const serviceSb = createServiceClient();
   const { data: actorProfile } = await serviceSb.from("profiles").select("full_name").eq("id", actorId).maybeSingle();
   const actorName = actorProfile?.full_name?.trim() || "Staff";
