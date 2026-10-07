@@ -122,8 +122,8 @@ export default function Overview() {
   const onboardingBlock = <OnboardingChecklist workspaceId={currentWorkspaceId} />;
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-42px_hsl(213_82%_45%/0.45)] sm:p-6">
+    <div className="mx-auto max-w-[1440px] space-y-5">
+      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-4 shadow-[0_18px_60px_-42px_hsl(213_82%_45%/0.45)] sm:p-5">
         <div className="pointer-events-none absolute -right-20 -top-28 h-64 w-64 rounded-full bg-sky-200/25 blur-3xl" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -171,7 +171,8 @@ export default function Overview() {
       {!showOnboardingFirst && onboardingBlock}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
+        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">
+          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
             {campaignsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
