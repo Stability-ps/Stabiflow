@@ -8,6 +8,7 @@
 // Deliberate exceptions: pausing a campaign and disconnecting an integration
 // stay available after a downgrade. LOCAL Supabase, real functions.
 import { randomUUID } from "node:crypto";
+import { strFromU8, unzipSync } from "fflate";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { admin, cleanupTenant, createTestTenant, enableModules, SUPABASE_URL, type TestTenant } from "./helpers";
 
@@ -123,6 +124,20 @@ describe("edge functions enforce module plans", () => {
   it("a downgraded workspace can still pause a campaign", async () => {
     const r = await call(free, "ad-campaigns-pause-resume", { campaign_id: ids.free.campaign, action: "pause" });
     expect(r.body.code).not.toBe("MODULE_NOT_IN_PLAN");
+  });
+
+  it("a downgraded workspace can still export its existing module data", async () => {
+    const { data } = await free.client.auth.getSession();
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/workspace-export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session!.access_token}` },
+      body: JSON.stringify({ workspace_id: free.workspaceId }),
+    });
+    expect(res.status).toBe(200);
+    const files = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    const exported = Object.values(files).map((f) => strFromU8(f)).join("\n");
+    expect(exported).toContain(ids.free.lead);
+    expect(exported).toContain(ids.free.campaign);
   });
 
   it("a downgraded workspace can still disconnect an integration", async () => {
