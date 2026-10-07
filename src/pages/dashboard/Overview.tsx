@@ -122,13 +122,13 @@ export default function Overview() {
   const onboardingBlock = <OnboardingChecklist workspaceId={currentWorkspaceId} />;
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-42px_hsl(213_82%_45%/0.45)] sm:p-6">
-        <div className="pointer-events-none absolute -right-20 -top-28 h-64 w-64 rounded-full bg-sky-200/25 blur-3xl" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="operational-page space-y-4">
+      <div className="operational-header">
+
+        <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace overview</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+          <p className="operational-section-label">Workspace overview</p>
+          <h1 className="operational-title">
             {currentMembership ? currentMembership.workspace.name : "Dashboard"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">Your business command centre — priorities, performance and activity in one place.</p>
@@ -171,7 +171,7 @@ export default function Overview() {
       {!showOnboardingFirst && onboardingBlock}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
+        <Card className="operational-panel">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
             {campaignsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -204,7 +204,7 @@ export default function Overview() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
+        <Card className="operational-panel">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
             {conversationsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -257,7 +257,7 @@ export default function Overview() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">
+      <Card className="operational-panel">
         <CardHeader><CardTitle className="text-base">Recent activity</CardTitle></CardHeader>
         <CardContent>
           {activityQuery.isLoading ? (
