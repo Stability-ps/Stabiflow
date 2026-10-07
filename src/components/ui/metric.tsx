@@ -49,15 +49,19 @@ export function Metric({ label, state, icon, to, className }: {
   );
 }
 
+// Slightly smaller on phones so two tiles fit side by side with full
+// currency values ("ZAR 48,210.00"); the design-system size from sm up.
+const VALUE = "text-[1.375rem] font-semibold leading-7 tracking-tight tabular-nums text-foreground sm:text-metric";
+
 function MetricValue({ state }: { state: MetricState }) {
   switch (state.kind) {
     case "value":
-      return <p className="text-metric tabular-nums text-foreground">{state.value}</p>;
+      return <p className={VALUE}>{state.value}</p>;
     case "zero":
-      return <p className="text-metric tabular-nums text-foreground">{state.value ?? "0"}</p>;
+      return <p className={VALUE}>{state.value ?? "0"}</p>;
     case "no_data":
       return (
-        <p className="text-metric text-muted-foreground">
+        <p className="text-[1.375rem] font-semibold leading-7 text-muted-foreground sm:text-metric">
           <span aria-hidden="true">—</span>
           <span className="sr-only">No data</span>
         </p>
