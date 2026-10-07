@@ -60,23 +60,23 @@ create policy "creator campaigns edit" on public.creator_campaigns for update to
 using (public.has_workspace_permission(workspace_id, 'campaign.edit'))
 with check (public.has_workspace_permission(workspace_id, 'campaign.edit'));
 create policy "creator campaigns delete" on public.creator_campaigns for delete to authenticated
-using (public.has_workspace_permission(workspace_id, 'campaign.edit'));
+using (public.has_workspace_permission(workspace_id, 'campaign.delete'));
 
 create policy "creator posts view" on public.creator_campaign_posts for select to authenticated
 using (public.has_workspace_permission(workspace_id, 'view_analytics'));
 create policy "creator posts create" on public.creator_campaign_posts for insert to authenticated
 with check (
   public.has_workspace_permission(workspace_id, 'campaign.create')
-  and exists (select 1 from public.creator_campaigns c where c.id=campaign_id and c.workspace_id=workspace_id)
+  and exists (select 1 from public.creator_campaigns c where c.id=creator_campaign_posts.campaign_id and c.workspace_id=creator_campaign_posts.workspace_id)
 );
 create policy "creator posts edit" on public.creator_campaign_posts for update to authenticated
 using (public.has_workspace_permission(workspace_id, 'campaign.edit'))
 with check (
   public.has_workspace_permission(workspace_id, 'campaign.edit')
-  and exists (select 1 from public.creator_campaigns c where c.id=campaign_id and c.workspace_id=workspace_id)
+  and exists (select 1 from public.creator_campaigns c where c.id=creator_campaign_posts.campaign_id and c.workspace_id=creator_campaign_posts.workspace_id)
 );
 create policy "creator posts delete" on public.creator_campaign_posts for delete to authenticated
-using (public.has_workspace_permission(workspace_id, 'campaign.edit'));
+using (public.has_workspace_permission(workspace_id, 'campaign.delete'));
 
 comment on table public.creator_campaigns is 'Paid creator/UGC agreements: fee, contracted deliverables and campaign identity.';
 comment on table public.creator_campaign_posts is 'Per-post creator performance. Manual metrics now; provider APIs may safely upsert external metrics later.';
