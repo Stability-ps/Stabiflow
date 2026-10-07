@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { format, isToday, isYesterday } from "date-fns";
+import { toZonedTime } from "date-fns-tz";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowRight, BarChart3, Building2, DollarSign, FileText, Megaphone, MessageSquare, Plus, Sparkles, TrendingUp, UserPlus, Users, Wallet,
@@ -95,16 +97,23 @@ export default function Overview() {
   );
   const showOnboardingFirst = !onboardingComplete && !hasRealActivity;
 
+  const formatDashboardTime = (value: string) => {
+    const zoned = toZonedTime(new Date(value), timezone);
+    if (isToday(zoned)) return `Today, ${format(zoned, "HH:mm")}`;
+    if (isYesterday(zoned)) return `Yesterday, ${format(zoned, "HH:mm")}`;
+    return format(zoned, "d MMM, HH:mm");
+  };
+
   const kpiGrid = (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {kpis ? (
         <>
-          <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage={metaConnected ? "No data yet" : "Meta not connected"} value={dashboardMoneyValue(kpis.spend, workspaceCurrency)} />
-          <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="WhatsApp not connected" value={dashboardConversationValue(kpis.conversations, whatsappConnected)} />
-          <MetricCard icon={Users} label="Qualified leads (30d)" emptyMessage="No leads yet" value={String(kpis.qualified_leads)} />
-          <MetricCard icon={DollarSign} label="Customers (30d)" emptyMessage="No customers yet" value={String(kpis.customers)} />
-          {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="No data yet" value={dashboardMoneyValue(kpis.revenue_attributed, workspaceCurrency)} />}
-          {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="Not enough data yet" value={roas?.status === "ok" || roas?.status === "mixed_currency" ? formatRoas(roas) : undefined} />}
+          <MetricCard icon={Wallet} label="Campaign spend (30d)" emptyMessage={metaConnected ? "— · No spend recorded yet" : "— · Meta not connected"} value={dashboardMoneyValue(kpis.spend, workspaceCurrency)} onClick={() => navigate("/app/campaigns")} />
+          <MetricCard icon={MessageSquare} label="Conversations (30d)" emptyMessage="— · WhatsApp not connected" value={dashboardConversationValue(kpis.conversations, whatsappConnected)} onClick={() => navigate("/app/messages")} />
+          <MetricCard icon={Users} label="Qualified leads (30d)" emptyMessage="— · No leads yet" value={String(kpis.qualified_leads)} onClick={() => navigate("/app/leads")} />
+          <MetricCard icon={DollarSign} label="Customers (30d)" emptyMessage="— · No customers yet" value={String(kpis.customers)} onClick={() => navigate("/app/customers")} />
+          {canSeeRevenue && <MetricCard icon={TrendingUp} label="Revenue (30d)" emptyMessage="— · No revenue recorded yet" value={dashboardMoneyValue(kpis.revenue_attributed, workspaceCurrency)} onClick={() => navigate("/app/analytics")} />}
+          {canSeeRevenue && <MetricCard icon={BarChart3} label="ROAS (30d)" emptyMessage="— · Needs spend and revenue data" value={roas?.status === "ok" || roas?.status === "mixed_currency" ? formatRoas(roas) : undefined} onClick={() => navigate("/app/analytics")} />}
         </>
       ) : (
         <>
@@ -122,8 +131,8 @@ export default function Overview() {
   const onboardingBlock = <OnboardingChecklist workspaceId={currentWorkspaceId} />;
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-42px_hsl(213_82%_45%/0.45)] sm:p-6">
+    <div className="mx-auto max-w-[1440px] space-y-5">
+      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-4 shadow-[0_18px_60px_-42px_hsl(213_82%_45%/0.45)] sm:p-5">
         <div className="pointer-events-none absolute -right-20 -top-28 h-64 w-64 rounded-full bg-sky-200/25 blur-3xl" />
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -171,7 +180,8 @@ export default function Overview() {
       {!showOnboardingFirst && onboardingBlock}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
+        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">
+          <CardHeader className="pb-2"><CardTitle className="text-base">Campaign performance</CardTitle></CardHeader>
           <CardContent>
             {campaignsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -204,7 +214,8 @@ export default function Overview() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">\n          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
+        <Card className="border-border/60 bg-card/90 shadow-[0_12px_40px_-32px_hsl(213_45%_30%/0.35)]">
+          <CardHeader className="pb-2"><CardTitle className="text-base">Recent conversations</CardTitle></CardHeader>
           <CardContent>
             {conversationsQuery.isLoading ? (
               <div className="h-24 animate-pulse rounded-lg bg-muted" />
@@ -213,7 +224,7 @@ export default function Overview() {
                 {conversationsQuery.data.slice(0, 3).map((conversation) => (
                   <li key={conversation.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
                     <span className="min-w-0 truncate font-medium">{conversation.display_name || conversation.phone_number}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{new Date(conversation.updated_at).toLocaleDateString(undefined, { timeZone: timezone })}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatDashboardTime(conversation.updated_at)}</span>
                   </li>
                 ))}
               </ul>
@@ -271,7 +282,7 @@ export default function Overview() {
               {visibleActivity.map((row) => (
                 <li key={row.id} className="flex flex-col gap-1 rounded-lg border p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span>{formatActivityAction(row.action)}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{new Date(row.created_at).toLocaleString(undefined, { timeZone: timezone })}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{formatDashboardTime(row.created_at)}</span>
                 </li>
               ))}
             </ul>
