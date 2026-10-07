@@ -18,6 +18,9 @@ const state = vi.hoisted(() => ({
   recentEvents: [] as Array<Record<string, unknown>>,
   conversations: [] as Array<Record<string, unknown>>,
   templates: [] as Array<Record<string, unknown>>,
+  library: [] as Array<Record<string, unknown>>,
+  libraryLoading: false,
+  libraryError: false,
 }));
 
 const inboxActionSpies = vi.hoisted(() => ({
@@ -77,7 +80,9 @@ vi.mock("@/hooks/useInboxTemplates", async (importOriginal) => {
 });
 // Templates also loads the curated StabiFlow template library and the
 // user's favourites; both are separate queries the page waits on.
-vi.mock("@/hooks/useWhatsAppTemplateLibrary", () => ({ useWhatsAppTemplateLibrary: () => ({ data: [], isLoading: false }) }));
+vi.mock("@/hooks/useWhatsAppTemplateLibrary", () => ({
+  useWhatsAppTemplateLibrary: () => ({ data: state.libraryLoading || state.libraryError ? undefined : state.library, isLoading: state.libraryLoading, isError: state.libraryError }),
+}));
 vi.mock("@/hooks/useWhatsAppTemplateFavorites", () => ({
   useWhatsAppTemplateFavorites: () => ({ favorites: new Set<string>(), isLoading: false, toggleFavorite: vi.fn(), isToggling: false }),
 }));
@@ -144,6 +149,9 @@ beforeEach(() => {
   state.recentEvents = [];
   state.conversations = [];
   state.templates = [];
+  state.library = [];
+  state.libraryLoading = false;
+  state.libraryError = false;
   Object.values(inboxActionSpies).forEach((s) => s.mockReset());
   Object.values(leadSpies).forEach((s) => s.mockReset());
   Object.values(integrationSpies).forEach((s) => s.mockReset());
@@ -323,6 +331,41 @@ describe("WhatsApp Templates child", () => {
     state.templates = [];
     renderArea("/app/whatsapp/templates");
     expect(screen.getByText(/Message templates are created in Meta and synced into StabiFlow/i)).toBeInTheDocument();
+  });
+});
+
+describe("WhatsApp Templates - StabiFlow Library availability (deferred fix)", () => {
+  const LIB = { id: "lib-1", name: "order_ready_pickup", industry: "Bakery", category: "UTILITY", use_case: "order_ready", body: "Hi {{1}}, your order is ready.", variables: ["customer_name"], is_active: true, sort_order: 1 };
+
+  it("keeps the library reachable when no Meta templates have synced yet", () => {
+    state.templates = [];
+    state.library = [LIB];
+    renderArea("/app/whatsapp/templates");
+    expect(screen.getByText("No Meta templates synced yet")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Browse the StabiFlow Library/ }));
+    expect(screen.getByRole("button", { name: /StabiFlow Library/, pressed: true })).toBeInTheDocument();
+    expect(screen.getByText("order_ready_pickup")).toBeInTheDocument();
+  });
+
+  it("the source toggle is available even with nothing synced", () => {
+    state.library = [LIB];
+    renderArea("/app/whatsapp/templates");
+    fireEvent.click(screen.getByRole("button", { name: "StabiFlow Library", pressed: false }));
+    expect(screen.getByText("order_ready_pickup")).toBeInTheDocument();
+  });
+
+  it("does not hold synced templates back while the library is still loading", () => {
+    state.libraryLoading = true;
+    state.templates = [{ id: "t1", name: "order_update", language: "en_US", category: "UTILITY", provider_status: "APPROVED", components: [{ type: "BODY", text: "Hi {{1}}" }] }];
+    renderArea("/app/whatsapp/templates");
+    expect(screen.getByText("order_update")).toBeInTheDocument();
+  });
+
+  it("explains when the library can't load, without affecting Meta templates", () => {
+    state.libraryError = true;
+    renderArea("/app/whatsapp/templates");
+    fireEvent.click(screen.getByRole("button", { name: "StabiFlow Library", pressed: false }));
+    expect(screen.getByText(/couldn't load the template library/)).toBeInTheDocument();
   });
 });
 
