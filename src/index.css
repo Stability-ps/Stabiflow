@@ -108,8 +108,8 @@
     --admin-chart: 213 75% 52%;
   }
 
-  /* Dark values mirror the Figma Dark mode. No in-app theme switch exists
-     yet, so nothing applies .dark today; kept in sync for when one does. */
+  /* Dark values mirror the Figma Dark mode. Applied to <html> inside /app
+     by the account menu's Theme choice (src/lib/theme.ts). */
   .dark {
     color-scheme: dark;
     --background: 220 29% 6%;

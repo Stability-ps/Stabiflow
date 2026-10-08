@@ -67,8 +67,8 @@ export default function BusinessHub() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-44px_hsl(213_82%_45%/0.4)]">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-sky-200/25 blur-3xl" />
+      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-44px_hsl(213_82%_45%/0.4)] dark:border-border dark:from-card dark:via-card dark:to-sky-950/20">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-sky-200/25 blur-3xl dark:bg-sky-500/10" />
         <div className="relative">
         <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business workspace</p>
         <h1 className="truncate text-2xl font-semibold tracking-tight">{name}</h1>
@@ -89,8 +89,8 @@ export default function BusinessHub() {
       </div>
 
       {pendingCount > 0 ? (
-        <Link to="/app/business?section=review" className="flex min-h-14 items-center gap-3 rounded-xl border border-sky-300 bg-sky-50/60 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-sky-950/20">
-          <Sparkles className="h-4 w-4 shrink-0 text-sky-600" aria-hidden="true" />
+        <Link to="/app/business?section=review" className="flex min-h-14 items-center gap-3 rounded-xl border border-sky-300 bg-sky-50/60 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-sky-950/20 dark:border-sky-800">
+          <Sparkles className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" aria-hidden="true" />
           <span className="flex-1">
             <span className="font-medium">{pendingCount} change{pendingCount === 1 ? "" : "s"} to review</span>
             <span className="block text-xs text-muted-foreground">Found on your website or in your documents</span>

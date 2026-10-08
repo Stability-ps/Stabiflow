@@ -9,7 +9,7 @@ export function ProvenanceBadge({ source, status, className }: { source?: string
   const Icon = st === "verified" ? ShieldCheck : st === "user_confirmed" ? BadgeCheck : CircleDashed;
   return (
     <p className={cn("flex items-center gap-1 text-xs text-muted-foreground", className)}>
-      <Icon className={cn("h-3.5 w-3.5", st === "verified" && "text-emerald-600", st === "user_confirmed" && "text-primary")} aria-hidden="true" />
+      <Icon className={cn("h-3.5 w-3.5", st === "verified" && "text-emerald-600 dark:text-emerald-300", st === "user_confirmed" && "text-primary")} aria-hidden="true" />
       <span>
         {src ? `${src} · ` : ""}
         {VERIFICATION_LABELS[st]}

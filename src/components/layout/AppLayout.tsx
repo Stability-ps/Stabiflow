@@ -12,6 +12,7 @@ import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { filterNavItems, planLockedNavItems } from "@/lib/featureFlags";
 import { NAV_ITEMS } from "@/lib/navigation";
 import { useMobileKeyboard } from "@/hooks/useMobileKeyboard";
+import { useApplyTheme } from "@/lib/theme";
 
 export function AppLayout() {
   const location = useLocation();
@@ -19,6 +20,7 @@ export function AppLayout() {
   const navItems = useMemo(() => filterNavItems(NAV_ITEMS, isEnabled), [isEnabled]);
   const lockedItems = useMemo(() => planLockedNavItems(NAV_ITEMS, isPlanLocked), [isPlanLocked]);
   useMobileKeyboard();
+  useApplyTheme();
 
   return (
     <SidebarProvider>

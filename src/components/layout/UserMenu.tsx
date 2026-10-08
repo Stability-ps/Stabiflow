@@ -1,12 +1,20 @@
-import { CircleHelp, LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
+import { CircleHelp, LogOut, Monitor, Moon, Settings, Shield, Sun, User as UserIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdminAccess } from "@/hooks/useAdminAccess";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { setThemePreference, useThemePreference, type ThemePreference } from "@/lib/theme";
+
+const THEMES: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "Match device", icon: Monitor },
+];
 
 function initials(name: string | null | undefined, email: string | null | undefined) {
   if (name?.trim()) {
@@ -20,6 +28,7 @@ export function UserMenu() {
   const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
   const canOpenAdmin = useAdminAccess();
+  const theme = useThemePreference();
 
   return (
     <DropdownMenu>
@@ -48,6 +57,16 @@ export function UserMenu() {
           <CircleHelp className="mr-2 h-4 w-4" />
           Help & guide
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Theme</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={theme} onValueChange={(v) => setThemePreference(v as ThemePreference)}>
+          {THEMES.map(({ value, label, icon: Icon }) => (
+            <DropdownMenuRadioItem key={value} value={value}>
+              <Icon className="mr-2 h-4 w-4" aria-hidden="true" />
+              {label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
         {canOpenAdmin && (
           <>
             <DropdownMenuSeparator />

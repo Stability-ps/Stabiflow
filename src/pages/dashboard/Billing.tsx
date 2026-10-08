@@ -33,22 +33,22 @@ function formatDate(value: string | null): string {
 
 function planTheme(code: string) {
   if (code === "business") return {
-    card: "border-sky-200 bg-gradient-to-b from-sky-50/90 to-background shadow-sm",
-    badge: "bg-sky-100 text-sky-800 hover:bg-sky-100",
+    card: "border-sky-200 bg-gradient-to-b from-sky-50/90 to-background shadow-sm dark:border-border dark:from-sky-950/20",
+    badge: "bg-sky-100 text-sky-800 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300",
     button: "bg-sky-600 text-white hover:bg-sky-700",
-    check: "text-sky-600",
+    check: "text-sky-600 dark:text-sky-300",
   };
   if (code === "growth") return {
-    card: "border-violet-200 bg-gradient-to-b from-violet-50/90 to-background shadow-sm",
-    badge: "bg-violet-100 text-violet-800 hover:bg-violet-100",
+    card: "border-violet-200 bg-gradient-to-b from-violet-50/90 to-background shadow-sm dark:border-border dark:from-violet-950/20",
+    badge: "bg-violet-100 text-violet-800 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300",
     button: "bg-violet-600 text-white hover:bg-violet-700",
-    check: "text-violet-600",
+    check: "text-violet-600 dark:text-violet-300",
   };
   return {
-    card: "border-amber-200 bg-gradient-to-b from-amber-50/90 to-background shadow-sm",
-    badge: "bg-amber-100 text-amber-800 hover:bg-amber-100",
+    card: "border-amber-200 bg-gradient-to-b from-amber-50/90 to-background shadow-sm dark:border-border dark:from-amber-950/20",
+    badge: "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300",
     button: "bg-amber-500 text-slate-950 hover:bg-amber-600",
-    check: "text-amber-600",
+    check: "text-amber-600 dark:text-amber-300",
   };
 }
 
@@ -198,7 +198,7 @@ export default function Billing() {
           <div>
             <span className="text-2xl font-semibold">{formatMoney(price.amount_minor, price.currency)}</span>
             <span className="ml-1 text-sm text-muted-foreground">{intervalLabel(price.billing_interval)}</span>
-            {saving && <p className="text-xs text-emerald-700">Save {saving}% vs monthly</p>}
+            {saving && <p className="text-xs text-emerald-700 dark:text-emerald-300">Save {saving}% vs monthly</p>}
           </div>
           <ul className="flex-1 space-y-1 text-sm">
             {(plan.marketing.features ?? []).map((f) => (
@@ -209,13 +209,13 @@ export default function Billing() {
           </ul>
           {isPurchased ? (
             <div className="space-y-2">
-              <Button disabled variant="outline" className="w-full border-emerald-200 bg-emerald-50 text-emerald-800 opacity-100">
+              <Button disabled variant="outline" className="w-full border-emerald-200 bg-emerald-50 text-emerald-800 opacity-100 dark:border-border dark:bg-emerald-950/40 dark:text-emerald-300">
                 <Check className="mr-2 h-4 w-4" /> Purchased
               </Button>
               <p className="text-center text-xs text-muted-foreground">Bought {formatDate(purchase.paid_at)}</p>
             </div>
           ) : isCurrent ? (
-            <Button disabled variant="outline" className="w-full border-emerald-200 bg-emerald-50 text-emerald-800 opacity-100">
+            <Button disabled variant="outline" className="w-full border-emerald-200 bg-emerald-50 text-emerald-800 opacity-100 dark:border-border dark:bg-emerald-950/40 dark:text-emerald-300">
               <Check className="mr-2 h-4 w-4" /> Current plan
             </Button>
           ) : (
@@ -242,9 +242,9 @@ export default function Billing() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-sky-50/65 to-violet-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.3)] sm:p-6">
+      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-sky-50/65 to-violet-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.3)] sm:p-6 dark:border-border dark:from-card dark:via-sky-950/20 dark:to-violet-950/20">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace subscription</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Billing & plans</h1>
-        <p className="mt-1 text-sm text-slate-600">Choose the plan that fits your business. Payments are processed securely by Paystack.</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-muted-foreground">Choose the plan that fits your business. Payments are processed securely by Paystack.</p>
         <GuideHelpLink chapter="billing" label="How plans and payments work" className="mt-1" />
       </div>
 
@@ -256,45 +256,45 @@ export default function Billing() {
         </Card>
       )}
 
-      <Card className={currentIsPaid ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm"}>
+      <Card className={currentIsPaid ? "border-emerald-200 bg-gradient-to-r from-emerald-50/90 to-background shadow-sm dark:border-border dark:from-emerald-950/20" : "border-slate-200 bg-gradient-to-r from-slate-50 to-background shadow-sm dark:border-border dark:from-card"}>
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${currentIsPaid ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${currentIsPaid ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-slate-100 text-slate-700 dark:bg-muted dark:text-muted-foreground"}`}>
                 <CreditCard className="h-4 w-4" />
               </span>
               Current plan
             </CardTitle>
             {sub ? (
-              <Badge className={sub.status === "active" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100" : "bg-amber-100 text-amber-800 hover:bg-amber-100"}>
+              <Badge className={sub.status === "active" ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"}>
                 {STATUS_LABELS[sub.status] ?? sub.status}
               </Badge>
             ) : highestPurchase ? (
-              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Purchased</Badge>
+              <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300">Purchased</Badge>
             ) : (
               <Badge variant="secondary">Free</Badge>
             )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-white/70 px-3 py-2">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-100 bg-white/70 px-3 py-2 dark:border-border dark:bg-card">
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your access</p>
-              <p className="truncate font-semibold text-slate-900">{currentLabel}</p>
+              <p className="truncate font-semibold text-slate-900 dark:text-foreground">{currentLabel}</p>
             </div>
-            {highestPurchase && !sub && <span className="shrink-0 text-xs font-medium text-emerald-700">Paid once · permanent</span>}
+            {highestPurchase && !sub && <span className="shrink-0 text-xs font-medium text-emerald-700 dark:text-emerald-300">Paid once · permanent</span>}
           </div>
           {(entitlements.data ?? []).length > 0 && (
-            <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-1 border-b border-slate-200 pb-3 sm:grid-cols-2 dark:border-border">
               {(entitlements.data ?? []).filter((e) => e.enabled || e.kind === "boolean").map((e) => (
                 <div key={e.entitlement_key} className="flex min-w-0 items-center gap-2 py-1">
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400"}`}>
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${e.enabled ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300" : "bg-slate-100 text-slate-400 dark:bg-muted dark:text-muted-foreground"}`}>
                     {e.enabled ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <span className="h-1.5 w-1.5 rounded-full bg-current" />}
                   </span>
-                  <span className={`min-w-0 flex-1 truncate ${e.enabled ? "text-slate-700" : "text-slate-400"}`}>
+                  <span className={`min-w-0 flex-1 truncate ${e.enabled ? "text-slate-700 dark:text-muted-foreground" : "text-slate-400 dark:text-muted-foreground"}`}>
                     {entitlementLabel(e.entitlement_key, entitlementNames.data)}
                   </span>
-                  <span className={`shrink-0 text-xs font-medium ${e.enabled ? "text-emerald-700" : "text-slate-400"}`}>
+                  <span className={`shrink-0 text-xs font-medium ${e.enabled ? "text-emerald-700 dark:text-emerald-300" : "text-slate-400 dark:text-muted-foreground"}`}>
                     {e.kind === "boolean"
                       ? e.enabled ? "Included" : "Not included"
                       : !e.enabled ? "Not included"
@@ -315,9 +315,9 @@ export default function Billing() {
                 {sub.price && <p className="mt-0.5 text-muted-foreground">{formatMoney(sub.price.amount_minor, sub.price.currency)} {intervalLabel(sub.price.billing_interval)}</p>}
               </div>
               {sub.status === "grace" && sub.grace_until && (
-                <p className="text-amber-700">Your last payment did not go through. Access continues until {formatDate(sub.grace_until)} - please update your card with Paystack.</p>
+                <p className="text-amber-700 dark:text-amber-300">Your last payment did not go through. Access continues until {formatDate(sub.grace_until)} - please update your card with Paystack.</p>
               )}
-              {sub.status === "past_due" && <p className="text-amber-700">Your last renewal failed. Paystack will retry the payment.</p>}
+              {sub.status === "past_due" && <p className="text-amber-700 dark:text-amber-300">Your last renewal failed. Paystack will retry the payment.</p>}
               <p className="text-muted-foreground">
                 {sub.status === "cancelled" ? "Access ends" : "Next renewal"}: {formatDate(sub.current_period_end)}
               </p>
@@ -353,9 +353,9 @@ export default function Billing() {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Current plan</Badge>
+                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300">Current plan</Badge>
                 {purchases.filter((p) => p.id !== highestPurchase.id).map((p) => (
-                  <span key={p.id} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
+                  <span key={p.id} className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-border dark:bg-amber-950/40 dark:text-amber-300">
                     {p.plan?.name ?? "Purchase"} · bought {formatDate(p.paid_at)}
                   </span>
                 ))}

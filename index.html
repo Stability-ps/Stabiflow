@@ -27,6 +27,14 @@
     <meta name="twitter:description" content="StabiFlow helps businesses manage Meta advertising, Facebook and Instagram business assets, WhatsApp conversations, leads, analytics and automation from one workspace." />
     <meta name="twitter:image" content="https://app.stabiflow.com/brand/StabiFlow_Full_Logo_Light.png" />
     <title>StabiFlow | Meta Ads, WhatsApp, CRM & Business Automation</title>
+    <script>
+      // Apply the in-app theme before first paint (see src/lib/theme.ts). /app only.
+      try {
+        var t = localStorage.getItem("stabiflow-theme");
+        if (location.pathname.indexOf("/app") === 0 && (t === "dark" || (t === "system" && matchMedia("(prefers-color-scheme: dark)").matches)))
+          document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
   </head>
   <body style="background-color:#07162d">
     <div id="pwa-launch-screen" aria-hidden="true">

@@ -226,7 +226,7 @@ export function WorkspaceTab() {
               stabiflow.com/{slug || "..."}
               {checkingSlug && " · checking availability..."}
               {slugAvailable === false && <span className="text-destructive"> · already taken</span>}
-              {slugAvailable === true && <span className="text-emerald-600"> · available</span>}
+              {slugAvailable === true && <span className="text-emerald-600 dark:text-emerald-300"> · available</span>}
             </p>
           </div>
         </div>

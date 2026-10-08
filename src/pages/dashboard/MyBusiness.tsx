@@ -217,7 +217,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
     return (
       <Card className="overflow-hidden border-border/70 shadow-sm">
         <button type="button" className="flex w-full items-center gap-3 p-5 text-left" onClick={() => setOpenSection(open ? null : id)} aria-expanded={open}>
-          {complete ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" /> : <div className="h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />}
+          {complete ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-300" /> : <div className="h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />}
           <div className="min-w-0 flex-1">
             <div className="font-medium">{title}</div>
             <div className="text-sm text-muted-foreground">{description}</div>
@@ -232,7 +232,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.25)] sm:p-6">
+      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.25)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-sky-950/20">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business identity</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">My Business</h1>
         <p className="text-sm text-muted-foreground">Keep your business facts in one place. StabiFlow uses these details for your profile, documents and marketing.</p>
@@ -265,7 +265,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
           </Button>}
         </CardHeader>
         {aiLocked && (
-          <p className="border-b bg-amber-50/70 px-6 py-3 text-sm text-amber-950" role="note">
+          <p className="border-b bg-amber-50/70 px-6 py-3 text-sm text-amber-950 dark:bg-amber-950/40" role="note">
             Complete with AI is included with the Business and Growth plans. You can still fill in every section yourself.{" "}
             <Link to="/app/billing" className="font-medium underline underline-offset-4">See plans</Link>
           </p>

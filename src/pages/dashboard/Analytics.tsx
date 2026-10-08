@@ -101,7 +101,7 @@ export default function Analytics() {
   return (
     <div className="mx-auto max-w-[1500px] space-y-6">
       {fromWhatsApp && <WhatsAppContextBanner label="Viewing WhatsApp conversion analytics." />}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-cyan-100/80 bg-gradient-to-br from-white via-white to-cyan-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(190_70%_40%/0.3)] sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-cyan-100/80 bg-gradient-to-br from-white via-white to-cyan-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(190_70%_40%/0.3)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-cyan-950/20">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance intelligence</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Analytics</h1>
           <p className="text-sm text-muted-foreground">Spend, conversations, leads, customers, revenue, and cost-per-outcome, all the way through the funnel.</p>
