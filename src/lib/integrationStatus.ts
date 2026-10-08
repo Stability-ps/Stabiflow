@@ -114,12 +114,17 @@ export function presentWebhookEventOutcome(event: {
 export function toneClassName(tone: IntegrationTone): string {
   switch (tone) {
     case "healthy":
-      return "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300";
+      return "bg-success-soft text-success";
     case "attention":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+      return "bg-warning-soft text-warning";
     case "error":
-      return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+      return "bg-destructive-soft text-destructive-strong";
     default:
       return "bg-muted text-muted-foreground";
   }
+}
+
+/** The same tone in the shared StatusPill vocabulary. */
+export function statusPillTone(tone: IntegrationTone): "success" | "warning" | "danger" | "neutral" {
+  return tone === "healthy" ? "success" : tone === "attention" ? "warning" : tone === "error" ? "danger" : "neutral";
 }

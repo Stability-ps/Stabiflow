@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Separator } from "@/components/ui/separator";
 import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAllWhatsAppNumbers, type WorkspaceIntegrationRow } from "@/hooks/useIntegrations";
 import { checkIntegrationConnectionHealth, disconnectIntegration, refreshIntegrationResources, setResourceActive, type IntegrationResourceHealth } from "@/lib/integrations";
-import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
+import { presentIntegrationStatus, statusPillTone } from "@/lib/integrationStatus";
 
 export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDisconnect, onDisconnected, chrome = "sheet" }: {
   workspaceId: string;
@@ -27,7 +27,7 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
   chrome?: "sheet" | "page";
 }) {
   const queryClient = useQueryClient();
-  const { data: numbers, isLoading } = useAllWhatsAppNumbers(workspaceId);
+  const { data: numbers, isLoading, isError } = useAllWhatsAppNumbers(workspaceId);
 
   const [refreshing, setRefreshing] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -105,31 +105,31 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
       {chrome === "sheet" ? (
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            Manage WhatsApp <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
+            Manage WhatsApp <StatusPill tone={statusPillTone(status.tone)}>{status.label}</StatusPill>
           </SheetTitle>
           <SheetDescription>Choose which WhatsApp Business phone number(s) StabiFlow uses for this workspace.</SheetDescription>
         </SheetHeader>
       ) : (
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            Manage WhatsApp <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
+          <h2 className="flex flex-wrap items-center gap-2 text-title-section text-foreground">
+            Manage WhatsApp <StatusPill tone={statusPillTone(status.tone)}>{status.label}</StatusPill>
           </h2>
           <p className="text-sm text-muted-foreground">Choose which WhatsApp Business phone number(s) StabiFlow uses for this workspace.</p>
         </div>
       )}
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={handleCheck} disabled={checking || !canManage}>
-          {checking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {checking ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
           Check connection
         </Button>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing || !canManage}>
-          {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          {refreshing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
           Refresh numbers
         </Button>
         {canDisconnect && (
           <Button variant="outline" size="sm" className="ml-auto text-destructive" onClick={() => setConfirmDisconnect(true)}>
-            <Unplug className="mr-2 h-4 w-4" /> Disconnect
+            <Unplug aria-hidden="true" /> Disconnect
           </Button>
         )}
       </div>
@@ -137,9 +137,13 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
       <Separator className="my-6" />
 
       <section>
-        <h4 className="mb-2 text-sm font-semibold">Phone numbers</h4>
+        <h3 className="mb-2 text-title-card text-foreground">Phone numbers</h3>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : isError ? (
+          <p role="alert" className="flex items-center gap-2 text-sm text-destructive-strong">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Couldn't load phone numbers. Reload to try again.
+          </p>
         ) : !numbers?.length ? (
           <p className="text-sm text-muted-foreground">No WhatsApp Business phone numbers found on this connection.</p>
         ) : (
@@ -147,8 +151,8 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
             {numbers.map((n) => {
               const h = healthFor(n.id);
               return (
-                <div key={n.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <Checkbox checked={n.is_active} disabled={!canManage} onCheckedChange={(v) => handleToggle(n.id, v === true)} />
+                <div key={n.id} className="flex items-center gap-3 rounded-lg border border-border p-3">
+                  <Checkbox checked={n.is_active} disabled={!canManage} onCheckedChange={(v) => handleToggle(n.id, v === true)} aria-label={`Use ${n.verified_name || n.display_phone_number || n.phone_number_id}`} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{n.verified_name || n.display_phone_number || n.phone_number_id}</p>
                     <p className="truncate text-xs text-muted-foreground">
@@ -157,9 +161,7 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
                     </p>
                   </div>
                   {h && !h.healthy && (
-                    <Badge variant="secondary" className="gap-1 text-amber-800 dark:text-amber-300">
-                      <AlertTriangle className="h-3 w-3" /> Issue
-                    </Badge>
+                    <StatusPill tone="warning" title={h.message}>Issue</StatusPill>
                   )}
                 </div>
               );

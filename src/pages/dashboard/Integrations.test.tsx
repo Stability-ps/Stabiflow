@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Integrations from "@/pages/dashboard/Integrations";
 import { IntegrationInvokeError } from "@/lib/integrations";
 
-const { startIntegrationConnectMock, toastErrorMock, toastSuccessMock } = vi.hoisted(() => ({
+const { startIntegrationConnectMock, toastErrorMock, toastSuccessMock, intState } = vi.hoisted(() => ({
+  intState: { integrations: [] as Array<Record<string, unknown>>, error: false, resourcesError: false },
   startIntegrationConnectMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastSuccessMock: vi.fn(),
@@ -25,8 +26,8 @@ vi.mock("@/hooks/useAuth", () => ({
 }));
 
 vi.mock("@/hooks/useIntegrations", () => ({
-  useWorkspaceIntegrations: () => ({ data: [], isLoading: false }),
-  useAllFacebookPages: () => ({ data: [] }),
+  useWorkspaceIntegrations: () => ({ data: intState.error ? undefined : intState.integrations, isLoading: false, isError: intState.error, refetch: vi.fn() }),
+  useAllFacebookPages: () => ({ data: intState.resourcesError ? undefined : [], isError: intState.resourcesError }),
   useAllInstagramAccounts: () => ({ data: [] }),
   useAllMetaAdAccounts: () => ({ data: [] }),
   useAllWhatsAppNumbers: () => ({ data: [] }),
@@ -107,5 +108,32 @@ describe("Integrations OAuth callback return handling", () => {
       );
     });
     expect(await screen.findByRole("heading", { name: "Integrations" })).toBeInTheDocument();
+  });
+});
+describe("Integrations - honest load states", () => {
+  afterEach(() => { cleanup(); intState.integrations = []; intState.error = false; intState.resourcesError = false; });
+
+  it("a failed integrations read shows an error, never 'No integrations connected' + Connect", () => {
+    intState.error = true;
+    render(<MemoryRouter><Integrations /></MemoryRouter>);
+    expect(screen.getByText("Couldn't load your integrations")).toBeInTheDocument();
+    expect(screen.queryByText("No integrations connected")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect" })).not.toBeInTheDocument();
+  });
+
+  it("a failed resource read doesn't claim 'no Page selected' or show zero counts", () => {
+    intState.integrations = [{ id: "i1", provider: "meta", status: "connected", last_health_check_status: "healthy", last_health_check_at: null }];
+    intState.resourcesError = true;
+    render(<MemoryRouter><Integrations /></MemoryRouter>);
+    expect(screen.getByText("Couldn't load connected resources")).toBeInTheDocument();
+    expect(screen.queryByText(/no Page selected/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Facebook Pages: 0/)).not.toBeInTheDocument();
+  });
+
+  it("a connected integration shows its status as a labelled pill", () => {
+    intState.integrations = [{ id: "i1", provider: "meta", status: "connected", last_health_check_status: "reauthorization_required", last_health_check_at: null }];
+    render(<MemoryRouter><Integrations /></MemoryRouter>);
+    expect(screen.getByText("Reauthorization required")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
   });
 });
