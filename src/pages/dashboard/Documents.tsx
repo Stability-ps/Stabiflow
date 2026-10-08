@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import QRCode from "qrcode";
-import { Copy, Download, ExternalLink, Eye, FileText, Loader2, MoreHorizontal, Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Copy, Download, ExternalLink, Eye, FileText, MoreHorizontal, Plus } from "lucide-react";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,11 +20,24 @@ import {
   documentDownloadUrl, fetchDocuments, fetchHostedProfile, PUBLIC_PROFILE_PATH, saveHostedProfile, slugify, type BusinessDocument, type HostedProfile,
 } from "@/lib/businessStudio";
 
-function HostedProfilePanel({ workspaceId, docs, canEdit, entitled }: { workspaceId: string; docs: BusinessDocument[]; canEdit: boolean; entitled: boolean }) {
+function LoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-strong">
+      <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Couldn't load {what}. Nothing has changed.</span>
+      <Button variant="outline" size="sm" className="bg-card" onClick={onRetry}>Try again</Button>
+    </div>
+  );
+}
+
+/** entitled: null = we couldn't read the plan (never treated as "not included"). */
+function HostedProfilePanel({ workspaceId, docs, canEdit, entitled, onRetryEntitlement }: { workspaceId: string; docs: BusinessDocument[]; canEdit: boolean; entitled: boolean | null; onRetryEntitlement: () => void }) {
   const qc = useQueryClient();
   const hp = useQuery({ queryKey: ["hosted-profile", workspaceId], queryFn: () => fetchHostedProfile(workspaceId) });
   const identity = useQuery({ queryKey: ["business-identity", workspaceId], queryFn: () => fetchBusinessIdentity(workspaceId) });
-  if (hp.isLoading || identity.isLoading) return <Loader2 className="h-5 w-5 animate-spin" />;
+  if (hp.isLoading || identity.isLoading) return <div className="h-48 animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading hosted profile" />;
+  // A failed read must not open the editor as if no profile existed: saving
+  // from there would try to create a second profile for this workspace.
+  if (hp.isError) return <LoadError what="your hosted profile" onRetry={() => void hp.refetch()} />;
   return (
     <HostedProfileEditor
       key={hp.data?.updated_at ?? "new"}
@@ -35,12 +48,13 @@ function HostedProfilePanel({ workspaceId, docs, canEdit, entitled }: { workspac
       canEdit={canEdit}
       entitled={entitled}
       onSaved={() => qc.invalidateQueries({ queryKey: ["hosted-profile", workspaceId] })}
+      onRetryEntitlement={onRetryEntitlement}
     />
   );
 }
 
 function HostedProfileEditor(props: {
-  workspaceId: string; existing: HostedProfile | null; suggestedSlug: string; docs: BusinessDocument[]; canEdit: boolean; entitled: boolean; onSaved: () => void;
+  workspaceId: string; existing: HostedProfile | null; suggestedSlug: string; docs: BusinessDocument[]; canEdit: boolean; entitled: boolean | null; onSaved: () => void; onRetryEntitlement: () => void;
 }) {
   const { existing } = props;
   const [slug, setSlug] = useState(existing?.slug ?? props.suggestedSlug);
@@ -68,15 +82,20 @@ function HostedProfileEditor(props: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          Hosted business profile {existing?.is_published ? <Badge>Live</Badge> : <Badge variant="outline">Not published</Badge>}
+        <CardTitle className="flex flex-wrap items-center gap-2">
+          Hosted business profile {existing?.is_published ? <StatusPill tone="success">Live</StatusPill> : <StatusPill tone="neutral">Not published</StatusPill>}
         </CardTitle>
         <CardDescription>A web page for your business with your services, credentials, contact details and profile download. Only published when you choose.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {!props.entitled && (
-          <p className="text-sm">
-            Hosted profiles are included with the Business and Growth plans. <Link className="underline" to="/app/billing">See plans</Link>
+        {props.entitled === null ? (
+          <p role="alert" className="flex flex-wrap items-center gap-2 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive-strong">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Couldn't check whether your plan includes publishing.
+            <Button variant="link" size="sm" className="h-auto p-0" onClick={props.onRetryEntitlement}>Try again</Button>
+          </p>
+        ) : !props.entitled && (
+          <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning" role="note">
+            Hosted profiles are included with the Business and Growth plans. <Link className="font-medium text-foreground underline underline-offset-4" to="/app/billing">See plans</Link>
           </p>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
@@ -86,7 +105,7 @@ function HostedProfileEditor(props: {
               <span className="text-muted-foreground">/b/</span>
               <Input id="hp-slug" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} disabled={!props.canEdit} aria-invalid={!slugValid} />
             </div>
-            {!slugValid && <p className="text-xs text-destructive">3-60 lowercase letters, numbers and dashes.</p>}
+            {!slugValid && <p className="text-xs text-destructive-strong">3-60 lowercase letters, numbers and dashes.</p>}
           </div>
           <div className="space-y-1">
             <Label htmlFor="hp-doc">Profile document visitors can download</Label>
@@ -119,20 +138,20 @@ function HostedProfileEditor(props: {
           </div>
         )}
         {existing?.is_published && (
-          <div className="flex flex-wrap items-center gap-4 rounded-md border p-3">
+          <div className="flex flex-wrap items-center gap-4 rounded-lg border border-border p-3">
             {qr && <img src={qr} alt={`QR code for ${publicUrl}`} className="h-28 w-28" />}
             <div className="space-y-2 text-sm">
-              <p className="break-all font-medium">{publicUrl}</p>
+              <p className="break-all font-medium text-foreground">{publicUrl}</p>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(publicUrl).then(() => toast.success("Link copied"))}>
-                  <Copy className="mr-1 h-4 w-4" /> Copy link
+                  <Copy aria-hidden="true" /> Copy link
                 </Button>
                 <Button size="sm" variant="outline" asChild>
-                  <a href={publicUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="mr-1 h-4 w-4" /> Open</a>
+                  <a href={publicUrl} target="_blank" rel="noopener noreferrer"><ExternalLink aria-hidden="true" /> Open</a>
                 </Button>
                 {qr && (
                   <Button size="sm" variant="outline" asChild>
-                    <a href={qr} download={`${existing.slug}-qr.png`}><Download className="mr-1 h-4 w-4" /> QR code</a>
+                    <a href={qr} download={`${existing.slug}-qr.png`}><Download aria-hidden="true" /> QR code</a>
                   </Button>
                 )}
               </div>
@@ -150,7 +169,7 @@ export default function Documents() {
   const docs = useQuery({ queryKey: ["business-documents", ws], queryFn: () => fetchDocuments(ws as string), enabled: !!ws });
   const ents = useQuery({ queryKey: ["entitlements", ws], queryFn: () => fetchEntitlements(ws as string), enabled: !!ws });
   if (!ws) return null;
-  const entitledHosted = !!ents.data?.find((e) => e.entitlement_key === "hosted_profile.publish")?.enabled;
+  const entitledHosted = ents.isError ? null : !!ents.data?.find((e) => e.entitlement_key === "hosted_profile.publish")?.enabled;
 
   async function download(d: BusinessDocument) {
     try {
@@ -161,57 +180,56 @@ export default function Documents() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-col gap-4 rounded-3xl border border-amber-100/80 bg-gradient-to-br from-white via-white to-amber-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(38_60%_40%/0.22)] sm:flex-row sm:items-end sm:justify-between sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-amber-950/20">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business library</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Documents</h1>
-          <p className="text-sm text-muted-foreground">Your generated business documents and published profile.</p>
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-title-page text-foreground">Documents</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Your generated business documents and published profile.</p>
           {!docs.isLoading && (docs.data ?? []).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-              <span>{docs.data!.length} document{docs.data!.length === 1 ? "" : "s"}</span>
-              <span>·</span>
-              <span>{docs.data!.filter((d) => !d.watermarked).length} final</span>
-              <span>·</span>
-              <span>{docs.data!.filter((d) => d.watermarked).length} preview</span>
-            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {docs.data!.length} document{docs.data!.length === 1 ? "" : "s"} · {docs.data!.filter((d) => !d.watermarked).length} final · {docs.data!.filter((d) => d.watermarked).length} preview
+            </p>
           )}
         </div>
-        <Button asChild><Link to="/app/business-studio"><Plus className="mr-1 h-4 w-4" /> Create document</Link></Button>
-      </div>
+        <Button asChild><Link to="/app/business-studio"><Plus aria-hidden="true" /> Create document</Link></Button>
+      </header>
       {docs.isLoading ? (
-        <Loader2 className="h-5 w-5 animate-spin" />
+        <div className="h-32 animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading documents" />
+      ) : docs.isError ? (
+        <LoadError what="your documents" onRetry={() => void docs.refetch()} />
       ) : (docs.data ?? []).length === 0 ? (
         <EmptyState
           icon={FileText}
           title="No documents yet"
           description="Create your company profile in Business Studio."
           action={<Button asChild><Link to="/app/business-studio">Open Business Studio</Link></Button>}
+          className="rounded-xl border border-border bg-card"
         />
       ) : (
         <Card>
-          <CardContent className="divide-y p-0">
+          <CardContent className="divide-y divide-border p-0">
             {docs.data!.map((d) => (
               <div key={d.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium">{d.title}</p>
-                    <Badge variant="secondary" className="capitalize">{d.template_key}</Badge>
-                    <Badge variant={d.watermarked ? "outline" : "default"}>{d.watermarked ? "Preview" : "Final PDF"}</Badge>
+                    <p className="truncate font-medium text-foreground">{d.title}</p>
+                    <StatusPill tone="neutral" dot={false} className="capitalize">{d.template_key}</StatusPill>
+                    <StatusPill tone={d.watermarked ? "neutral" : "success"}>{d.watermarked ? "Preview" : "Final PDF"}</StatusPill>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Generated {new Date(d.created_at).toLocaleDateString("en-ZA", { day: "numeric", month: "short", year: "numeric" })} · {d.page_count} page{d.page_count === 1 ? "" : "s"}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <Button size="sm" variant="ghost" onClick={() => download(d)}>
-                    <Eye className="mr-1 h-4 w-4" /> Preview
+                    <Eye aria-hidden="true" /> Preview
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => download(d)}>
-                    <Download className="mr-1 h-4 w-4" /> Download
+                    <Download aria-hidden="true" /> Download
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="ghost" aria-label={`More actions for ${d.title}`}><MoreHorizontal className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" aria-label={`More actions for ${d.title}`}><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem onClick={() => download(d)}>Open document</DropdownMenuItem>
@@ -224,7 +242,7 @@ export default function Documents() {
           </CardContent>
         </Card>
       )}
-      <HostedProfilePanel workspaceId={ws} docs={docs.data ?? []} canEdit={canEdit} entitled={entitledHosted} />
+      <HostedProfilePanel workspaceId={ws} docs={docs.data ?? []} canEdit={canEdit} entitled={entitledHosted} onRetryEntitlement={() => void ents.refetch()} />
     </div>
   );
 }
