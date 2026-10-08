@@ -2,12 +2,14 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Award, Briefcase, Building2, CalendarDays, ChevronRight, FileText, Files, FolderKanban, Info, Palette, Sparkles, Users, Wand2, type LucideIcon,
+  AlertTriangle, Award, Briefcase, Building2, CalendarDays, ChevronRight, FileText, Files, FolderKanban, Info, Palette, Sparkles, Users, Wand2, type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { computeCompleteness, fetchBusinessIdentity } from "@/lib/businessIdentity";
 import { fetchPendingProposals } from "@/lib/businessStudio";
+import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 
 type HubLink = { label: string; to: string; icon: LucideIcon; detail?: string; section?: string };
 
@@ -67,41 +69,45 @@ export default function BusinessHub() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-6">
-      <div className="relative overflow-hidden rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/80 p-5 shadow-[0_18px_60px_-44px_hsl(213_82%_45%/0.4)] dark:border-border dark:from-card dark:via-card dark:to-sky-950/20">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-sky-200/25 blur-3xl dark:bg-sky-500/10" />
-        <div className="relative">
-        <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business workspace</p>
-        <h1 className="truncate text-2xl font-semibold tracking-tight">{name}</h1>
-        {!completeness ? (
-          <div className="mt-2 h-1.5 animate-pulse rounded-full bg-muted motion-reduce:animate-none" role="status" aria-label="Loading" />
+      <header className="min-w-0 space-y-3">
+        <div>
+          <h1 className="truncate text-title-page text-foreground">{name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Your business profile, documents and studio in one place.</p>
+        </div>
+        {identity.isError ? (
+          <p role="alert" className="flex flex-wrap items-center gap-2 rounded-lg bg-destructive-soft px-3 py-2 text-sm text-destructive-strong">
+            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Couldn't load your profile progress.
+            <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void identity.refetch()}>Try again</Button>
+          </p>
+        ) : !completeness ? (
+          <div className="h-1.5 animate-pulse rounded-full bg-muted motion-reduce:animate-none" role="status" aria-label="Loading" />
         ) : (
-          <Link to="/app/business" className="mt-1 block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Link to="/app/business" className="block rounded-xl border border-border bg-card px-4 py-3 transition-colors duration-fast hover:border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <span className="flex items-baseline justify-between text-sm">
               <span className="text-muted-foreground">Profile</span>
-              <span className="font-medium tabular-nums">{completeness.score}% complete</span>
+              <span className="font-medium tabular-nums text-foreground">{completeness.score}% complete</span>
             </span>
-            <span className="mt-1.5 block h-1.5 rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completeness">
+            <span className="mt-2 block h-1.5 rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completeness">
               <span className="block h-1.5 rounded-full bg-primary" style={{ width: `${completeness.score}%` }} />
             </span>
           </Link>
         )}
-        </div>
-      </div>
+      </header>
 
       {pendingCount > 0 ? (
-        <Link to="/app/business?section=review" className="flex min-h-14 items-center gap-3 rounded-xl border border-sky-300 bg-sky-50/60 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:bg-sky-950/20 dark:border-sky-800">
-          <Sparkles className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-300" aria-hidden="true" />
+        <Link to="/app/business?section=review" className="flex min-h-14 items-center gap-3 rounded-xl border border-brand/30 bg-brand-soft px-4 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Sparkles className="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
           <span className="flex-1">
-            <span className="font-medium">{pendingCount} change{pendingCount === 1 ? "" : "s"} to review</span>
+            <span className="font-medium text-foreground">{pendingCount} change{pendingCount === 1 ? "" : "s"} to review</span>
             <span className="block text-xs text-muted-foreground">Found on your website or in your documents</span>
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
         </Link>
       ) : studioOn ? (
-        <Link to="/app/business?section=scan" className="flex min-h-14 items-center gap-3 rounded-xl border px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <Sparkles className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <Link to="/app/business?section=scan" className="flex min-h-14 items-center gap-3 rounded-xl border border-border bg-card px-4 text-sm transition-colors duration-fast hover:border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Sparkles className="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
           <span className="flex-1">
-            <span className="font-medium">Scan &amp; complete profile</span>
+            <span className="font-medium text-foreground">Scan &amp; complete profile</span>
             <span className="block text-xs text-muted-foreground">We read your website and suggest details for you to approve</span>
           </span>
           <ChevronRight className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
@@ -110,19 +116,19 @@ export default function BusinessHub() {
 
       {groups.filter((g) => g.links.length > 0).map((g) => (
         <section key={g.title} aria-labelledby={`hub-${g.title}`}>
-          <h2 id={`hub-${g.title}`} className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</h2>
-          <ul className="divide-y overflow-hidden rounded-2xl border border-border/70 bg-card/90 shadow-[0_12px_40px_-34px_hsl(213_45%_30%/0.32)] backdrop-blur-sm">
+          <h2 id={`hub-${g.title}`} className="mb-1.5 px-1 text-overline uppercase text-muted-foreground">{g.title}</h2>
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
             {g.links.map((l) => {
               const st = status(l.section);
               return (
                 <li key={`${l.label}-${l.to}`}>
-                  <Link to={l.to} className="group flex min-h-16 items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-accent">
+                  <Link to={l.to} className="group flex min-h-14 items-center gap-3 px-4 py-2.5 transition-colors duration-fast hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:bg-accent">
                     <l.icon className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium">{l.label}</span>
+                      <span className="block text-sm font-medium text-foreground">{l.label}</span>
                       {l.detail ? <span className="block truncate text-xs text-muted-foreground">{l.detail}</span> : null}
                     </span>
-                    {st ? <span className={`shrink-0 text-xs ${st === "To do" ? "font-medium text-primary" : "text-muted-foreground"}`}>{st}</span> : null}
+                    {st ? <StatusPill tone={st === "Complete" ? "success" : st === "To do" ? "neutral" : "info"} className="shrink-0">{st}</StatusPill> : null}
                     <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   </Link>
                 </li>

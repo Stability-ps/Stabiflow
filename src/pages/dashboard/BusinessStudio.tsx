@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, Download, Globe, Loader2, Lock, PenLine, Sparkles, Upload } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Download, Globe, Loader2, Lock, PenLine, Sparkles, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,13 +124,12 @@ export default function BusinessStudio() {
   const oneOffPrice = oneOff?.prices.find((p) => p.billing_interval === "once");
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.28)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-sky-950/20">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Profile builder</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Business Studio</h1>
-        <p className="text-sm text-muted-foreground">Turn your website into a professional company profile. You check every fact before it's used.</p>
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <header className="min-w-0">
+        <h1 className="text-title-page text-foreground">Business Studio</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Turn your website into a professional company profile. You check every fact before it's used.</p>
         <GuideHelpLink chapter="business-studio" className="mt-1" />
-      </div>
+      </header>
 
       <ol className="flex flex-wrap gap-2 text-xs" aria-label="Progress">
         {STEPS.map((s, i) => (
@@ -139,9 +138,9 @@ export default function BusinessStudio() {
               type="button"
               onClick={() => setStep(i)}
               aria-current={i === step ? "step" : undefined}
-              className={`rounded-full border px-3 py-1 ${i === step ? "border-primary bg-primary text-primary-foreground" : i < step ? "border-primary/40" : "text-muted-foreground"}`}
+              className={`inline-flex min-h-8 items-center rounded-full border px-3 py-1 font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${i === step ? "border-primary bg-primary text-primary-foreground" : i < step ? "border-primary/40 bg-card text-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}
             >
-              {i < step && <Check className="mr-1 inline h-3 w-3" />}
+              {i < step && <Check className="mr-1 inline h-3 w-3" aria-hidden="true" />}
               {i + 1}. {s}
             </button>
           </li>
@@ -157,9 +156,9 @@ export default function BusinessStudio() {
           </CardHeader>
           <CardContent>
             {toolsLocked && (
-              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950 dark:border-border dark:bg-amber-950/40" role="note">
+              <p className="mb-4 rounded-lg bg-warning-soft p-3 text-sm text-warning" role="note">
                 Website scanning, reading an existing profile and AI wording are included with the Business and Growth plans. You can still enter your details yourself and preview your profile.{" "}
-                <Link to="/app/billing" className="font-medium underline underline-offset-4">See plans</Link>
+                <Link to="/app/billing" className="font-medium text-foreground underline underline-offset-4">See plans</Link>
               </p>
             )}
             <Tabs defaultValue={toolsLocked ? "scratch" : "website"} key={toolsLocked ? "locked" : "open"}>
@@ -221,6 +220,10 @@ export default function BusinessStudio() {
         </Card>
       )}
 
+      {step === 2 && identity.isError && (
+        <StudioLoadError what="your profile" onRetry={() => void identity.refetch()} />
+      )}
+
       {step === 2 && completeness && (
         <Card>
           <CardHeader>
@@ -234,8 +237,8 @@ export default function BusinessStudio() {
             <ul className="grid gap-1 text-sm sm:grid-cols-2">
               {completeness.items.map((i) => (
                 <li key={i.key} className="flex items-center gap-2">
-                  {i.done ? <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" aria-label="Done" /> : <span className="h-4 w-4 rounded-full border" aria-label="Missing" />}
-                  <span className={i.done ? "text-muted-foreground" : ""}>{i.label}</span>
+                  {i.done ? <Check className="h-4 w-4 shrink-0 text-success" aria-label="Done" /> : <span className="h-4 w-4 shrink-0 rounded-full border border-input" aria-label="Missing" />}
+                  <span className={i.done ? "text-muted-foreground" : "text-foreground"}>{i.label}</span>
                 </li>
               ))}
             </ul>
@@ -307,7 +310,8 @@ export default function BusinessStudio() {
             <CardTitle className="text-base">Choose a design</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {preview.isLoading && <Loader2 className="h-5 w-5 animate-spin" />}
+            {preview.isLoading && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Loading designs" />}
+            {preview.isError && <StudioLoadError what="the profile designs" onRetry={() => void preview.refetch()} />}
             <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Profile design">
               {templates.map((t) => {
                 const locked = t.is_premium && !preview.data?.canUsePremium;
@@ -318,10 +322,10 @@ export default function BusinessStudio() {
                     role="radio"
                     aria-checked={templateKey === t.key}
                     onClick={() => setTemplateKey(t.key)}
-                    className={`rounded-md border p-3 text-left ${templateKey === t.key ? "border-primary ring-2 ring-primary/30" : ""}`}
+                    className={`rounded-lg border bg-card p-3 text-left transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${templateKey === t.key ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-input"}`}
                   >
-                    <p className="flex items-center gap-2 font-medium">
-                      {t.name} {locked && <Badge variant="outline"><Lock className="mr-1 h-3 w-3" /> Paid</Badge>}
+                    <p className="flex flex-wrap items-center gap-2 font-medium text-foreground">
+                      {t.name} {locked && <Badge variant="outline"><Lock className="mr-1 h-3 w-3" aria-hidden="true" /> Paid</Badge>}
                     </p>
                     <p className="text-xs text-muted-foreground">{t.description}</p>
                   </button>
@@ -336,7 +340,16 @@ export default function BusinessStudio() {
         </Card>
       )}
 
-      {step === 5 && (
+      {step === 5 && preview.isError && (
+        <StudioLoadError what="your preview" onRetry={() => void preview.refetch()} />
+      )}
+      {step === 5 && preview.isLoading && (
+        <div className="h-64 animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading preview" />
+      )}
+      {/* Purchase/PDF options only once we KNOW what this workspace can
+          export - a failed or pending read must never offer "Buy" to a
+          customer who already paid. */}
+      {step === 5 && preview.data && (
         <div className="space-y-4">
           {preview.data && template && (
             <ProfilePreview content={preview.data.content} layout={template.config.layout ?? "band"} serif={template.config.headingFont === "serif"} watermark={!preview.data.canExportPdf} />
@@ -353,7 +366,7 @@ export default function BusinessStudio() {
                 <p className="text-sm text-muted-foreground">The {template?.name} design is included after purchasing the Professional Profile or with an eligible subscription.</p>
               ) : preview.data?.canExportPdf ? (
                 <Button onClick={() => docMutation.mutate()} disabled={!canEdit || docMutation.isPending}>
-                  {docMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                  {docMutation.isPending ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Download aria-hidden="true" />}
                   Create my PDF
                 </Button>
               ) : teaserStudio ? (
@@ -372,6 +385,15 @@ export default function BusinessStudio() {
           </Card>
         </div>
       )}
+    </div>
+  );
+}
+
+function StudioLoadError({ what, onRetry }: { what: string; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive-soft px-4 py-3 text-sm text-destructive-strong">
+      <span className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Couldn't load {what}. Nothing has changed.</span>
+      <Button variant="outline" size="sm" className="bg-card" onClick={onRetry}>Try again</Button>
     </div>
   );
 }
