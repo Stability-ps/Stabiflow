@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Loader2, Upload } from "lucide-react";
+import { AlertTriangle, ArrowRight, Loader2, Upload } from "lucide-react";
+import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +26,7 @@ export function WorkspaceTab() {
   const { currentWorkspaceId, currentMembership, refreshMemberships } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { data, isLoading } = useWorkspaceProfile(currentWorkspaceId);
+  const { data, isLoading, isError, refetch } = useWorkspaceProfile(currentWorkspaceId);
   const canEdit = workspaceRoleRank(currentMembership?.role) >= workspaceRoleRank("admin");
   const isOwner = workspaceRoleRank(currentMembership?.role) >= workspaceRoleRank("owner");
 
@@ -180,6 +181,17 @@ export function WorkspaceTab() {
     }
   };
 
+  if (isError) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load workspace settings"
+        description="Something went wrong fetching your workspace profile. Nothing has changed - try again."
+        action={<Button variant="outline" onClick={() => void refetch()}>Try again</Button>}
+        className="rounded-xl border border-border bg-card"
+      />
+    );
+  }
   if (isLoading || !data) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
 
   const deleteConfirmMatches = deleteConfirmText.trim() === data.workspace.name || deleteConfirmText.trim() === data.workspace.slug;
@@ -226,7 +238,7 @@ export function WorkspaceTab() {
               stabiflow.com/{slug || "..."}
               {checkingSlug && " · checking availability..."}
               {slugAvailable === false && <span className="text-destructive"> · already taken</span>}
-              {slugAvailable === true && <span className="text-emerald-600 dark:text-emerald-300"> · available</span>}
+              {slugAvailable === true && <span className="text-success"> · available</span>}
             </p>
           </div>
         </div>

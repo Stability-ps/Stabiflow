@@ -19,6 +19,7 @@ function freshSettings() {
 }
 
 const mocks = vi.hoisted(() => ({
+  profileError: false as boolean,
   data: {
     workspace: { id: "ws-1", name: "Acme", slug: "acme" },
     settings: {
@@ -37,7 +38,7 @@ vi.mock("@/hooks/useAuth", () => ({
   }),
 }));
 vi.mock("@/hooks/useWorkspaceProfile", () => ({
-  useWorkspaceProfile: () => ({ data: mocks.data, isLoading: false }),
+  useWorkspaceProfile: () => ({ data: mocks.profileError ? undefined : mocks.data, isLoading: false, isError: !!mocks.profileError, refetch: vi.fn() }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -121,5 +122,15 @@ describe("WorkspaceTab - Brand Kit summary + link to Creative Studio", () => {
     unmount();
     renderTab();
     expect(screen.queryByText("No website or contact details set yet")).not.toBeInTheDocument();
+  });
+});
+
+describe("WorkspaceTab - load failure", () => {
+  afterEach(() => { cleanup(); mocks.profileError = false; });
+  it("a failed profile read shows an error with retry instead of an endless skeleton", () => {
+    mocks.profileError = true;
+    renderTab();
+    expect(screen.getByText("Couldn't load workspace settings")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 });

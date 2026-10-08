@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Mail, MoreHorizontal, UserMinus, UserPlus } from "lucide-react";
+import { AlertTriangle, Copy, Mail, MoreHorizontal, UserMinus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,8 +30,8 @@ type InvitationConfirmation = { email: string; role: WorkspaceRole; expiresAt: s
 export function MembersTab() {
   const { currentWorkspaceId, currentMembership, user } = useAuth();
   const queryClient = useQueryClient();
-  const { data: members, isLoading: membersLoading } = useWorkspaceMembers(currentWorkspaceId);
-  const { data: invitations, isLoading: invitesLoading } = useWorkspacePendingInvitations(currentWorkspaceId);
+  const { data: members, isLoading: membersLoading, isError: membersError, refetch: refetchMembers } = useWorkspaceMembers(currentWorkspaceId);
+  const { data: invitations, isLoading: invitesLoading, isError: invitesError, refetch: refetchInvites } = useWorkspacePendingInvitations(currentWorkspaceId);
   const entitlements = useQuery({
     queryKey: ["entitlements", currentWorkspaceId],
     queryFn: () => fetchEntitlements(currentWorkspaceId as string),
@@ -120,12 +120,25 @@ export function MembersTab() {
   };
 
   if (membersLoading || invitesLoading || entitlements.isLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+  // A failed read must not render as "no members / no invitations" - and
+  // seat counts computed from an empty list would be wrong too.
+  if (membersError || invitesError) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load members"
+        description="Something went wrong fetching this workspace's members and invitations. Nothing has changed - try again."
+        action={<Button variant="outline" onClick={() => { void refetchMembers(); void refetchInvites(); }}>Try again</Button>}
+        className="rounded-xl border border-border bg-card"
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <div>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 space-y-0">
+          <div className="min-w-[12rem] flex-1">
             <CardTitle>Members</CardTitle>
             <CardDescription>
               Everyone with access to this workspace.
@@ -140,7 +153,7 @@ export function MembersTab() {
             <Dialog open={inviteOpen} onOpenChange={(open) => { setInviteOpen(open); if (!open) { setInvitationConfirmation(null); setCopiedLink(null); } }}>
               <DialogTrigger asChild>
                 <Button size="sm" disabled={!canCreateInvite} title={!seatAvailable ? "Your current plan has no available team seats" : undefined}>
-                  <UserPlus className="mr-2 h-4 w-4" /> Invite member
+                  <UserPlus aria-hidden="true" /> Invite member
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-sm">
@@ -199,17 +212,19 @@ export function MembersTab() {
           {(members || []).map((m) => {
             const canManage = canManageMemberWithRole(callerRole, m.role);
             return (
-              <div key={m.id} className="flex items-center gap-3 rounded-lg border p-3">
-                <Avatar className="h-9 w-9">
+              <div key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border p-3">
+                <Avatar className="h-9 w-9 shrink-0">
                   <AvatarFallback className="text-xs">{(m.profile?.full_name || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{m.profile?.full_name || "Unnamed"}{m.user_id === user?.id ? " (you)" : ""}</p>
+                <div className="min-w-[8rem] flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{m.profile?.full_name || "Unnamed"}{m.user_id === user?.id ? " (you)" : ""}</p>
                   <p className="text-xs text-muted-foreground">Joined {new Date(m.joined_at).toLocaleDateString()}</p>
                 </div>
+                {/* Role + actions wrap under the name on narrow phones rather than squeezing it to nothing. */}
+                <div className="ml-auto flex shrink-0 items-center gap-1">
                 {canManage ? (
                   <Select value={m.role} onValueChange={(v) => handleRoleChange(m.id, v as WorkspaceRole)}>
-                    <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-32" aria-label={`Role for ${m.profile?.full_name || "this member"}`}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {WORKSPACE_ROLES.filter((r) => canGrantRole(callerRole, r)).map((r) => (
                         <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
@@ -222,7 +237,7 @@ export function MembersTab() {
                 {canManage && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={`Actions for ${m.profile?.full_name || "this member"}`}><MoreHorizontal className="h-4 w-4" aria-hidden="true" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
@@ -234,6 +249,7 @@ export function MembersTab() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+                </div>
               </div>
             );
           })}
@@ -252,13 +268,14 @@ export function MembersTab() {
           ) : (
             <div className="space-y-2">
               {invitations.map((inv) => (
-                <div key={inv.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{inv.email}</p>
+                <div key={inv.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border p-3">
+                  <div className="min-w-[10rem] flex-1">
+                    <p className="truncate text-sm font-medium text-foreground" title={inv.email}>{inv.email}</p>
                     <p className="text-xs text-muted-foreground">
                       {ROLE_LABELS[inv.role]} · expires {new Date(inv.expires_at).toLocaleDateString()}
                     </p>
                   </div>
+                  <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1">
                   <Badge variant={new Date(inv.expires_at).getTime() <= renderedAt ? "destructive" : "secondary"}>
                     {new Date(inv.expires_at).getTime() <= renderedAt ? "Expired" : "Pending"}
                   </Badge>
@@ -268,9 +285,10 @@ export function MembersTab() {
                     disabled={new Date(inv.expires_at).getTime() <= renderedAt}
                     onClick={() => void copyInvitationLink(buildInvitationLink(inv.token))}
                   >
-                    <Copy className="mr-2 h-4 w-4" /> {copiedLink === buildInvitationLink(inv.token) ? "Copied" : "Copy link"}
+                    <Copy aria-hidden="true" /> {copiedLink === buildInvitationLink(inv.token) ? "Copied" : "Copy link"}
                   </Button>
                   <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleRevoke(inv.id)}>Revoke</Button>
+                  </div>
                 </div>
               ))}
             </div>

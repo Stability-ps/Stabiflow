@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   inviteMember: vi.fn(),
   writeText: vi.fn(),
   invitations: [] as Array<Record<string, unknown>>,
+  membersError: false,
   seats: { entitlement_key: "team_seats", kind: "limit", enabled: true, unlimited: false, limit_value: 5, used: 0, source: "plan" } as Record<string, unknown>,
 }));
 
@@ -15,8 +16,8 @@ vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({ currentWorkspaceId: "workspace-1", currentMembership: { role: "owner" }, user: { id: "user-1" } }),
 }));
 vi.mock("@/hooks/useWorkspaceMembers", () => ({
-  useWorkspaceMembers: () => ({ data: [], isLoading: false }),
-  useWorkspacePendingInvitations: () => ({ data: mocks.invitations, isLoading: false }),
+  useWorkspaceMembers: () => ({ data: mocks.membersError ? undefined : [], isLoading: false, isError: mocks.membersError, refetch: vi.fn() }),
+  useWorkspacePendingInvitations: () => ({ data: mocks.invitations, isLoading: false, isError: false, refetch: vi.fn() }),
 }));
 // Inviting is gated on the plan's team_seats entitlement (17cf182, ab4cc54).
 vi.mock("@/lib/billing", () => ({ fetchEntitlements: async () => [mocks.seats] }));
@@ -37,6 +38,7 @@ describe("Members invitations", () => {
     mocks.inviteMember.mockReset().mockResolvedValue({ token: "complete-secret-token", expiresAt: "2026-09-05T10:30:00.000Z" });
     mocks.writeText.mockReset().mockResolvedValue(undefined);
     mocks.invitations = [];
+    mocks.membersError = false;
     mocks.seats = { entitlement_key: "team_seats", kind: "limit", enabled: true, unlimited: false, limit_value: 5, used: 0, source: "plan" };
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: mocks.writeText } });
   });
@@ -72,5 +74,17 @@ describe("Members invitations", () => {
     mocks.invitations = [{ id: "pending", email: "pending@example.com", role: "viewer", expires_at: "2099-01-01T00:00:00.000Z", token: "t", status: "pending" }];
     renderMembers();
     expect(await screen.findByRole("button", { name: /invite member/i })).toBeDisabled();
+  });
+});
+
+describe("Members load failure", () => {
+  afterEach(() => { cleanup(); mocks.membersError = false; });
+  it("a failed members read shows an error with retry, not 'No pending invitations' or a seat count", async () => {
+    mocks.membersError = true;
+    renderMembers();
+    expect(await screen.findByText("Couldn't load members")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByText("No pending invitations")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /invite member/i })).not.toBeInTheDocument();
   });
 });
