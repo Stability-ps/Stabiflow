@@ -6,15 +6,14 @@ import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
 export default function Settings() {
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-white to-slate-50 p-5 shadow-[0_18px_60px_-46px_hsl(215_30%_30%/0.3)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-card">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Workspace control</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">Workspace profile, members and roles, and your account.</p>
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <header className="min-w-0">
+        <h1 className="text-title-page text-foreground">Settings</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Workspace profile, members and roles, and your account.</p>
         <GuideHelpLink chapter="settings" label="Help with settings, roles and the StabiFlow Guide" className="mt-1" />
-      </div>
+      </header>
       <Tabs defaultValue="workspace">
-        <TabsList className="rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="workspace">Workspace</TabsTrigger>
           <TabsTrigger value="members">Members</TabsTrigger>
           <TabsTrigger value="account">Account</TabsTrigger>
