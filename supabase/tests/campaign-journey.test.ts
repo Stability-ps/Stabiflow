@@ -15,7 +15,7 @@
 //   - full workspace isolation + per-stage permission gating
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedWorkspaceIntegration, seedFacebookPage, seedMediaAsset } from "./contentHelpers";
 import { seedMetaAdAccount, seedAdCreative, seedAdCampaign, seedAdSet, seedAd } from "./campaignHelpers";
 import { seedWhatsAppSetup, seedInboxConversation } from "./inboxHelpers";
@@ -47,7 +47,9 @@ describe("get_campaign_journey (Phase 1 remediation)", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("cj");
+    await enableModules(ws.workspaceId, ...ALL_MODULES);
     other = await createTestTenant("cj-other");
+    await enableModules(other.workspaceId, ...ALL_MODULES);
 
     const marketing = await createTestUser("cj-marketing");
     await seedMembership(ws.workspaceId, marketing.userId, "marketing");

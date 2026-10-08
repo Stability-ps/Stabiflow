@@ -10,7 +10,7 @@
 // never flaky relative to when the suite happens to run.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedWorkspaceIntegration, seedFacebookPage, seedMediaAsset } from "./contentHelpers";
 import { seedMetaAdAccount, seedAdCreative, seedAdCampaign, seedAdSet, seedAd } from "./campaignHelpers";
 import { seedWhatsAppSetup, seedInboxConversation, seedInboxMessage } from "./inboxHelpers";
@@ -58,7 +58,9 @@ describe("Analytics & Reporting (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("analytics");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     otherWorkspace = await createTestTenant("analytics-other");
+    await enableModules(otherWorkspace.workspaceId, ...ALL_MODULES);
 
     const viewerUser = await createTestUser("analytics-viewer");
     await seedMembership(workspace.workspaceId, viewerUser.userId, "viewer");
@@ -273,6 +275,7 @@ describe("Analytics & Reporting (release blocker)", () => {
   describe("empty workspace", () => {
     it("every read model returns real zeros/empty arrays, never an error, for a workspace with no data at all", async () => {
       const emptyWorkspace = await createTestTenant("analytics-empty");
+      await enableModules(emptyWorkspace.workspaceId, ...ALL_MODULES);
       try {
         const { data: kpis, error: kpisError } = await emptyWorkspace.client.rpc("get_analytics_kpis", { p_workspace_id: emptyWorkspace.workspaceId, p_date_from: RANGE_FROM, p_date_to: RANGE_TO }).single();
         expect(kpisError).toBeNull();

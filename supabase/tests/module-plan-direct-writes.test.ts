@@ -31,6 +31,10 @@ type Spec = {
   serverOnlyInsert?: RegExp;
   // Same for updates (workspace_integrations is never edited by clients).
   serverOnlyUpdate?: RegExp;
+  // 20261027080000: read access ALSO follows the plan (history is kept but
+  // hidden until upgrade), so while off an update/delete matches no rows
+  // rather than raising, and nothing changes.
+  hiddenWhileOff?: boolean;
 };
 
 type Fixture = { ws: string; userId: string; ids: Record<string, string> };
@@ -128,9 +132,9 @@ const SPECS: Spec[] = [
   { table: "ai_conversations", flag: "module.flow_ai", message: FLOW_AI, canInsert: true, canUpdate: true, canDelete: false,
     build: (f) => ({ workspace_id: f.ws, created_by: f.userId }) },
   // 20261027060000: Creator Campaigns live under Analytics.
-  { table: "creator_campaigns", flag: "module.analytics", message: ANALYTICS, canInsert: true, canUpdate: true, canDelete: true,
+  { table: "creator_campaigns", flag: "module.analytics", message: ANALYTICS, canInsert: true, canUpdate: true, canDelete: true, hiddenWhileOff: true,
     build: (f) => ({ workspace_id: f.ws, name: `Gate ${uniq()}`, creator_name: "Gate", platform: "instagram", created_by: f.userId }) },
-  { table: "creator_campaign_posts", flag: "module.analytics", message: ANALYTICS, canInsert: true, canUpdate: true, canDelete: true,
+  { table: "creator_campaign_posts", flag: "module.analytics", message: ANALYTICS, canInsert: true, canUpdate: true, canDelete: true, hiddenWhileOff: true,
     build: (f) => ({ workspace_id: f.ws, campaign_id: f.ids.creatorCampaign, platform: "instagram", title: `Gate ${uniq()}` }) },
 ];
 
@@ -219,14 +223,18 @@ describe("module-owned tables follow the plan for direct writes", () => {
         expect(error?.code, `${spec.table} insert while off`).toBe("42501");
         expect(error?.message).toMatch(spec.message);
       }
-      if (spec.canUpdate) {
+      if (spec.canUpdate && spec.hiddenWhileOff) {
+        const { data, error } = await matchKey(tenant.client.from(spec.table).update(noop), key).select("*");
+        expect(error, `${spec.table} update while off`).toBeNull();
+        expect((data ?? []).length, `${spec.table} update while off touches nothing`).toBe(0);
+      } else if (spec.canUpdate) {
         const { error } = await matchKey(tenant.client.from(spec.table).update(noop), key);
         expect(error?.code, `${spec.table} update while off`).toBe("42501");
         expect(error?.message).toMatch(spec.message);
       }
-      // ...but can still read it.
+      // ...but can still read it - unless reads follow the plan too.
       const { data: readable } = await matchKey(tenant.client.from(spec.table).select("*"), key);
-      expect((readable ?? []).length, `${spec.table} readable while off`).toBe(1);
+      expect((readable ?? []).length, `${spec.table} readable while off`).toBe(spec.hiddenWhileOff ? 0 : 1);
 
       // Module ON: the same writes succeed.
       await setModules(true, spec.flag);
@@ -258,7 +266,8 @@ describe("module-owned tables follow the plan for direct writes", () => {
         const { error } = await matchKey(tenant.client.from(spec.table).delete(), targetKey);
         expect(error, `${spec.table} delete while off`).toBeNull();
         const { data: left } = await matchKey(admin.from(spec.table).select("*"), targetKey);
-        expect((left ?? []).length, `${spec.table} deleted while off`).toBe(0);
+        // Hidden history is preserved, not deletable, until the workspace upgrades.
+        expect((left ?? []).length, `${spec.table} after delete while off`).toBe(spec.hiddenWhileOff ? 1 : 0);
       }
     });
   }
