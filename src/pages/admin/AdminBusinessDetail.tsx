@@ -31,7 +31,7 @@ function copy(text: string) {
 
 function healthIcon(ok: boolean | null) {
   if (ok === null) return null;
-  return ok ? <CheckCircle2 className="inline h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" aria-label="Healthy" /> : <XCircle className="inline h-3.5 w-3.5 text-destructive" aria-label="Problem" />;
+  return ok ? <CheckCircle2 className="inline h-3.5 w-3.5 text-success" aria-label="Healthy" /> : <XCircle className="inline h-3.5 w-3.5 text-destructive" aria-label="Problem" />;
 }
 
 function BusinessDetail({ id }: { id: string }) {

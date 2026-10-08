@@ -39,7 +39,7 @@ export function OperatorSystem() {
           <div className="grid gap-1 sm:grid-cols-2">
             {(s?.secrets ?? []).map((x) => (
               <div key={x.name} className="flex items-center gap-2 rounded border px-2 py-1">
-                {x.configured ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" aria-label="Configured" /> : <XCircle className={`h-4 w-4 ${x.required ? "text-destructive" : "text-muted-foreground"}`} aria-label="Missing" />}
+                {x.configured ? <CheckCircle2 className="h-4 w-4 text-success" aria-label="Configured" /> : <XCircle className={`h-4 w-4 ${x.required ? "text-destructive" : "text-muted-foreground"}`} aria-label="Missing" />}
                 <span className="font-mono text-xs">{x.name}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{x.area}{x.required ? " · required" : ""}</span>
               </div>

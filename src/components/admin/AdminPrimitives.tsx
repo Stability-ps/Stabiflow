@@ -16,7 +16,7 @@ export function AdminPageHeader({ title, description, actions }: { title: string
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{title}</h1>
+        <h1 className="text-title-page text-foreground">{title}</h1>
         {description ? <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -30,7 +30,7 @@ export function MetricHelp({ children }: { children: ReactNode }) {
     <Tooltip>
       <TooltipTrigger asChild>
         <button type="button" className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="How this is calculated">
-          <Info className="h-3.5 w-3.5" />
+          <Info className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs text-xs leading-relaxed">{children}</TooltipContent>
@@ -43,16 +43,16 @@ export function StatTile({ label, value, sub, help, tone = "default", href }: {
 }) {
   const body = (
     <div className={cn(
-      "h-full rounded-xl border bg-card p-4 transition-colors",
+      "h-full rounded-xl border border-border bg-card p-4 transition-colors duration-fast",
       href && "hover:border-primary/40 hover:bg-accent/40",
-      tone === "warning" && "border-amber-300/70 dark:border-amber-500/40",
+      tone === "warning" && "border-warning/40",
       tone === "danger" && "border-destructive/50",
     )}>
-      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-label text-muted-foreground">
         <span>{label}</span>
         {help ? <MetricHelp>{help}</MetricHelp> : null}
       </div>
-      <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">{value}</div>
+      <div className="mt-2 text-metric tabular-nums text-foreground">{value}</div>
       {sub ? <div className="mt-1 text-xs text-muted-foreground">{sub}</div> : null}
     </div>
   );
@@ -98,15 +98,15 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
   const forbidden = error instanceof AdminApiError && error.status === 403;
   const ref = error instanceof AdminApiError ? error.ref : null;
   return (
-    <div role="alert" className="flex flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-10 text-center">
-      {forbidden ? <Lock className="h-6 w-6 text-muted-foreground" /> : <AlertCircle className="h-6 w-6 text-destructive" />}
-      <p className="text-sm font-medium">{forbidden ? "Your role does not include this data." : "This data could not be loaded."}</p>
+    <div role="alert" className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-card px-4 py-10 text-center">
+      {forbidden ? <Lock className="h-6 w-6 text-muted-foreground" aria-hidden="true" /> : <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />}
+      <p className="text-sm font-medium text-foreground">{forbidden ? "Your role does not include this data." : "This data could not be loaded."}</p>
       <p className="max-w-md text-xs text-muted-foreground">
         {forbidden ? "Ask the Owner to change your role if you need it." : error instanceof Error && error.message !== "Request failed" ? error.message : "Try again in a moment."}
         {ref ? ` Reference: ${ref}` : ""}
       </p>
       {onRetry && !forbidden ? (
-        <Button variant="outline" size="sm" onClick={onRetry} className="mt-1"><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Retry</Button>
+        <Button variant="outline" size="sm" onClick={onRetry} className="mt-1"><RefreshCw aria-hidden="true" />Retry</Button>
       ) : null}
     </div>
   );

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { formatMoney, intervalLabel } from "@/lib/billing";
 import { operatorAdmin, type AdminPlan, type AdminPrice, type EntitlementDefinition } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type Catalog = { plans: AdminPlan[]; definitions: EntitlementDefinition[] };
 
@@ -225,7 +226,7 @@ export function OperatorPlans() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["op-catalog"], queryFn: () => operatorAdmin<Catalog>("list_catalog") });
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not load plans.</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["op-catalog"] });
     qc.invalidateQueries({ queryKey: ["billing-catalog"] });

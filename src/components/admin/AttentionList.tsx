@@ -6,10 +6,10 @@ import { cn } from "@/lib/utils";
 
 // Status colour always ships with an icon and a text label.
 const SEVERITY: Record<AdminAlert["severity"], { label: string; icon: LucideIcon; className: string }> = {
-  critical: { label: "Critical", icon: AlertOctagon, className: "text-red-700 bg-red-50 border-red-200 dark:text-red-300 dark:bg-red-950/40 dark:border-red-900" },
-  high: { label: "High", icon: AlertTriangle, className: "text-orange-700 bg-orange-50 border-orange-200 dark:text-orange-300 dark:bg-orange-950/40 dark:border-orange-900" },
-  medium: { label: "Medium", icon: CircleAlert, className: "text-amber-800 bg-amber-50 border-amber-200 dark:text-amber-300 dark:bg-amber-950/40 dark:border-amber-900" },
-  low: { label: "Low", icon: Info, className: "text-slate-700 bg-slate-50 border-slate-200 dark:text-slate-300 dark:bg-slate-900/60 dark:border-slate-800" },
+  critical: { label: "Critical", icon: AlertOctagon, className: "text-destructive-strong bg-destructive-soft border-destructive/30" },
+  high: { label: "High", icon: AlertTriangle, className: "text-warning bg-warning-soft border-warning/40" },
+  medium: { label: "Medium", icon: CircleAlert, className: "text-warning bg-background border-warning/30" },
+  low: { label: "Low", icon: Info, className: "text-muted-foreground bg-muted border-border" },
 };
 
 export function SeverityBadge({ severity }: { severity: AdminAlert["severity"] }) {
@@ -25,7 +25,7 @@ export function AttentionList({ alerts, limit }: { alerts: AdminAlert[]; limit?:
   if (alerts.length === 0) {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-6 text-sm text-muted-foreground justify-center">
-        <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+        <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
         Nothing needs attention right now. Payments, webhooks, automations, integrations and AI are within normal limits.
       </div>
     );

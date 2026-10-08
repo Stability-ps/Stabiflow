@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { operatorAdmin } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type Ent = { entitlement_key: string; kind: string; enabled: boolean; limit_value: number | null; unlimited: boolean; used: number; source: string };
 type Flag = { flag_key: string; enabled: boolean; reason: string };
@@ -64,7 +65,7 @@ export function WorkspaceCommercialPanel({ workspaceId }: { workspaceId: string 
   });
 
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading commercial state...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not load commercial state.</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const d = q.data;
   const needsReason = reason.trim().length < 3;
 
@@ -154,7 +155,7 @@ export function WorkspaceCommercialPanel({ workspaceId }: { workspaceId: string 
           {d.flags.map((f) => (
             <div key={f.flag_key} className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
               <span>
-                {f.flag_key} · <span className={f.enabled ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}>{f.enabled ? "on" : "off"}</span> ({f.reason})
+                {f.flag_key} · <span className={f.enabled ? "text-success" : "text-muted-foreground"}>{f.enabled ? "on" : "off"}</span> ({f.reason})
               </span>
               <Button size="sm" variant="ghost" className="h-6" disabled={needsReason || target.isPending} onClick={() => target.mutate({ flag: f.flag_key, enabled: !f.enabled })}>
                 {f.enabled ? "Turn off" : "Turn on"}
