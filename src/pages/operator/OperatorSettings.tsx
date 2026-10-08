@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { operatorAdmin, type AdminSetting } from "@/lib/operatorAdmin";
 import { useAdmin } from "@/hooks/useAdmin";
 import { Plus, Trash2 } from "lucide-react";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type FaqItem = { question: string; answer: string };
 
@@ -308,7 +309,7 @@ export function OperatorSettings() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["op-settings"], queryFn: () => operatorAdmin<{ settings: AdminSetting[] }>("list_settings") });
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading settings...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not load settings.</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
 
   const groups = q.data.settings.reduce<Record<string, AdminSetting[]>>((acc, s) => {
     const g = s.key.split(".")[0];
@@ -330,7 +331,7 @@ export function OperatorSettings() {
         return (
           <section key={group} className="space-y-3">
             <div>
-              <h2 className="text-base font-semibold capitalize">{meta.title}</h2>
+              <h2 className="text-title-section capitalize text-foreground">{meta.title}</h2>
               <p className="text-sm text-muted-foreground">{meta.description}</p>
             </div>
             <div className="grid gap-4">

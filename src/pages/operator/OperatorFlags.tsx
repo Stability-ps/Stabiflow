@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { operatorAdmin, type AdminFlag, type AdminFlagTarget } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 const AUDIENCE_LABELS = { everyone: "Everyone", operators: "Admins only", targeted: "Selected plans / rollout" } as const;
 
@@ -109,7 +110,7 @@ export function OperatorFlags() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ["op-flags"], queryFn: () => operatorAdmin<{ flags: AdminFlag[]; targets: AdminFlagTarget[] }>("list_flags") });
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not load flags.</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">

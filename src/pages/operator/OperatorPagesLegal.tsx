@@ -16,6 +16,7 @@ import {
 import { LegalMarkdown } from "@/components/legal/LegalMarkdown";
 import { LEGAL_DOCUMENTS, type LegalDocumentType } from "@/lib/legal";
 import { operatorAdmin, type AdminSetting } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type LegalDoc = {
   id: string; document_type: LegalDocumentType; version: string; title: string; body: string; change_summary: string | null;
@@ -272,17 +273,17 @@ export function OperatorPagesLegal() {
   const legal = useQuery({ queryKey: ["op-legal"], queryFn: () => operatorAdmin<LegalData>("list_legal") });
   const [type, setType] = useState<LegalDocumentType>("terms_of_service");
   if (settings.isLoading || legal.isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (!settings.data || !legal.data) return <p className="text-sm text-destructive">Could not load pages and legal content.</p>;
+  if (!settings.data || !legal.data) return <ErrorState error={settings.error ?? legal.error} onRetry={() => { void settings.refetch(); void legal.refetch(); }} />;
   const map = Object.fromEntries(settings.data.settings.map((s) => [s.key, s.value]));
   const draftKey = legal.data.documents.find((x) => x.document_type === type && x.status === "draft")?.updated_at ?? "none";
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Public pages</h2>
+        <h2 className="text-title-card text-foreground">Public pages</h2>
         <ContentEditors settings={map} />
       </section>
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold">Policies and legal</h2>
+        <h2 className="text-title-card text-foreground">Policies and legal</h2>
         <Select value={type} onValueChange={(v) => setType(v as LegalDocumentType)}>
           <SelectTrigger aria-label="Document"><SelectValue /></SelectTrigger>
           <SelectContent>{LEGAL_DOCUMENTS.map((x) => <SelectItem key={x.type} value={x.type}>{x.title}</SelectItem>)}</SelectContent>

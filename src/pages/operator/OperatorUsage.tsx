@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { operatorAdmin } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type Usage = {
   ai30d: { tokens: number; cost_usd: number; by_feature: Record<string, { tokens: number; cost_usd: number; calls: number }> };
@@ -10,17 +11,17 @@ type Usage = {
 
 export function OperatorUsage() {
   const q = useQuery({ queryKey: ["operator-usage"], queryFn: () => operatorAdmin<Usage>("usage_overview") });
-  if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading usage...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not load usage.</p>;
+  if (q.isLoading) return <p className="text-sm text-muted-foreground" role="status">Loading usage...</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const data = q.data;
   const hot = data.allowances.filter((x) => x.pct !== null && x.pct >= 80).sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
 
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">AI tokens · 30d</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold">{data.ai30d.tokens.toLocaleString()}</p></CardContent></Card>
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Estimated AI cost · 30d</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold">${data.ai30d.cost_usd.toFixed(2)}</p></CardContent></Card>
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Automation runs · 30d</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold">{data.automation30d.total}</p><p className="text-xs text-muted-foreground">{data.automation30d.blocked_usage_limit} quota-blocked · {data.automation30d.failed} failed</p></CardContent></Card>
+        <Card><CardHeader className="pb-1"><CardTitle className="text-label font-normal text-muted-foreground">AI tokens · 30d</CardTitle></CardHeader><CardContent><p className="text-metric tabular-nums text-foreground">{data.ai30d.tokens.toLocaleString()}</p></CardContent></Card>
+        <Card><CardHeader className="pb-1"><CardTitle className="text-label font-normal text-muted-foreground">Estimated AI cost · 30d</CardTitle></CardHeader><CardContent><p className="text-metric tabular-nums text-foreground">${data.ai30d.cost_usd.toFixed(2)}</p></CardContent></Card>
+        <Card><CardHeader className="pb-1"><CardTitle className="text-label font-normal text-muted-foreground">Automation runs · 30d</CardTitle></CardHeader><CardContent><p className="text-metric tabular-nums text-foreground">{data.automation30d.total}</p><p className="text-xs text-muted-foreground">{data.automation30d.blocked_usage_limit} quota-blocked · {data.automation30d.failed} failed</p></CardContent></Card>
       </div>
 
       <Card>

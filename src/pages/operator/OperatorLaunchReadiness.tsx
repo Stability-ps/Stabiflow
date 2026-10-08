@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, CircleDashed, XCircle } from "lucide-react
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { operatorAdmin } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type Check = { key: string; label: string; status: "pass" | "warn" | "fail"; detail: string };
 type LaunchReadiness = {
@@ -15,31 +16,31 @@ type LaunchReadiness = {
 };
 
 function Icon({ status }: { status: Check["status"] }) {
-  if (status === "pass") return <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" aria-label="Pass" />;
-  if (status === "warn") return <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-300" aria-label="Warning" />;
+  if (status === "pass") return <CheckCircle2 className="h-4 w-4 text-success" aria-label="Pass" />;
+  if (status === "warn") return <AlertTriangle className="h-4 w-4 text-warning" aria-label="Warning" />;
   return <XCircle className="h-4 w-4 text-destructive" aria-label="Fail" />;
 }
 
 export function OperatorLaunchReadiness() {
   const q = useQuery({ queryKey: ["operator-launch-readiness"], queryFn: () => operatorAdmin<LaunchReadiness>("launch_readiness") });
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Checking launch readiness...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not run launch-readiness checks.</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const data = q.data;
   const certified = data.summary.fail === 0;
 
   return (
     <div className="space-y-4">
-      <Card className={certified ? "border-emerald-200 bg-emerald-50/40 dark:border-border dark:bg-emerald-950/40" : "border-destructive/30 bg-destructive/5"}>
+      <Card className={certified ? "border-success/30 bg-success-soft" : "border-destructive/30 bg-destructive/5"}>
         <CardContent className="flex items-center gap-3 pt-6">
-          {certified ? <CheckCircle2 className="h-5 w-5 text-emerald-700 dark:text-emerald-300" /> : <XCircle className="h-5 w-5 text-destructive" />}
+          {certified ? <CheckCircle2 className="h-5 w-5 text-success" /> : <XCircle className="h-5 w-5 text-destructive" />}
           <div><p className="font-medium">{certified ? "Pre-payment launch certification passed" : "Launch blockers still need attention"}</p><p className="text-xs text-muted-foreground">{certified ? "All non-deferred production checks are passing. Live Paystack certification can be completed later." : "Clear the failed checks below before launch."}</p></div>
         </CardContent>
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Passed</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold text-emerald-700 dark:text-emerald-300">{data.summary.pass}</p></CardContent></Card>
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Warnings</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold text-amber-700 dark:text-amber-300">{data.summary.warn}</p></CardContent></Card>
-        <Card><CardHeader className="pb-1"><CardTitle className="text-xs font-normal text-muted-foreground">Blockers</CardTitle></CardHeader><CardContent><p className="text-2xl font-semibold text-destructive">{data.summary.fail}</p></CardContent></Card>
+        <Card><CardHeader className="pb-1"><CardTitle className="text-label font-normal text-muted-foreground">Passed</CardTitle></CardHeader><CardContent><p className="text-metric tabular-nums text-success">{data.summary.pass}</p></CardContent></Card>
+        <Card><CardHeader className="pb-1"><CardTitle className="text-label font-normal text-muted-foreground">Warnings</CardTitle></CardHeader><CardContent><p className="text-metric tabular-nums text-warning">{data.summary.warn}</p></CardContent></Card>
+        <Card><CardHeader className="pb-1"><CardTitle className="text-label font-normal text-muted-foreground">Blockers</CardTitle></CardHeader><CardContent><p className="text-metric tabular-nums text-destructive-strong">{data.summary.fail}</p></CardContent></Card>
       </div>
 
       <Card>
@@ -59,7 +60,7 @@ export function OperatorLaunchReadiness() {
       </Card>
 
       {data.deferred && data.deferred.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/40 dark:border-border dark:bg-amber-950/40">
+        <Card className="border-warning/30 bg-warning-soft">
           <CardHeader><CardTitle className="text-base">Deferred until payment credentials are ready</CardTitle></CardHeader>
           <CardContent className="space-y-1 text-sm text-muted-foreground">{data.deferred.map((x) => <p key={x}>• {x}</p>)}</CardContent>
         </Card>
@@ -89,7 +90,7 @@ export function OperatorLaunchReadiness() {
           </div>
           <div className="rounded-md border p-3">
             <p className="font-medium">PWA shell</p>
-            <p className="flex items-center gap-2 text-muted-foreground">{data.mobile.installable_shell ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-300" /> : <CircleDashed className="h-4 w-4" />} Installable shell configured</p>
+            <p className="flex items-center gap-2 text-muted-foreground">{data.mobile.installable_shell ? <CheckCircle2 className="h-4 w-4 text-success" /> : <CircleDashed className="h-4 w-4" />} Installable shell configured</p>
             <p className="text-xs text-muted-foreground">Manifest: {data.mobile.manifest ? "yes" : "no"} · Service worker: {data.mobile.service_worker ? "yes" : "no"}</p>
           </div>
         </CardContent>

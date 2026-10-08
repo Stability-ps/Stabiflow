@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { operatorAdmin } from "@/lib/operatorAdmin";
+import { ErrorState } from "@/components/admin/AdminPrimitives";
 
 type Data = {
   scans: { id: string; requested_url: string; final_url: string | null; purpose: string; status: string; pages_fetched: number; error: string | null; created_at: string; workspaces: { name: string } | null }[];
@@ -29,7 +30,7 @@ export function OperatorBusinessStudio() {
     onError: (e: Error) => toast.error(e.message),
   });
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Loading...</p>;
-  if (q.error || !q.data) return <p className="text-sm text-destructive">Could not load Business Studio data.</p>;
+  if (q.error || !q.data) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const x = q.data;
   return (
     <div className="space-y-4">
