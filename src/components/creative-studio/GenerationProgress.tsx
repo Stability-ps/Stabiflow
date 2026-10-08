@@ -27,7 +27,7 @@ export function GenerationProgress({
   const currentIndex = STAGE_ORDER.indexOf(currentStage === "done" ? "saving" : currentStage);
 
   return (
-    <div className="rounded-lg border bg-muted/30 p-4">
+    <div role="status" className="rounded-xl border border-border bg-card p-4">
       <p className="mb-3 text-sm font-medium">Creating your ads...</p>
       <ul className="space-y-2">
         {STAGE_ORDER.map((stage, i) => {
@@ -39,7 +39,7 @@ export function GenerationProgress({
           return (
             <li key={stage} className="flex items-center gap-2 text-sm">
               {isDone ? (
-                <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+                <Check className="h-4 w-4 shrink-0 text-success" />
               ) : isActive ? (
                 <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
               ) : (
