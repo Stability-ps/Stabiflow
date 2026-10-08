@@ -29,8 +29,14 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initi
   const [caption, setCaption] = useState("");
   const [whenMode, setWhenMode] = useState<"now" | "schedule">("schedule");
   const [scheduledAtLocal, setScheduledAtLocal] = useState(() => {
-    const base = initialDate ? new Date(initialDate.getFullYear(), initialDate.getMonth(), initialDate.getDate(), 9, 0) : new Date(Date.now() + 60 * 60 * 1000);
-    return toLocalDateTimeInputValue(base, workspaceTimezone);
+    // initialDate is a calendar day picked on the (workspace-timezone)
+    // calendar: default to 09:00 on that day IN THE WORKSPACE, built as a
+    // wall-clock string so the browser's own timezone never shifts it.
+    if (initialDate) {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${initialDate.getFullYear()}-${pad(initialDate.getMonth() + 1)}-${pad(initialDate.getDate())}T09:00`;
+    }
+    return toLocalDateTimeInputValue(new Date(Date.now() + 60 * 60 * 1000), workspaceTimezone);
   });
   const [submitting, setSubmitting] = useState(false);
   const [generatingCaption, setGeneratingCaption] = useState(false);

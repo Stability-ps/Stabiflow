@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths } from "date-fns";
+import { addDays, addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameMonth, startOfMonth, startOfWeek, subMonths } from "date-fns";
 import { AlertTriangle, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { ComposePostDialog } from "@/components/content/ComposePostDialog";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { useAuth } from "@/hooks/useAuth";
 import { useContentScheduledPosts } from "@/hooks/useContentScheduledPosts";
-import { formatInTimezone } from "@/lib/contentTimezone";
+import { calendarDateKey, dateKeyInZone, formatInTimezone, startOfCalendarDayInZone, todayInZone } from "@/lib/contentTimezone";
 import { postStatus } from "@/lib/contentPostStatus";
 
 const DOT: Record<StatusTone, string> = {
@@ -35,7 +35,13 @@ type CalendarPost = {
 
 export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: string }) {
   const { currentWorkspaceId } = useAuth();
-  const [month, setMonth] = useState(() => new Date());
+  // The grid's Date objects are plain calendar dates (y/m/d only). Every
+  // instant -> day mapping goes through the WORKSPACE timezone, so a post
+  // scheduled for 09:00 in the workspace never shows on a different day
+  // for someone viewing from another timezone.
+  const today = todayInZone(workspaceTimezone);
+  const todayKey = calendarDateKey(today);
+  const [month, setMonth] = useState(() => today);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeDay, setComposeDay] = useState<Date | null>(null);
@@ -45,21 +51,21 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
   const days = useMemo(() => eachDayOfInterval({ start: rangeStart, end: rangeEnd }), [rangeStart, rangeEnd]);
 
   const { data: posts, isLoading, isError, refetch } = useContentScheduledPosts(currentWorkspaceId, "all", {
-    from: rangeStart.toISOString(),
-    to: rangeEnd.toISOString(),
+    from: startOfCalendarDayInZone(rangeStart, workspaceTimezone).toISOString(),
+    to: startOfCalendarDayInZone(addDays(rangeEnd, 1), workspaceTimezone).toISOString(),
   });
 
   const postsByDay = useMemo(() => {
     const map = new Map<string, CalendarPost[]>();
     for (const post of (posts as CalendarPost[] | undefined) || []) {
-      const key = format(new Date(post.scheduled_at), "yyyy-MM-dd");
+      const key = dateKeyInZone(post.scheduled_at, workspaceTimezone);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(post);
     }
     return map;
-  }, [posts]);
+  }, [posts, workspaceTimezone]);
 
-  const selectedDayPosts = selectedDay ? postsByDay.get(format(selectedDay, "yyyy-MM-dd")) || [] : [];
+  const selectedDayPosts = selectedDay ? postsByDay.get(calendarDateKey(selectedDay)) || [] : [];
 
   return (
     <div className="space-y-3">
@@ -67,7 +73,7 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
         <h3 className="text-title-section text-foreground" aria-live="polite">{format(month, "MMMM yyyy")}</h3>
         <div className="flex gap-1">
           <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Previous month" onClick={() => setMonth((m) => subMonths(m, 1))}><ChevronLeft aria-hidden="true" /></Button>
-          <Button variant="outline" size="sm" className="h-9" onClick={() => setMonth(new Date())}>Today</Button>
+          <Button variant="outline" size="sm" className="h-9" onClick={() => setMonth(today)}>Today</Button>
           <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Next month" onClick={() => setMonth((m) => addMonths(m, 1))}><ChevronRight aria-hidden="true" /></Button>
         </div>
       </div>
@@ -87,10 +93,10 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
 
       <div className={`grid grid-cols-7 gap-px overflow-hidden rounded-lg border border-border bg-border ${isLoading ? "opacity-60" : ""}`}>
         {days.map((day) => {
-          const key = format(day, "yyyy-MM-dd");
+          const key = calendarDateKey(day);
           const dayPosts = postsByDay.get(key) || [];
           const inMonth = isSameMonth(day, month);
-          const isToday = isSameDay(day, new Date());
+          const isToday = key === todayKey;
           return (
             <button
               key={key}
@@ -145,7 +151,9 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
           </div>
         </DialogContent>
       </Dialog>
-      <ComposePostDialog open={composeOpen} onOpenChange={setComposeOpen} workspaceTimezone={workspaceTimezone} initialDate={composeDay ?? undefined} />
+      {/* Keyed by day: the dialog seeds its schedule from initialDate only on
+          mount, so a new day must remount it or it keeps the first value. */}
+      <ComposePostDialog key={composeDay ? calendarDateKey(composeDay) : "new"} open={composeOpen} onOpenChange={setComposeOpen} workspaceTimezone={workspaceTimezone} initialDate={composeDay ?? undefined} />
     </div>
   );
 }

@@ -15,12 +15,13 @@ const { state } = vi.hoisted(() => ({
     assets: [] as Array<Record<string, unknown>>,
     assetsError: false,
     refetch: vi.fn(),
+    postsArgs: [] as unknown[],
   },
 }));
 
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ currentWorkspaceId: "workspace-1", hasPermission: () => true }) }));
 vi.mock("@/hooks/useContentScheduledPosts", () => ({
-  useContentScheduledPosts: () => ({ data: state.postsError ? undefined : state.posts, isLoading: false, isError: state.postsError, refetch: state.refetch }),
+  useContentScheduledPosts: (...args: unknown[]) => (state.postsArgs = args, { data: state.postsError ? undefined : state.posts, isLoading: false, isError: state.postsError, refetch: state.refetch }),
 }));
 vi.mock("@/hooks/useContentMediaAssets", () => ({
   useContentMediaAssets: () => ({ data: state.assetsError ? undefined : state.assets, isLoading: false, isError: state.assetsError, refetch: state.refetch }),
@@ -102,5 +103,38 @@ describe("CalendarMonthView", () => {
     wrap(<CalendarMonthView workspaceTimezone="Africa/Johannesburg" />);
     expect(screen.getByRole("button", { name: /2 posts: 1 scheduled, 1 failed/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Previous month" })).toBeInTheDocument();
+  });
+});
+
+describe("CalendarMonthView - workspace timezone", () => {
+  // Noon UTC on 15 Jan 2026 is already 16 Jan in Kiritimati (UTC+14) and
+  // still 15 Jan in Pago Pago (UTC-11). The browser zone running the test
+  // can't be both, so bucketing by browser time fails one of these.
+  const POST_AT = "2026-01-15T12:00:00.000Z";
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(POST_AT));
+    state.postsError = false;
+    state.posts = [{ ...POST, scheduled_at: POST_AT, status: "scheduled" }];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("places a post on the workspace's day (UTC+14)", () => {
+    wrap(<CalendarMonthView workspaceTimezone="Pacific/Kiritimati" />);
+    expect(screen.getByRole("button", { name: /^Friday 16 January, 1 post/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Thursday 15 January, no posts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Friday 16 January/ })).toHaveAttribute("aria-current", "date");
+  });
+
+  it("places the same post on the workspace's day (UTC-11)", () => {
+    wrap(<CalendarMonthView workspaceTimezone="Pacific/Pago_Pago" />);
+    expect(screen.getByRole("button", { name: /^Thursday 15 January, 1 post/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Friday 16 January, no posts" })).toBeInTheDocument();
+  });
+
+  it("fetches the visible grid's range in workspace midnights", () => {
+    wrap(<CalendarMonthView workspaceTimezone="Pacific/Kiritimati" />);
+    // Jan 2026 grid: Sun 28 Dec 2025 .. Sat 31 Jan 2026 (inclusive).
+    expect(state.postsArgs[2]).toEqual({ from: "2025-12-27T10:00:00.000Z", to: "2026-01-31T10:00:00.000Z" });
   });
 });

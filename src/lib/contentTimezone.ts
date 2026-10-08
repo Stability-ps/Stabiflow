@@ -63,3 +63,30 @@ export function formatInTimezone(date: Date | string, timeZone: string, options:
     ...options,
   }).format(instant);
 }
+
+// Calendar-day key ("YYYY-MM-DD") of a UTC instant as seen in `timeZone`.
+// The Content calendar buckets posts with this so a post lands on the
+// workspace's day, not the viewer's browser day.
+export function dateKeyInZone(date: Date | string, timeZone: string): string {
+  const parts = partsFromInstant(typeof date === "string" ? new Date(date) : date, timeZone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
+}
+
+// A plain calendar date (the browser-local Date objects date-fns builds a
+// month grid from) as a "YYYY-MM-DD" key - its components, no zone shift.
+export function calendarDateKey(day: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+}
+
+// The UTC instant at which calendar date `day` starts (00:00) in `timeZone`.
+export function startOfCalendarDayInZone(day: Date, timeZone: string): Date {
+  return zonedDateTimeToUtc(day.getFullYear(), day.getMonth() + 1, day.getDate(), 0, 0, timeZone);
+}
+
+// "Today" in `timeZone`, as a plain calendar date for a date-fns grid.
+export function todayInZone(timeZone: string, now: Date = new Date()): Date {
+  const [y, m, d] = dateKeyInZone(now, timeZone).split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
