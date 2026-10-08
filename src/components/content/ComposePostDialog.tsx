@@ -192,7 +192,7 @@ export function ComposePostDialog({ open, onOpenChange, workspaceTimezone, initi
           </div>
 
           {validation && (
-            <div className={`flex items-start gap-2 rounded-md p-2 text-sm ${validation.valid ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" : "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300"}`}>
+            <div className={`flex items-start gap-2 rounded-lg p-2 text-sm ${validation.valid ? "bg-success-soft text-success" : "bg-warning-soft text-warning"}`}>
               {validation.valid ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
               <div>
                 {validation.valid ? (
