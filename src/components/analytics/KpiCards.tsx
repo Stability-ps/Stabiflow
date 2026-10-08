@@ -6,7 +6,7 @@ import { formatMoney } from "@/lib/adMoney";
 function Delta({ value }: { value: number | null }) {
   if (value === null) return null;
   const positive = value >= 0;
-  return <span className={`ml-1.5 text-xs font-medium ${positive ? "text-emerald-600" : "text-red-600"}`}>{positive ? "+" : ""}{value.toFixed(0)}%</span>;
+  return <span className={`ml-1.5 text-xs font-medium ${positive ? "text-emerald-600 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}`}>{positive ? "+" : ""}{value.toFixed(0)}%</span>;
 }
 
 function Kpi({ label, value, previousValue, isMoney, workspaceCurrency }: { label: string; value: number | MoneyByCurrency | null; previousValue?: number | null; isMoney?: boolean; workspaceCurrency?: string }) {

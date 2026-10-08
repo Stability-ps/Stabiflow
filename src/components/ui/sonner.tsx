@@ -1,13 +1,14 @@
 import { Toaster as Sonner, toast } from "sonner";
+import { useAppliedTheme } from "@/lib/theme";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
-// Hardcoded to "system" for now (no next-themes dependency yet) - Phase 4
-// (branding) is where real light/dark theme switching gets wired up.
+// Toasts match the theme actually applied (dark only inside /app; src/lib/theme.ts).
 const Toaster = ({ ...props }: ToasterProps) => {
+  const theme = useAppliedTheme();
   return (
     <Sonner
-      theme="system"
+      theme={theme}
       className="toaster group"
       toastOptions={{
         classNames: {

@@ -157,7 +157,7 @@ export function WhatsAppManagePanel({ workspaceId, integration, canManage, canDi
                     </p>
                   </div>
                   {h && !h.healthy && (
-                    <Badge variant="secondary" className="gap-1 text-amber-800">
+                    <Badge variant="secondary" className="gap-1 text-amber-800 dark:text-amber-300">
                       <AlertTriangle className="h-3 w-3" /> Issue
                     </Badge>
                   )}

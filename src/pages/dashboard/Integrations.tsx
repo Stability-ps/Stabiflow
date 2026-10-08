@@ -226,7 +226,7 @@ export default function Integrations() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-8">
-      <div className="rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-white via-white to-indigo-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(235_55%_45%/0.25)] sm:p-6">
+      <div className="rounded-3xl border border-indigo-100/80 bg-gradient-to-br from-white via-white to-indigo-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(235_55%_45%/0.25)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-indigo-950/20">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Connected ecosystem</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Integrations</h1>
         <p className="text-sm text-muted-foreground">Connect Meta and WhatsApp Business to this workspace.</p>

@@ -162,7 +162,7 @@ export default function Documents() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-col gap-4 rounded-3xl border border-amber-100/80 bg-gradient-to-br from-white via-white to-amber-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(38_60%_40%/0.22)] sm:flex-row sm:items-end sm:justify-between sm:p-6">
+      <div className="flex flex-col gap-4 rounded-3xl border border-amber-100/80 bg-gradient-to-br from-white via-white to-amber-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(38_60%_40%/0.22)] sm:flex-row sm:items-end sm:justify-between sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-amber-950/20">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business library</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Documents</h1>
           <p className="text-sm text-muted-foreground">Your generated business documents and published profile.</p>

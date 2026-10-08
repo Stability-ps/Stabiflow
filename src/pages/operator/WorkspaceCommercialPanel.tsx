@@ -154,7 +154,7 @@ export function WorkspaceCommercialPanel({ workspaceId }: { workspaceId: string 
           {d.flags.map((f) => (
             <div key={f.flag_key} className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
               <span>
-                {f.flag_key} · <span className={f.enabled ? "text-emerald-700" : "text-muted-foreground"}>{f.enabled ? "on" : "off"}</span> ({f.reason})
+                {f.flag_key} · <span className={f.enabled ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}>{f.enabled ? "on" : "off"}</span> ({f.reason})
               </span>
               <Button size="sm" variant="ghost" className="h-6" disabled={needsReason || target.isPending} onClick={() => target.mutate({ flag: f.flag_key, enabled: !f.enabled })}>
                 {f.enabled ? "Turn off" : "Turn on"}

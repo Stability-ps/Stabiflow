@@ -125,7 +125,7 @@ export default function BusinessStudio() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.28)] sm:p-6">
+      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.28)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-sky-950/20">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Profile builder</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">Business Studio</h1>
         <p className="text-sm text-muted-foreground">Turn your website into a professional company profile. You check every fact before it's used.</p>
@@ -157,7 +157,7 @@ export default function BusinessStudio() {
           </CardHeader>
           <CardContent>
             {toolsLocked && (
-              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950" role="note">
+              <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-950 dark:border-border dark:bg-amber-950/40" role="note">
                 Website scanning, reading an existing profile and AI wording are included with the Business and Growth plans. You can still enter your details yourself and preview your profile.{" "}
                 <Link to="/app/billing" className="font-medium underline underline-offset-4">See plans</Link>
               </p>
@@ -234,7 +234,7 @@ export default function BusinessStudio() {
             <ul className="grid gap-1 text-sm sm:grid-cols-2">
               {completeness.items.map((i) => (
                 <li key={i.key} className="flex items-center gap-2">
-                  {i.done ? <Check className="h-4 w-4 text-emerald-600" aria-label="Done" /> : <span className="h-4 w-4 rounded-full border" aria-label="Missing" />}
+                  {i.done ? <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-300" aria-label="Done" /> : <span className="h-4 w-4 rounded-full border" aria-label="Missing" />}
                   <span className={i.done ? "text-muted-foreground" : ""}>{i.label}</span>
                 </li>
               ))}

@@ -23,7 +23,7 @@ function ResourceRow({ label, sublabel, active, disabled, onToggle, health }: { 
         {sublabel && <p className="truncate text-xs text-muted-foreground">{sublabel}</p>}
       </div>
       {health && !health.healthy && (
-        <Badge variant="secondary" className="gap-1 text-amber-800">
+        <Badge variant="secondary" className="gap-1 text-amber-800 dark:text-amber-300">
           <AlertTriangle className="h-3 w-3" /> Issue
         </Badge>
       )}

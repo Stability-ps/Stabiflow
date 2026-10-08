@@ -9,7 +9,7 @@ export function PlatformNotice() {
   if (!notice?.enabled || !message) return null;
   const warn = notice.tone === "warning";
   return (
-    <div role="status" className={`flex items-center gap-2 border-b px-4 py-2 text-sm ${warn ? "bg-amber-50 text-amber-900" : "bg-sky-50 text-sky-900"}`}>
+    <div role="status" className={`flex items-center gap-2 border-b px-4 py-2 text-sm ${warn ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-300" : "bg-sky-50 text-sky-900 dark:bg-sky-950/40 dark:text-sky-300"}`}>
       <Info className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
     </div>
