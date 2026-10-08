@@ -22,6 +22,7 @@ const { navigateMock, mocks } = vi.hoisted(() => ({
     duplicateCampaignDraft: vi.fn(),
     deleteCampaignDraft: vi.fn(),
     publishCampaign: vi.fn(),
+    keySeq: 0,
   },
 }));
 
@@ -56,7 +57,7 @@ vi.mock("@/lib/adCampaigns", async () => {
     pauseCampaign: vi.fn(),
     resumeCampaign: vi.fn(),
     refreshCampaignMetrics: vi.fn(),
-    newPublishIdempotencyKey: () => "k",
+    newPublishIdempotencyKey: () => `k${++mocks.keySeq}`,
   };
 });
 
@@ -296,5 +297,65 @@ describe("CampaignDetail - honest error states", () => {
     renderDetail();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Performance" }), { button: 0 });
     expect(screen.getByText("No data until it's published")).toBeInTheDocument();
+  });
+});
+
+describe("CampaignDetail - failed publish can be retried", () => {
+  it("a failed campaign shows 'Publish failed - retry' with the last error", async () => {
+    mocks.campaign = makeCampaign({ status: "failed", last_publish_error: { message: "Ad account disabled" } });
+    renderDetail();
+    expect(await screen.findByRole("heading", { name: "Publish failed - retry" })).toBeInTheDocument();
+    expect(screen.getByText(/Ad account disabled/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled());
+  });
+
+  it("a partially published failure (Meta id already set) is still retryable", async () => {
+    mocks.campaign = makeCampaign({ status: "failed", external_campaign_id: "120000", last_publish_error: null });
+    renderDetail();
+    expect(await screen.findByRole("heading", { name: "Publish failed - retry" })).toBeInTheDocument();
+    expect(screen.getByText(/Meta didn't return a reason/)).toBeInTheDocument();
+    expect(mocks.checkCampaignReadiness).toHaveBeenCalledWith("campaign-1");
+    // A failed campaign must never be demoted to a draft by the readiness sync.
+    expect(mocks.syncCampaignReviewStatus).not.toHaveBeenCalled();
+  });
+
+  it("a failed campaign that no longer passes readiness shows the checklist and a disabled publish", async () => {
+    mocks.campaign = makeCampaign({ status: "failed", last_publish_error: { message: "boom" } });
+    mocks.checkCampaignReadiness.mockResolvedValue({
+      ok: true, ready: false, issues: [{ code: "invalid_budget", message: "start date must not be in the past", severity: "error" }],
+    });
+    renderDetail();
+    expect(await screen.findByRole("region", { name: "Publishing checklist" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeDisabled();
+  });
+
+  it("retrying after a failed outcome sends a NEW idempotency key (old one would only replay)", async () => {
+    mocks.campaign = makeCampaign({ status: "failed", last_publish_error: { message: "boom" } });
+    mocks.publishCampaign.mockResolvedValue({ ok: false, outcome: "failed", error: "still broken" });
+    renderDetail();
+    const button = await screen.findByRole("button", { name: "Publish to Meta" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Publish to Meta" }));
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalledTimes(2));
+    const [first, second] = mocks.publishCampaign.mock.calls.map((c) => c[1]);
+    expect(second).not.toBe(first);
+  });
+
+  it("a thrown (unknown-outcome) error keeps the same key so the retry replays safely", async () => {
+    mocks.campaign = makeCampaign({ status: "failed", last_publish_error: { message: "boom" } });
+    mocks.publishCampaign.mockRejectedValue(new Error("network"));
+    renderDetail();
+    const button = await screen.findByRole("button", { name: "Publish to Meta" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Publish to Meta" }));
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalledTimes(2));
+    const [first, second] = mocks.publishCampaign.mock.calls.map((c) => c[1]);
+    expect(second).toBe(first);
   });
 });

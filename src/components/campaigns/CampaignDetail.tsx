@@ -25,7 +25,7 @@ import { getObjectiveOption, DESTINATION_TYPE_LABELS, type DestinationType } fro
 import { formatMoney } from "@/lib/adMoney";
 import { localDateString } from "@/lib/analyticsDate";
 import {
-  deriveCampaignPresentation, isEditableCampaign, isUnpublishedCampaign, type ReadinessSnapshot,
+  deriveCampaignPresentation, isEditableCampaign, isPublishRetryable, isUnpublishedCampaign, type ReadinessSnapshot,
 } from "@/lib/campaignLifecycle";
 import { formatScheduleStart, isScheduledStartTooCloseOrPast } from "@/lib/campaignSchedule";
 import { campaignEditorPath, presentReadinessIssue, readinessActionLabel } from "@/lib/readinessIssuePresentation";
@@ -84,6 +84,9 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   };
 
   const unpublished = campaign ? isUnpublishedCampaign(campaign) : false;
+  // Both an unpublished draft and a failed publish need a fresh readiness
+  // result: it drives the checklist and enables the (re)publish button.
+  const publishable = campaign ? isUnpublishedCampaign(campaign) || isPublishRetryable(campaign) : false;
 
   const runReadinessCheck = async () => {
     setChecking(true);
@@ -114,7 +117,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   // its result drives both the lifecycle badge (Needs attention vs Ready
   // to publish) and the actionable issue list below.
   useEffect(() => {
-    if (campaign && isUnpublishedCampaign(campaign) && issues === null) {
+    if (campaign && (isUnpublishedCampaign(campaign) || isPublishRetryable(campaign)) && issues === null) {
       runReadinessCheck();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,6 +127,10 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     setPublishing(true);
     try {
       const result = await publishCampaign(campaignId, idempotencyKeyRef.current);
+      // The server answered with a definite outcome, so this key is spent:
+      // reusing it would only replay this result. A retry needs a new key.
+      // (A thrown network error keeps the key - that retry must replay.)
+      if (!result.ok) idempotencyKeyRef.current = newPublishIdempotencyKey();
       if (result.ok) toast.success("Campaign published to Meta");
       else if (result.outcome === "partial") toast.warning("Campaign partially published - some objects were created at Meta before it failed. Check Activity for details.");
       else toast.error(result.error || "Publish failed");
@@ -276,7 +283,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       {/* Needs-attention panel: shown for an unpublished campaign whose
           readiness has any issue. Every fixable issue links straight into
           the editor at the right step/field. */}
-      {unpublished && liveReadiness && readinessRows.length > 0 && (
+      {publishable && liveReadiness && readinessRows.length > 0 && (
         <section
           aria-label="Publishing checklist"
           className={cn("rounded-xl border bg-card p-4 sm:p-5", hasBlockingIssues ? "border-warning/40" : "border-border")}
@@ -315,14 +322,15 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
       {/* Publish panel: only once readiness actually passes (presentation
           === ready_to_publish) or a prior publish failed. Never gated on a
-          stale stored 'ready'. */}
-      {unpublished && (presentation === "ready_to_publish" || campaign.status === "failed") && hasPermission("campaign.publish") && (
+          stale stored 'ready'. A failed campaign is not "unpublished"
+          (it may already carry a partial Meta id), so it is its own case. */}
+      {((unpublished && presentation === "ready_to_publish") || isPublishRetryable(campaign)) && hasPermission("campaign.publish") && (
         <section aria-label="Publish" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="min-w-0 space-y-1">
             <h2 className="text-title-section text-foreground">{campaign.status === "failed" ? "Publish failed - retry" : "Ready to publish"}</h2>
-            {campaign.last_publish_error && (
+            {isPublishRetryable(campaign) && (
               <p className="text-sm text-destructive-strong">
-                Last error: {(campaign.last_publish_error as { message?: string })?.message || "Unknown error"}
+                Last error: {(campaign.last_publish_error as { message?: string } | null)?.message || "Meta didn't return a reason. Check Activity for details."}
               </p>
             )}
             {liveReadiness?.ready && issues?.length === 0 && (

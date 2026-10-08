@@ -54,6 +54,16 @@ export function isUnpublishedCampaign(input: { status: string; external_campaign
   return !input.external_campaign_id && UNPUBLISHED_STATUSES.has(input.status);
 }
 
+/**
+ * A campaign whose last publish attempt failed. The server's atomic claim
+ * accepts 'failed' (adPublishExecution.claimCampaignForPublish) and resumes
+ * from provider_state, so this is retryable even when a partial publish
+ * already created a Meta campaign (external_campaign_id set).
+ */
+export function isPublishRetryable(input: { status: string }): boolean {
+  return input.status === "failed";
+}
+
 /** Only unpublished campaigns can be opened in the Campaign Builder editor. */
 export function isEditableCampaign(input: { status: string; external_campaign_id?: string | null }): boolean {
   return isUnpublishedCampaign(input);

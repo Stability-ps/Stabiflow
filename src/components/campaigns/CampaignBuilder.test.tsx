@@ -28,6 +28,7 @@ const mockAssets = [
 
 const mockAdAccount = { id: "acct-1", name: "StabiFlow Insights", ad_account_id: "act_123", currency: "ZAR" };
 
+let keySeq = 0;
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ currentWorkspaceId: "workspace-1" }) }));
 vi.mock("@/hooks/useMetaAccountResources", () => ({
   useMetaAdAccounts: () => ({ data: [mockAdAccount], isLoading: false }),
@@ -56,7 +57,7 @@ vi.mock("@/lib/adCampaigns", async () => {
     publishCampaign: mocks.publishCampaign,
     checkCampaignReadiness: mocks.checkCampaignReadiness,
     syncCampaignReviewStatus: mocks.syncCampaignReviewStatus,
-    newPublishIdempotencyKey: () => "test-idempotency-key",
+    newPublishIdempotencyKey: () => `test-idempotency-key-${++keySeq}`,
   };
 });
 
@@ -320,6 +321,19 @@ describe("CampaignBuilder Publish readiness actionability", () => {
     expect(await screen.findByText("Unable to publish this campaign right now.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Edit Budget/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Edit Creative/ })).not.toBeInTheDocument();
+  });
+  it("retrying after a failed publish outcome uses a fresh idempotency key", async () => {
+    mocks.checkCampaignReadiness.mockResolvedValue({ ok: true, ready: true, issues: [] });
+    mocks.publishCampaign.mockResolvedValue({ ok: false, outcome: "failed", error: "Meta rejected the ad" });
+    renderBuilder();
+    await createDraftAndReachPublish();
+    fireEvent.click(await screen.findByRole("button", { name: "Publish to Meta" }));
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Publish to Meta" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Publish to Meta" }));
+    await waitFor(() => expect(mocks.publishCampaign).toHaveBeenCalledTimes(2));
+    const [first, second] = mocks.publishCampaign.mock.calls.map((c) => c[1]);
+    expect(second).not.toBe(first);
   });
 });
 
