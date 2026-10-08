@@ -9,7 +9,7 @@
 // deterministic.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedWhatsAppSetup, seedInboxConversation, seedInboxMessage } from "./inboxHelpers";
 import { seedLead } from "./leadsHelpers";
 
@@ -45,7 +45,9 @@ describe("get_revenue_breakdown (Phase 1 remediation)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("rev-breakdown");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     otherWorkspace = await createTestTenant("rev-breakdown-other");
+    await enableModules(otherWorkspace.workspaceId, ...ALL_MODULES);
 
     const support = await createTestUser("rev-breakdown-support");
     await seedMembership(workspace.workspaceId, support.userId, "support");

@@ -7,7 +7,7 @@
 // No WhatsApp / Meta / OpenAI call anywhere: analytics is pure DB math.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 // A fixed period well clear of "now" so wall-clock drift never matters.
@@ -74,7 +74,9 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("wa-ops");
+    await enableModules(ws.workspaceId, ...ALL_MODULES);
     other = await createTestTenant("wa-ops-other");
+    await enableModules(other.workspaceId, ...ALL_MODULES);
     numberId = (await seedWhatsAppSetup(ws.workspaceId)).id;
     otherNumberId = (await seedWhatsAppSetup(other.workspaceId)).id;
   });
@@ -133,6 +135,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("conversation volume counts only conversations started in [from, to) - half-open", async () => {
     const w = await createTestTenant("wa-ops-vol");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     await seedInboxConversation(w.workspaceId, n, { wa_id: "27991", phone_number: "+27991", created_at: IN_A });
     await seedInboxConversation(w.workspaceId, n, { wa_id: "27992", phone_number: "+27992", created_at: IN_B });
@@ -145,6 +148,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("inbound_messages counts inbound messages in range (voice notes included, no special-casing)", async () => {
     const w = await createTestTenant("wa-ops-inb");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     const c = await seedInboxConversation(w.workspaceId, n, { wa_id: "279a", phone_number: "+279a", created_at: IN_A });
     await seedInboxMessage(w.workspaceId, c.id, { direction: "inbound", sender_type: "customer", message_type: "text", created_at: IN_A });
@@ -160,6 +164,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("median human response = first STAFF reply at/after handoff minus handoff time; AI reply is not counted", async () => {
     const w = await createTestTenant("wa-ops-resp");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     const handoff = "2026-06-10T10:00:00.000Z";
     // conv 1: handoff -> AI reply after 30s (ignored) -> staff reply after 120s
@@ -182,6 +187,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("a conversation never handed off contributes no human-response sample", async () => {
     const w = await createTestTenant("wa-ops-nohand");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     const c = await seedInboxConversation(w.workspaceId, n, { wa_id: "279n", phone_number: "+279n", created_at: IN_A });
     await seedInboxMessage(w.workspaceId, c.id, { direction: "outbound", sender_type: "staff", created_at: IN_A });
@@ -195,6 +201,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("handoff rate counts a conversation once regardless of how many messages/episodes it has", async () => {
     const w = await createTestTenant("wa-ops-hand");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     const c1 = await seedInboxConversation(w.workspaceId, n, { wa_id: "279h1", phone_number: "+279h1", created_at: IN_A, human_handoff_requested_at: IN_B });
     // many messages + an alert-style repeated handoff does not inflate anything
@@ -213,6 +220,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("median resolution time uses resolved_at; unresolved conversations are excluded from the duration", async () => {
     const w = await createTestTenant("wa-ops-res");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279s1", phone_number: "+279s1", created_at: "2026-06-05T00:00:00.000Z", resolved_at: "2026-06-05T01:00:00.000Z" }); // 3600s
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279s2", phone_number: "+279s2", created_at: "2026-06-06T00:00:00.000Z", resolved_at: "2026-06-06T03:00:00.000Z" }); // 10800s
@@ -226,6 +234,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("a cohort with zero reliable resolved_at returns N/A resolution, never 0", async () => {
     const w = await createTestTenant("wa-ops-res0");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279z1", phone_number: "+279z1", created_at: IN_A }); // no resolved_at
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279z2", phone_number: "+279z2", created_at: "2026-06-08T05:00:00.000Z", resolved_at: "2026-06-08T04:00:00.000Z" }); // resolved before created -> anomaly, excluded
@@ -239,6 +248,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("intake denominator = pinned-schema conversations only; numerator = authoritative intake_completed_at", async () => {
     const w = await createTestTenant("wa-ops-intake");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     const sch = await schemaId(w.workspaceId);
     // 3 with a pinned schema, 2 completed
@@ -258,6 +268,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("no pinned-schema conversations -> intake completion is N/A, not 0%", async () => {
     const w = await createTestTenant("wa-ops-intake0");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279j1", phone_number: "+279j1", created_at: IN_A });
     const [row] = await rpc(w.client, w.workspaceId);
@@ -270,6 +281,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("classifies AI-only / human-only / human-assisted / no-reply as a mutually-exclusive partition; automation (system) counts as neither", async () => {
     const w = await createTestTenant("wa-ops-cls");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     // AI-only: ai reply, no staff, never handed off
     const cAi = await seedInboxConversation(w.workspaceId, n, { wa_id: "279c1", phone_number: "+279c1", created_at: IN_A });
@@ -305,6 +317,7 @@ describe("Phase 11 - WhatsApp operational analytics RPC", () => {
 
   it("the same RPC over the previous equal-length window is independent and correct", async () => {
     const w = await createTestTenant("wa-ops-prev");
+    await enableModules(w.workspaceId, ...ALL_MODULES);
     const n = (await seedWhatsAppSetup(w.workspaceId)).id;
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279p1", phone_number: "+279p1", created_at: IN_A });                 // in current
     await seedInboxConversation(w.workspaceId, n, { wa_id: "279p2", phone_number: "+279p2", created_at: "2026-05-10T00:00:00.000Z" }); // in previous month
