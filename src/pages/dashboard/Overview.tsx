@@ -78,7 +78,7 @@ export default function Overview() {
   const canView = hasPermission("view_analytics");
   const canSeeRevenue = hasPermission("revenue.view");
   const createActions = [
-    hasPermission("lead.create") && { label: "New lead", description: "Add someone to your pipeline", icon: UserPlus, to: "/app/leads" },
+    hasPermission("lead.create") && { label: "New lead", description: "Add someone to your pipeline", icon: UserPlus, to: "/app/leads?new=1" },
     hasPermission("content.create") && { label: "New content", description: "Create or upload marketing content", icon: FileText, to: "/app/content" },
     hasPermission("campaign.create") && { label: "New campaign", description: "Build a campaign for Meta", icon: Megaphone, to: "/app/campaigns/new" },
     { label: "Business profile", description: "Build or update your company profile", icon: Building2, to: "/app/business-studio" },

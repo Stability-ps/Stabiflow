@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { LeadRow } from "@/hooks/useLeads";
@@ -33,7 +33,9 @@ vi.mock("@/hooks/useWorkspaceMembers", () => ({
 }));
 vi.mock("@/hooks/useOpportunityTerminology", () => ({ useOpportunityTerminology: () => "Opportunity" }));
 vi.mock("@/pages/dashboard/leads/LeadDetail", () => ({ LeadDetail: ({ leadId }: { leadId: string }) => <div role="dialog">LEAD DETAIL {leadId}</div> }));
-vi.mock("@/pages/dashboard/leads/NewLeadDialog", () => ({ NewLeadDialog: () => <button type="button">Add lead</button> }));
+vi.mock("@/pages/dashboard/leads/NewLeadDialog", () => ({
+  NewLeadDialog: ({ defaultOpen }: { defaultOpen?: boolean }) => <><button type="button">Add lead</button>{defaultOpen && <div role="dialog">NEW LEAD</div>}</>,
+}));
 vi.mock("@/pages/dashboard/leads/PipelineSettings", () => ({ PipelineSettings: () => <div>PIPELINE SETTINGS</div> }));
 
 import Leads from "./Leads";
@@ -180,5 +182,25 @@ describe("Leads - permissions", () => {
     renderLeads();
     expect(screen.getAllByRole("button", { name: "Add lead" }).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Pipelines/ })).toBeInTheDocument();
+  });
+});
+
+describe("Leads - shortcuts and focus", () => {
+  it("/app/leads?new=1 (Overview's New lead shortcut) lands with the new-lead dialog open", () => {
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={["/app/leads?new=1"]}><Leads /></MemoryRouter></QueryClientProvider>);
+    expect(screen.getByRole("dialog")).toHaveTextContent("NEW LEAD");
+  });
+
+  it("plain /app/leads does not open the dialog", () => {
+    renderLeads();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closing the filter sheet returns focus to the Filters button", async () => {
+    renderLeads();
+    const filters = screen.getByRole("button", { name: /^Filters/ });
+    fireEvent.click(filters);
+    fireEvent.click(await screen.findByRole("button", { name: "Show leads" }));
+    await waitFor(() => expect(filters).toHaveFocus());
   });
 });

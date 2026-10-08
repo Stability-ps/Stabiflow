@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertTriangle, Columns3, List, Search, Settings2, SlidersHorizontal, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,14 @@ export default function Leads() {
   const [filters, setFilters] = useState<LeadFilters>(DEFAULT_LEAD_FILTERS);
   const [sort, setSort] = useState<LeadSort>("follow_up");
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
+  const filtersButtonRef = useRef<HTMLButtonElement>(null);
+  // "New lead" shortcuts (Overview, search) link to /app/leads?new=1 and land
+  // with the dialog open; the param is dropped so a refresh doesn't reopen it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [openNewLead] = useState(() => searchParams.get("new") === "1");
+  useEffect(() => {
+    if (searchParams.has("new")) setSearchParams((p) => { p.delete("new"); return p; }, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [autoOpenOpportunityForm, setAutoOpenOpportunityForm] = useState(false);
   // One clock per render pass keeps every row's "overdue / today" consistent.
   const [now, setNow] = useState(() => new Date());
@@ -245,7 +253,7 @@ export default function Leads() {
           {canManagePipelines && (
             <Button variant="outline" onClick={() => setPipelineSettingsOpen(true)}><Settings2 aria-hidden="true" /> Pipelines</Button>
           )}
-          {canCreate && <NewLeadDialog workspaceId={currentWorkspaceId} onCreated={setSelectedLeadId} />}
+          {canCreate && <NewLeadDialog workspaceId={currentWorkspaceId} onCreated={setSelectedLeadId} defaultOpen={openNewLead} />}
         </div>
       </header>
 
@@ -282,7 +290,7 @@ export default function Leads() {
                   <Input value={filters.search} onChange={(e) => set({ search: e.target.value })} placeholder="Search leads" aria-label="Search leads" className="pl-9" />
                 </div>
                 <div className="hidden items-center gap-2 min-[1400px]:flex">{filterControls}</div>
-                <Button variant="outline" className="shrink-0 min-[1400px]:hidden" onClick={() => setFilterSheetOpen(true)} aria-label={`Filters${extraFilterCount ? `, ${extraFilterCount} active` : ""}`}>
+                <Button ref={filtersButtonRef} variant="outline" className="shrink-0 min-[1400px]:hidden" onClick={() => setFilterSheetOpen(true)} aria-label={`Filters${extraFilterCount ? `, ${extraFilterCount} active` : ""}`}>
                   <SlidersHorizontal aria-hidden="true" /><span className="hidden sm:inline">Filters</span>{extraFilterCount ? <span className="rounded-full bg-selected px-1.5 text-xs text-selected-foreground">{extraFilterCount}</span> : null}
                 </Button>
                 <div role="group" aria-label="Layout" className="ml-auto inline-flex shrink-0 rounded-lg bg-muted p-0.5">
@@ -348,7 +356,12 @@ export default function Leads() {
       )}
 
       <Sheet open={filterSheetOpen} onOpenChange={setFilterSheetOpen}>
-        <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-2xl pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] overflow-y-auto rounded-t-2xl pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+          // No SheetTrigger here, so hand focus back to the Filters button ourselves.
+          onCloseAutoFocus={(e) => { e.preventDefault(); filtersButtonRef.current?.focus(); }}
+        >
           <SheetHeader className="text-left">
             <SheetTitle>Filter leads</SheetTitle>
             <SheetDescription>{visibleLeads.length} {visibleLeads.length === 1 ? "lead matches" : "leads match"}</SheetDescription>

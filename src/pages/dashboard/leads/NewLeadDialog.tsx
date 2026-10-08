@@ -10,9 +10,9 @@ import { createLeadManual, type DuplicateLeadCandidate } from "@/lib/leads";
 
 const SOURCES = ["manual", "website", "referral", "organic", "google_later", "other"];
 
-export function NewLeadDialog({ workspaceId, onCreated }: { workspaceId: string; onCreated: (leadId: string) => void }) {
+export function NewLeadDialog({ workspaceId, onCreated, defaultOpen = false }: { workspaceId: string; onCreated: (leadId: string) => void; defaultOpen?: boolean }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
