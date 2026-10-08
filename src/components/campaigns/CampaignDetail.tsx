@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BarChart3, CalendarClock, CheckCircle2, Loader2, PauseCircle, PlayCircle, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarClock, CheckCircle2, History, Loader2, PauseCircle, PlayCircle, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Metric } from "@/components/ui/metric";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { EmptyState } from "@/components/EmptyState";
+import { cn } from "@/lib/utils";
 import { CampaignLifecycleBadge } from "@/components/campaigns/CampaignLifecycleBadge";
 import { CampaignActionsMenu } from "@/components/campaigns/CampaignActionsMenu";
 import { CampaignJourney } from "@/components/campaigns/CampaignJourney";
@@ -46,15 +47,26 @@ function calendarDateLabel(iso: string | null | undefined, timeZone: string): st
   return Number.isNaN(d.getTime()) ? "-" : localDateString(d, timeZone);
 }
 
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm font-medium text-foreground">{children}</dd>
+    </div>
+  );
+}
+
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { hasPermission, currentWorkspaceId } = useAuth();
   const workspaceCurrency = useWorkspaceCurrency(currentWorkspaceId);
   const workspaceTimezone = useWorkspaceTimezone(currentWorkspaceId);
   const queryClient = useQueryClient();
-  const { data: campaign, isLoading } = useAdCampaign(campaignId);
-  const { data: activity } = useCampaignActivity(campaignId);
-  const { data: metrics, isLoading: metricsLoading } = useAdCampaignMetrics(campaignId);
-  const { data: performance } = useSingleCampaignPerformance(currentWorkspaceId, campaignId, ALL_TIME_RANGE, DEFAULT_ATTRIBUTION_MODEL);
+  const { data: campaign, isLoading, isError, refetch } = useAdCampaign(campaignId);
+  const activityQuery = useCampaignActivity(campaignId);
+  const activity = activityQuery.data;
+  const metricsQuery = useAdCampaignMetrics(campaignId);
+  const { data: metrics, isLoading: metricsLoading } = metricsQuery;
+  const { data: performance, isError: performanceError } = useSingleCampaignPerformance(currentWorkspaceId, campaignId, ALL_TIME_RANGE, DEFAULT_ATTRIBUTION_MODEL);
   const { data: whatsappNumbers } = useAllWhatsAppNumbers(currentWorkspaceId);
   const canSeeRevenue = hasPermission("revenue.view");
 
@@ -164,8 +176,27 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     }
   };
 
-  if (isLoading) return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
-  if (!campaign) return <EmptyState icon={AlertTriangle} title="Campaign not found" description="It may have been deleted, or you may not have access to it." />;
+  if (isLoading) {
+    return (
+      <div className="space-y-4" role="status" aria-label="Loading campaign">
+        <div className="h-12 w-72 max-w-full animate-pulse rounded-lg bg-muted" />
+        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+      </div>
+    );
+  }
+  // A failed fetch is not "not found" - the campaign may well exist.
+  if (isError) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load this campaign"
+        description="Something went wrong fetching it. Nothing has changed at Meta - try again."
+        action={<Button variant="outline" onClick={() => void refetch()}>Try again</Button>}
+        className="rounded-xl border border-border bg-card"
+      />
+    );
+  }
+  if (!campaign) return <EmptyState icon={AlertTriangle} title="Campaign not found" description="It may have been deleted, or you may not have access to it." className="rounded-xl border border-border bg-card" />;
 
   const objectiveOption = getObjectiveOption(campaign.objective);
   const budget = campaign.budget_type === "daily" ? campaign.daily_budget_minor_units : campaign.lifetime_budget_minor_units;
@@ -222,83 +253,90 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const hasBlockingIssues = readinessRows.some((r) => r.severity === "error");
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="min-w-0 break-words text-title-page text-foreground">{campaign.name}</h1>
             <CampaignLifecycleBadge state={presentation} />
-            <h1 className="text-2xl font-semibold tracking-tight">{campaign.name}</h1>
           </div>
-          <p className="text-sm text-muted-foreground">{objectiveOption?.label || campaign.objective} · {campaign.workspace_meta_ad_accounts?.name || campaign.ad_account_id}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{objectiveOption?.label || campaign.objective} · {campaign.workspace_meta_ad_accounts?.name || campaign.ad_account_id}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {(campaign.status === "active" || campaign.status === "paused") && hasPermission("campaign.pause") && (
             <Button variant="outline" onClick={handlePauseResume} disabled={pausing}>
-              {campaign.status === "active" ? <PauseCircle className="mr-2 h-4 w-4" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+              {campaign.status === "active" ? <PauseCircle aria-hidden="true" /> : <PlayCircle aria-hidden="true" />}
               {campaign.status === "active" ? "Pause" : "Resume"}
             </Button>
           )}
           <CampaignActionsMenu campaign={campaign} />
         </div>
-      </div>
+      </header>
 
       {/* Needs-attention panel: shown for an unpublished campaign whose
           readiness has any issue. Every fixable issue links straight into
           the editor at the right step/field. */}
       {unpublished && liveReadiness && readinessRows.length > 0 && (
-        <Card className={hasBlockingIssues ? "border-amber-300 dark:border-amber-800" : ""}>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-            <CardTitle className="text-base">
+        <section
+          aria-label="Publishing checklist"
+          className={cn("rounded-xl border bg-card p-4 sm:p-5", hasBlockingIssues ? "border-warning/40" : "border-border")}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <h2 className="text-title-section text-foreground">
               {hasBlockingIssues ? "This campaign needs attention before it can be published" : "Ready to publish - with warnings"}
-            </CardTitle>
+            </h2>
             <Button variant="outline" size="sm" onClick={runReadinessCheck} disabled={checking}>
-              {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Re-check"}
+              {checking ? <><Loader2 className="animate-spin" aria-hidden="true" /> Checking</> : "Re-check"}
             </Button>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {readinessRows.map((row) => (
-                <li key={row.key} className={`flex flex-wrap items-start justify-between gap-2 rounded-md border p-2 text-sm ${row.severity === "error" ? "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400" : "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400"}`}>
-                  <span className="flex items-start gap-2">
-                    {row.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
-                    {row.message}
-                  </span>
-                  {row.href && row.actionLabel && canEditSchedule && (
-                    <Button asChild type="button" variant="outline" size="sm">
-                      <Link to={row.href}>{row.actionLabel}</Link>
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {readinessRows.map((row) => (
+              <li
+                key={row.key}
+                className={cn(
+                  "flex flex-wrap items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm",
+                  row.severity === "error" ? "bg-destructive-soft text-destructive-strong" : "bg-warning-soft text-warning",
+                )}
+              >
+                <span className="flex min-w-0 items-start gap-2">
+                  {row.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-label="Blocking" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-label="Warning" />}
+                  {row.message}
+                </span>
+                {row.href && row.actionLabel && canEditSchedule && (
+                  <Button asChild type="button" variant="outline" size="sm" className="bg-card">
+                    <Link to={row.href}>{row.actionLabel}</Link>
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* Publish panel: only once readiness actually passes (presentation
           === ready_to_publish) or a prior publish failed. Never gated on a
           stale stored 'ready'. */}
       {unpublished && (presentation === "ready_to_publish" || campaign.status === "failed") && hasPermission("campaign.publish") && (
-        <Card>
-          <CardHeader><CardTitle>{campaign.status === "failed" ? "Publish failed - retry" : "Ready to publish"}</CardTitle></CardHeader>
-          <CardContent className="space-y-3">
+        <section aria-label="Publish" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div className="min-w-0 space-y-1">
+            <h2 className="text-title-section text-foreground">{campaign.status === "failed" ? "Publish failed - retry" : "Ready to publish"}</h2>
             {campaign.last_publish_error && (
-              <p className="text-sm text-red-700 dark:text-red-400">
+              <p className="text-sm text-destructive-strong">
                 Last error: {(campaign.last_publish_error as { message?: string })?.message || "Unknown error"}
               </p>
             )}
             {liveReadiness?.ready && issues?.length === 0 && (
-              <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" /> Ready to publish.</p>
+              <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Every check passed. Publishing sends this campaign to Meta.</p>
             )}
-            <Button onClick={handlePublish} disabled={!liveReadiness?.ready || publishing} className="w-full">
-              {publishing ? "Publishing..." : "Publish to Meta"}
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+          <Button onClick={handlePublish} disabled={!liveReadiness?.ready || publishing} className="shrink-0">
+            {publishing ? "Publishing..." : "Publish to Meta"}
+          </Button>
+        </section>
       )}
 
       <Tabs defaultValue="overview">
-        <TabsList>
+        <TabsList className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="creative">Creative</TabsTrigger>
           <TabsTrigger value="journey">Journey</TabsTrigger>
@@ -307,43 +345,37 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <Card>
-            <CardContent className="grid gap-4 p-6 sm:grid-cols-2 lg:grid-cols-3">
-              <div><p className="text-xs text-muted-foreground">Campaign name</p><p className="text-sm font-medium">{campaign.name}</p></div>
-              <div><p className="text-xs text-muted-foreground">Objective</p><p className="text-sm font-medium">{objectiveOption?.label || campaign.objective}</p></div>
-              <div><p className="text-xs text-muted-foreground">Status</p><p className="text-sm font-medium"><CampaignLifecycleBadge state={presentation} /></p></div>
-              <div><p className="text-xs text-muted-foreground">Ad account</p><p className="text-sm font-medium">{campaign.workspace_meta_ad_accounts?.name || campaign.workspace_meta_ad_accounts?.ad_account_id || campaign.ad_account_id}</p></div>
-              <div><p className="text-xs text-muted-foreground">Budget</p><p className="text-sm font-medium">{formatMoney(budget, campaign.currency)} ({campaign.budget_type})</p></div>
-              <div>
-                <p className="text-xs text-muted-foreground">Schedule</p>
-                <p className="text-sm font-medium">
-                  {startsNow ? "Start now (immediate)" : scheduleStartLabel}
-                  {scheduleEndLabel ? ` → ${scheduleEndLabel}` : startsNow ? "" : " → ongoing"}
-                </p>
-                {!startsNow && <p className="text-xs text-muted-foreground">{workspaceTimezone}</p>}
-                {startTooCloseOrPast && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-                    <CalendarClock className="h-3.5 w-3.5" /> Scheduled start time is too close or has passed.
-                    {canEditSchedule && <Link to={editLink("startAt")} className="underline underline-offset-2">Edit schedule</Link>}
-                  </span>
-                )}
-              </div>
-              <div><p className="text-xs text-muted-foreground">Audience</p><p className="text-sm font-medium">{audienceSummary}</p></div>
-              <div><p className="text-xs text-muted-foreground">Destination</p><p className="text-sm font-medium">{DESTINATION_TYPE_LABELS[campaign.destination_type as DestinationType] || campaign.destination_type}{destinationDetail ? ` — ${destinationDetail}` : ""}</p></div>
-              <div><p className="text-xs text-muted-foreground">Facebook Page</p><p className="text-sm font-medium">{campaign.workspace_facebook_pages?.page_name || "-"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Instagram</p><p className="text-sm font-medium">{campaign.workspace_instagram_accounts?.username ? `@${campaign.workspace_instagram_accounts.username}` : "-"}</p></div>
-              {campaign.destination_type === "whatsapp" && (
-                <div><p className="text-xs text-muted-foreground">WhatsApp destination</p><p className="text-sm font-medium">{whatsappNumber?.display_phone_number || whatsappNumber?.verified_name || "-"}</p></div>
+          <dl className="grid gap-x-6 gap-y-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-3">
+            <Field label="Objective">{objectiveOption?.label || campaign.objective}</Field>
+            <Field label="Status"><CampaignLifecycleBadge state={presentation} /></Field>
+            <Field label="Ad account">{campaign.workspace_meta_ad_accounts?.name || campaign.workspace_meta_ad_accounts?.ad_account_id || campaign.ad_account_id}</Field>
+            <Field label="Budget">{formatMoney(budget, campaign.currency)} <span className="font-normal text-muted-foreground">({campaign.budget_type})</span></Field>
+            <Field label="Schedule">
+              {startsNow ? "Start now (immediate)" : scheduleStartLabel}
+              {scheduleEndLabel ? ` → ${scheduleEndLabel}` : startsNow ? "" : " → ongoing"}
+              {!startsNow && <span className="block text-xs font-normal text-muted-foreground">{workspaceTimezone}</span>}
+              {startTooCloseOrPast && (
+                <span className="mt-1 flex flex-wrap items-center gap-1 text-xs font-normal text-warning">
+                  <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" /> Scheduled start time is too close or has passed.
+                  {canEditSchedule && <Link to={editLink("startAt")} className="font-medium underline underline-offset-2">Edit schedule</Link>}
+                </span>
               )}
-              <div><p className="text-xs text-muted-foreground">Meta campaign ID</p><p className="text-sm font-medium">{campaign.external_campaign_id || "Not published yet"}</p></div>
-              <div><p className="text-xs text-muted-foreground">Created</p><p className="text-sm font-medium">{calendarDateLabel(campaign.created_at, workspaceTimezone)}</p></div>
-              <div><p className="text-xs text-muted-foreground">Last updated</p><p className="text-sm font-medium">{calendarDateLabel(campaign.updated_at, workspaceTimezone)}</p></div>
-            </CardContent>
-          </Card>
+            </Field>
+            <Field label="Audience">{audienceSummary}</Field>
+            <Field label="Destination">{DESTINATION_TYPE_LABELS[campaign.destination_type as DestinationType] || campaign.destination_type}{destinationDetail ? ` — ${destinationDetail}` : ""}</Field>
+            <Field label="Facebook Page">{campaign.workspace_facebook_pages?.page_name || "-"}</Field>
+            <Field label="Instagram">{campaign.workspace_instagram_accounts?.username ? `@${campaign.workspace_instagram_accounts.username}` : "-"}</Field>
+            {campaign.destination_type === "whatsapp" && (
+              <Field label="WhatsApp destination">{whatsappNumber?.display_phone_number || whatsappNumber?.verified_name || "-"}</Field>
+            )}
+            <Field label="Meta campaign ID">{campaign.external_campaign_id || "Not published yet"}</Field>
+            <Field label="Created">{calendarDateLabel(campaign.created_at, workspaceTimezone)}</Field>
+            <Field label="Last updated">{calendarDateLabel(campaign.updated_at, workspaceTimezone)}</Field>
+          </dl>
         </TabsContent>
 
         <TabsContent value="creative" className="mt-4">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">The media and copy this campaign will run.</p>
             {isEditableCampaign(campaign) && hasPermission("campaign.edit") && (
               <Button asChild variant="outline" size="sm">
@@ -352,8 +384,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             )}
           </div>
           {creative ? (
-            <Card>
-              <CardContent className="flex flex-col gap-4 p-6 sm:flex-row">
+            <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:p-5">
                 {creative.content_media_assets && (
                   <div className="shrink-0">
                     <MediaPreview storagePath={creative.content_media_assets.storage_path} alt={creative.content_media_assets.title} className="h-32 w-32 rounded-md object-cover" />
@@ -365,7 +396,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                   <p><span className="text-muted-foreground">Primary text:</span> {creative.primary_text}</p>
                   {creative.description && <p><span className="text-muted-foreground">Description:</span> {creative.description}</p>}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Badge variant="outline">{creative.cta || "No CTA"}</Badge>
+                    <StatusPill tone="neutral" dot={false}>{creative.cta || "No CTA"}</StatusPill>
                     {campaign.destination_type === "website" && creative.destination_url && (
                       <span className="truncate text-xs text-muted-foreground">{creative.destination_url}</span>
                     )}
@@ -374,10 +405,9 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                     )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+            </div>
           ) : (
-            <EmptyState icon={AlertTriangle} title="No creative" description="This campaign has no creative selected yet." />
+            <EmptyState icon={AlertTriangle} title="No creative" description="This campaign has no creative selected yet." className="rounded-xl border border-border bg-card" />
           )}
         </TabsContent>
 
@@ -385,81 +415,112 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           <CampaignJourney campaignId={campaignId} />
         </TabsContent>
 
-        <TabsContent value="performance" className="mt-4 space-y-3">
-          {performance && (
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm">Conversions (all time, last-touch attribution)</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-4 gap-3 text-center text-sm">
-                <div><p className="text-lg font-semibold">{performance.conversations}</p><p className="text-xs text-muted-foreground">Conversations</p></div>
-                <div><p className="text-lg font-semibold">{performance.leads}</p><p className="text-xs text-muted-foreground">Leads</p></div>
-                <div><p className="text-lg font-semibold">{performance.opportunities}</p><p className="text-xs text-muted-foreground">Opportunities</p></div>
-                <div><p className="text-lg font-semibold">{performance.customers}</p><p className="text-xs text-muted-foreground">Customers</p></div>
-              </CardContent>
-              {canSeeRevenue && (
-                <CardContent className="grid grid-cols-2 gap-3 border-t pt-3 text-center text-sm">
-                  <div><p className="text-lg font-semibold">{formatMoneyByCurrency(performance.revenue, workspaceCurrency)}</p><p className="text-xs text-muted-foreground">Attributed revenue</p></div>
-                  <div><p className="text-lg font-semibold">{formatRoas(computeRoas(performance.spend_minor, performance.currency, performance.revenue))}</p><p className="text-xs text-muted-foreground">ROAS</p></div>
-                </CardContent>
-              )}
-            </Card>
-          )}
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">Meta insights, synced automatically every 30 minutes while active.</p>
-            {hasPermission("campaign.metrics.view") && campaign.external_campaign_id && (
-              <Button variant="outline" size="sm" onClick={handleRefreshMetrics} disabled={refreshingMetrics}>
-                <RefreshCw className={`mr-2 h-4 w-4 ${refreshingMetrics ? "animate-spin" : ""}`} /> Refresh
-              </Button>
+        <TabsContent value="performance" className="mt-4 space-y-4">
+          <section aria-labelledby="conversions-heading" className="space-y-2">
+            <h2 id="conversions-heading" className="text-label text-muted-foreground">Conversions · all time, last-touch attribution</h2>
+            {performanceError ? (
+              <p className="rounded-xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground">Couldn't load conversions for this campaign right now.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                {([
+                  ["Conversations", performance?.conversations],
+                  ["Leads", performance?.leads],
+                  ["Opportunities", performance?.opportunities],
+                  ["Customers", performance?.customers],
+                ] as const).map(([label, n]) => (
+                  <Metric key={label} label={label} state={n == null ? { kind: "no_data", note: "Not available yet" } : n ? { kind: "value", value: String(n) } : { kind: "zero", note: "None attributed yet" }} />
+                ))}
+                {canSeeRevenue && performance && (
+                  <>
+                    <Metric label="Attributed revenue" state={{ kind: "value", value: formatMoneyByCurrency(performance.revenue, workspaceCurrency) }} />
+                    <Metric label="ROAS" state={{ kind: "value", value: formatRoas(computeRoas(performance.spend_minor, performance.currency, performance.revenue)) }} />
+                  </>
+                )}
+              </div>
             )}
-          </div>
-          {metricsLoading ? (
-            <div className="h-32 animate-pulse rounded-lg bg-muted" />
-          ) : !metrics?.length ? (
-            <EmptyState icon={BarChart3} title="No campaign data available yet" description="Performance data will appear after Meta begins delivering your ads." />
-          ) : (
-            <Card>
-              <CardContent className="overflow-x-auto p-0">
-                <table className="w-full text-sm">
-                  <thead className="border-b text-left text-xs text-muted-foreground">
+          </section>
+
+          <section aria-labelledby="insights-heading" className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 id="insights-heading" className="text-label text-muted-foreground">Meta insights</h2>
+                <p className="text-xs text-muted-foreground">Synced automatically every 30 minutes while active.</p>
+              </div>
+              {hasPermission("campaign.metrics.view") && campaign.external_campaign_id && (
+                <Button variant="outline" size="sm" onClick={handleRefreshMetrics} disabled={refreshingMetrics}>
+                  <RefreshCw className={cn(refreshingMetrics && "animate-spin")} aria-hidden="true" /> Refresh
+                </Button>
+              )}
+            </div>
+            {metricsLoading ? (
+              <div className="h-32 animate-pulse rounded-xl bg-muted" />
+            ) : metricsQuery.isError ? (
+              <EmptyState
+                icon={AlertTriangle}
+                title="Couldn't load Meta insights"
+                description="Your campaign data is safe - this is only a display problem. Try again."
+                action={<Button variant="outline" onClick={() => void metricsQuery.refetch()}>Try again</Button>}
+                className="rounded-xl border border-border bg-card"
+              />
+            ) : !metrics?.length ? (
+              <EmptyState
+                icon={BarChart3}
+                title={campaign.external_campaign_id ? "No campaign data available yet" : "No data until it's published"}
+                description={campaign.external_campaign_id ? "Performance data will appear after Meta begins delivering your ads." : "Meta reports spend, reach and clicks once this campaign is published and delivering."}
+                className="rounded-xl border border-border bg-card"
+              />
+            ) : (
+              <div className="relative overflow-x-auto rounded-xl border border-border bg-card">
+                <table className="w-full min-w-[40rem] text-sm tabular-nums">
+                  <thead className="border-b border-border bg-background/60 text-left text-overline uppercase text-muted-foreground">
                     <tr>
-                      <th className="p-3">Date</th><th className="p-3">Spend</th><th className="p-3">Impressions</th><th className="p-3">Reach</th><th className="p-3">Clicks</th><th className="p-3">CTR</th><th className="p-3">CPC</th><th className="p-3">Results</th>
+                      {["Date", "Spend", "Impressions", "Reach", "Clicks", "CTR", "CPC", "Results"].map((h) => <th key={h} scope="col" className="px-3 py-2 font-semibold">{h}</th>)}
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="divide-y divide-border">
                     {metrics.map((m) => (
-                      <tr key={m.id} className="border-b last:border-0">
-                        <td className="p-3">{m.date_start}</td>
-                        <td className="p-3">{formatMoney(m.spend_minor_units, m.currency)}</td>
-                        <td className="p-3">{m.impressions.toLocaleString()}</td>
-                        <td className="p-3">{m.reach.toLocaleString()}</td>
-                        <td className="p-3">{m.clicks.toLocaleString()}</td>
-                        <td className="p-3">{m.ctr != null ? `${m.ctr.toFixed(2)}%` : "-"}</td>
-                        <td className="p-3">{formatMoney(m.cpc_minor_units, m.currency)}</td>
-                        <td className="p-3">{m.results ?? "-"}</td>
+                      <tr key={m.id}>
+                        <th scope="row" className="px-3 py-2.5 text-left font-normal">{m.date_start}</th>
+                        <td className="px-3 py-2.5">{formatMoney(m.spend_minor_units, m.currency)}</td>
+                        <td className="px-3 py-2.5">{m.impressions.toLocaleString()}</td>
+                        <td className="px-3 py-2.5">{m.reach.toLocaleString()}</td>
+                        <td className="px-3 py-2.5">{m.clicks.toLocaleString()}</td>
+                        <td className="px-3 py-2.5">{m.ctr != null ? `${m.ctr.toFixed(2)}%` : "-"}</td>
+                        <td className="px-3 py-2.5">{formatMoney(m.cpc_minor_units, m.currency)}</td>
+                        <td className="px-3 py-2.5">{m.results ?? "-"}</td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot>
+                  <tfoot className="border-t border-border">
                     <tr className="font-medium">
-                      <td className="p-3">Total</td>
-                      <td className="p-3">{formatMoney(totalSpend, metrics[0]?.currency || campaign.currency)}</td>
+                      <th scope="row" className="px-3 py-2.5 text-left">Total</th>
+                      <td className="px-3 py-2.5">{formatMoney(totalSpend, metrics[0]?.currency || campaign.currency)}</td>
                       <td colSpan={6} />
                     </tr>
                   </tfoot>
                 </table>
-              </CardContent>
-            </Card>
-          )}
+              </div>
+            )}
+          </section>
         </TabsContent>
 
         <TabsContent value="activity" className="mt-4">
-          {!activity?.length ? (
-            <EmptyState icon={AlertTriangle} title="No activity yet" description="Actions taken on this campaign will appear here." />
+          {activityQuery.isError ? (
+            <EmptyState
+              icon={AlertTriangle}
+              title="Couldn't load activity"
+              description="Something went wrong fetching this campaign's history. Try again."
+              action={<Button variant="outline" onClick={() => void activityQuery.refetch()}>Try again</Button>}
+              className="rounded-xl border border-border bg-card"
+            />
+          ) : !activity?.length ? (
+            <EmptyState icon={History} title="No activity yet" description="Actions taken on this campaign will appear here." className="rounded-xl border border-border bg-card" />
           ) : (
-            <ul className="space-y-2">
+            <ul className="divide-y divide-border rounded-xl border border-border bg-card">
               {activity.map((a) => (
-                <li key={a.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                  <span>{a.action.replace(/_/g, " ")}</span>
-                  <span className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</span>
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-4 py-3 text-sm">
+                  <span className="first-letter:uppercase">{a.action.replace(/_/g, " ")}</span>
+                  <time dateTime={a.created_at} className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</time>
                 </li>
               ))}
             </ul>

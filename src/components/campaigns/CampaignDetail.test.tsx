@@ -15,6 +15,8 @@ const { navigateMock, mocks } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   mocks: {
     campaign: null as Record<string, unknown> | null,
+    campaignError: false,
+    metricsError: false,
     checkCampaignReadiness: vi.fn(),
     syncCampaignReviewStatus: vi.fn(),
     duplicateCampaignDraft: vi.fn(),
@@ -31,10 +33,12 @@ vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ currentWorkspaceId: "works
 vi.mock("@/hooks/useWorkspaceCurrency", () => ({ useWorkspaceCurrency: () => "ZAR" }));
 vi.mock("@/hooks/useWorkspaceTimezone", () => ({ useWorkspaceTimezone: () => "Africa/Johannesburg" }));
 vi.mock("@/hooks/useIntegrations", () => ({ useAllWhatsAppNumbers: () => ({ data: [] }) }));
-vi.mock("@/hooks/useAdCampaignMetrics", () => ({ useAdCampaignMetrics: () => ({ data: [], isLoading: false }) }));
+vi.mock("@/hooks/useAdCampaignMetrics", () => ({
+  useAdCampaignMetrics: () => ({ data: mocks.metricsError ? undefined : [], isLoading: false, isError: mocks.metricsError, refetch: vi.fn() }),
+}));
 vi.mock("@/hooks/useAnalytics", () => ({ useSingleCampaignPerformance: () => ({ data: null }) }));
 vi.mock("@/hooks/useAdCampaign", () => ({
-  useAdCampaign: () => ({ data: mocks.campaign, isLoading: false }),
+  useAdCampaign: () => ({ data: mocks.campaignError ? undefined : mocks.campaign, isLoading: false, isError: mocks.campaignError, refetch: vi.fn() }),
   useCampaignActivity: () => ({ data: [] }),
 }));
 vi.mock("@/components/content/MediaPreview", () => ({
@@ -93,6 +97,8 @@ beforeEach(() => {
   mocks.deleteCampaignDraft.mockReset().mockResolvedValue(undefined);
   mocks.publishCampaign.mockReset().mockResolvedValue({ ok: true });
   mocks.campaign = makeCampaign();
+  mocks.campaignError = false;
+  mocks.metricsError = false;
 });
 afterEach(cleanup);
 
@@ -260,5 +266,35 @@ describe("CampaignDetail - actions are lifecycle-appropriate", () => {
     await waitFor(() => expect(mocks.duplicateCampaignDraft).toHaveBeenCalledWith("campaign-1"));
     expect(mocks.publishCampaign).not.toHaveBeenCalled();
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/app/campaigns/campaign-2/edit"));
+  });
+});
+
+describe("CampaignDetail - honest error states", () => {
+  it("a failed campaign fetch shows a retry state, not 'Campaign not found'", () => {
+    mocks.campaignError = true;
+    renderDetail();
+    expect(screen.getByText("Couldn't load this campaign")).toBeInTheDocument();
+    expect(screen.queryByText("Campaign not found")).not.toBeInTheDocument();
+  });
+
+  it("a missing campaign still says not found", () => {
+    mocks.campaign = null;
+    renderDetail();
+    expect(screen.getByText("Campaign not found")).toBeInTheDocument();
+  });
+
+  it("a Meta insights load error is not shown as 'No campaign data available yet'", () => {
+    mocks.metricsError = true;
+    mocks.campaign = makeCampaign({ status: "active", external_campaign_id: "236" });
+    renderDetail();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Performance" }), { button: 0 });
+    expect(screen.getByText("Couldn't load Meta insights")).toBeInTheDocument();
+    expect(screen.queryByText("No campaign data available yet")).not.toBeInTheDocument();
+  });
+
+  it("an unpublished campaign explains insights arrive after publishing", () => {
+    renderDetail();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Performance" }), { button: 0 });
+    expect(screen.getByText("No data until it's published")).toBeInTheDocument();
   });
 });

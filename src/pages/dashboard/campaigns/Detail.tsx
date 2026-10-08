@@ -1,16 +1,14 @@
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useParams } from "react-router-dom";
 import { CampaignDetail } from "@/components/campaigns/CampaignDetail";
+import { BackLink } from "./BackLink";
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   if (!id) return null;
 
   return (
-    <div className="space-y-6">
-      <Button variant="ghost" size="sm" onClick={() => navigate("/app/campaigns")}><ArrowLeft className="mr-2 h-4 w-4" /> Campaigns</Button>
+    <div className="mx-auto w-full max-w-[1440px] space-y-3">
+      <BackLink to="/app/campaigns">Campaigns</BackLink>
       <CampaignDetail campaignId={id} />
     </div>
   );

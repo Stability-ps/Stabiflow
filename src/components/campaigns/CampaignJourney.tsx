@@ -49,9 +49,9 @@ function StageColumn({ label, count, costLabel, rateLabel, previousLabel, bands 
       {rateLabel !== null && <p className="text-[11px] text-muted-foreground">{rateLabel}{previousLabel ? ` of ${previousLabel}` : ""}</p>}
       {bands && (bands.direct > 0 || bands.inferred > 0) && (
         <p className="mt-1 text-[10px] text-muted-foreground">
-          <span className="text-emerald-700 dark:text-emerald-400">{bands.direct} direct</span>
+          <span className="text-success">{bands.direct} direct</span>
           {" · "}
-          <span className="text-amber-700 dark:text-amber-400">{bands.inferred} inferred</span>
+          <span className="text-warning">{bands.inferred} inferred</span>
         </p>
       )}
     </div>
@@ -79,7 +79,7 @@ function BreakdownTable({ title, rows, stageTotals, nameFor }: {
   };
   const anyRemainder = rem.conversations || rem.leads || rem.opportunities || rem.customers;
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="relative overflow-x-auto rounded-md border">
       <table className="w-full text-sm">
         <caption className="sr-only">{title} — model-credited conversion breakdown</caption>
         <thead className="border-b bg-muted/40 text-left text-xs uppercase text-muted-foreground">

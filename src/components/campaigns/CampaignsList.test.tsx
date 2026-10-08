@@ -5,13 +5,18 @@
 // AUTHENTICATED user to the public landing page - looking exactly like an
 // unexpected logout, even though the session/workspace were untouched.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { CampaignsList } from "./CampaignsList";
 
 const { navigateMock, state } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
-  state: { campaigns: [] as Array<Record<string, unknown>> },
+  state: {
+    campaigns: [] as Array<Record<string, unknown>>,
+    campaignsError: false,
+    adAccounts: [] as Array<Record<string, unknown>>,
+    adAccountsError: false,
+  },
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -34,38 +39,102 @@ const baseCampaign = {
   workspace_meta_ad_accounts: { name: "StabiFlow Insights", ad_account_id: "act_123" },
 };
 
-vi.mock("@/hooks/useAdCampaigns", () => ({ useAdCampaigns: () => ({ data: state.campaigns, isLoading: false }) }));
+vi.mock("@/hooks/useAdCampaigns", () => ({
+  useAdCampaigns: () => (state.campaignsError
+    ? { data: undefined, isLoading: false, isError: true, refetch: vi.fn() }
+    : { data: state.campaigns, isLoading: false, isError: false, refetch: vi.fn() }),
+}));
 vi.mock("@/hooks/useMetaAccountResources", () => ({
-  useMetaAdAccounts: () => ({ data: [mockAdAccount], isLoading: false }),
+  useMetaAdAccounts: () => (state.adAccountsError
+    ? { data: undefined, isLoading: false, isError: true, refetch: vi.fn() }
+    : { data: state.adAccounts, isLoading: false, isError: false, refetch: vi.fn() }),
 }));
 
 function renderList() {
   return render(<MemoryRouter><CampaignsList /></MemoryRouter>);
 }
 
+function reset() {
+  state.campaigns = [{ ...baseCampaign }];
+  state.campaignsError = false;
+  state.adAccounts = [mockAdAccount];
+  state.adAccountsError = false;
+}
+
 describe("CampaignsList navigation", () => {
-  beforeEach(() => { state.campaigns = [{ ...baseCampaign }]; });
+  beforeEach(reset);
   afterEach(() => {
     cleanup();
     navigateMock.mockReset();
   });
 
-  it("REGRESSION: clicking an existing campaign navigates to the canonical /app/campaigns/:id route, not the stale /campaigns/:id", () => {
+  it("REGRESSION: an existing campaign links to the canonical /app/campaigns/:id route, not the stale /campaigns/:id", () => {
     renderList();
-    fireEvent.click(screen.getByText("Splash"));
-    expect(navigateMock).toHaveBeenCalledWith("/app/campaigns/campaign-1");
-    expect(navigateMock).not.toHaveBeenCalledWith("/campaigns/campaign-1");
+    const link = screen.getByRole("link", { name: /Splash/ });
+    expect(link).toHaveAttribute("href", "/app/campaigns/campaign-1");
   });
 
-  it("New Campaign and other actions also use canonical /app routes", () => {
+  it("New campaign also uses the canonical /app route", () => {
     renderList();
-    fireEvent.click(screen.getByRole("button", { name: /New Campaign/i }));
-    expect(navigateMock).toHaveBeenCalledWith("/app/campaigns/new");
+    expect(screen.getByRole("link", { name: /New campaign/i })).toHaveAttribute("href", "/app/campaigns/new");
+  });
+});
+
+describe("CampaignsList - honest empty and error states", () => {
+  beforeEach(reset);
+  afterEach(cleanup);
+
+  it("a campaigns load error shows a retry state, never 'No campaigns yet' or 'connect an ad account'", () => {
+    state.campaignsError = true;
+    renderList();
+    expect(screen.getByText("Couldn't load campaigns")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByText("No campaigns yet")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Connect a Meta ad account/)).not.toBeInTheDocument();
+  });
+
+  it("no campaigns and no ad account asks to connect one", () => {
+    state.campaigns = [];
+    state.adAccounts = [];
+    renderList();
+    expect(screen.getByText("Connect a Meta ad account")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Integrations" })).toHaveAttribute("href", "/app/integrations");
+  });
+
+  it("no campaigns with a connected account offers New campaign", () => {
+    state.campaigns = [];
+    renderList();
+    expect(screen.getByText("No campaigns yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /New campaign/i })).toBeInTheDocument();
+  });
+
+  it("existing campaigns stay visible when the ad account is disconnected, with a reconnect notice", () => {
+    state.adAccounts = [];
+    renderList();
+    expect(screen.getByRole("link", { name: /Splash/ })).toBeInTheDocument();
+    expect(screen.getByText(/No Meta ad account is connected/)).toBeInTheDocument();
+  });
+
+  it("an ad-account lookup error is not reported as 'not connected'", () => {
+    state.adAccountsError = true;
+    renderList();
+    expect(screen.getByRole("link", { name: /Splash/ })).toBeInTheDocument();
+    expect(screen.getByText(/couldn't check your Meta ad account/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No Meta ad account is connected/)).not.toBeInTheDocument();
+  });
+
+  it("summarises running and attention counts in the header and tiles", () => {
+    state.campaigns = [
+      { ...baseCampaign, id: "a", status: "active", external_campaign_id: "1" },
+      { ...baseCampaign, id: "b", name: "Broken", status: "failed", external_campaign_id: null },
+    ];
+    renderList();
+    expect(screen.getByText(/1 running · 1 needs attention/)).toBeInTheDocument();
   });
 });
 
 describe("CampaignsList - lifecycle badge is consistent with the detail page", () => {
-  beforeEach(() => { state.campaigns = [{ ...baseCampaign }]; });
+  beforeEach(reset);
   afterEach(cleanup);
 
   it("a published active campaign shows 'Active'", () => {

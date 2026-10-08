@@ -786,7 +786,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
           <CardHeader><CardTitle>Review</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {validationIssues.length > 0 && (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-sm text-warning">
                 <p className="font-medium">This draft is incomplete.</p>
                 <ul className="mt-2 list-disc space-y-1 pl-5">
                   {validationIssues.map((issue) => (
@@ -855,14 +855,14 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
                   </Button>
                 </div>
                 {issues && issues.length === 0 && (
-                  <p className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-400"><CheckCircle2 className="h-4 w-4" /> Ready to publish.</p>
+                  <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 className="h-4 w-4" /> Ready to publish.</p>
                 )}
                 {issues && issues.length > 0 && (
                   <ul className="space-y-2">
                     {issues.map((issue, i) => {
                       const presentation = presentReadinessIssue(issue);
                       return (
-                        <li key={i} className={`flex flex-wrap items-start justify-between gap-2 rounded-md border p-2 text-sm ${issue.severity === "error" ? "border-red-200 text-red-700 dark:border-red-900 dark:text-red-400" : "border-amber-200 text-amber-700 dark:border-amber-900 dark:text-amber-400"}`}>
+                        <li key={i} className={`flex flex-wrap items-start justify-between gap-2 rounded-lg px-3 py-2 text-sm ${issue.severity === "error" ? "bg-destructive-soft text-destructive-strong" : "bg-warning-soft text-warning"}`}>
                           <span className="flex items-start gap-2">
                             {issue.severity === "error" ? <XCircle className="mt-0.5 h-4 w-4 shrink-0" /> : <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
                             {presentation.message}
@@ -888,7 +888,7 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
 
                 {publishResult && (
                   <div className="space-y-2 rounded-lg border p-3">
-                    <p className={`text-sm font-medium ${publishResult.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
+                    <p className={`text-sm font-medium ${publishResult.ok ? "text-success" : "text-destructive-strong"}`}>
                       {publishResult.ok ? "Published successfully" : publishResult.outcome === "partial" ? "Partially published" : publishResult.message || "Publish failed"}
                     </p>
                     {publishResult.steps && (
