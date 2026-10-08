@@ -1,11 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { MoreVertical, Plus, Workflow } from "lucide-react";
+import { AlertTriangle, MoreVertical, Plus, Workflow } from "lucide-react";
 import { WhatsAppContextBanner } from "@/components/whatsapp/WhatsAppContextBanner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill, type StatusTone } from "@/components/ui/status-pill";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EmptyState } from "@/components/EmptyState";
 import { Sheet } from "@/components/ui/sheet";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,6 +22,7 @@ import { AutomationRunsSheet } from "@/pages/dashboard/automations/AutomationRun
 import { GuideHelpLink } from "@/components/guide/GuideHelpLink";
 
 const STATUS_LABEL: Record<AutomationRow["status"], string> = { draft: "Draft", enabled: "Enabled", disabled: "Disabled" };
+const STATUS_TONE: Record<AutomationRow["status"], StatusTone> = { draft: "neutral", enabled: "success", disabled: "neutral" };
 
 // Starter examples for the empty state - every trigger/action pair here is
 // a real type in supabase/functions/_shared/automations/taxonomy.ts, never
@@ -48,7 +52,7 @@ export default function Automations() {
   const automationEntitlement = entitlementQuery.data?.find((e) => e.entitlement_key === "automation_runs");
   const hasAutomationSubscription = automationEntitlement?.enabled === true;
 
-  const { data: automations, isLoading, refetch } = useAutomations(canView ? currentWorkspaceId : null);
+  const { data: automations, isLoading, isError, refetch } = useAutomations(canView ? currentWorkspaceId : null);
 
   // Entered from WhatsApp > Automations: show the "came from WhatsApp"
   // context and narrow the list to conversation/message triggers. Purely a
@@ -66,23 +70,51 @@ export default function Automations() {
   const [pendingTemplate, setPendingTemplate] = useState<AutomationTemplate | null>(null);
   const [runsAutomation, setRunsAutomation] = useState<AutomationRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AutomationRow | null>(null);
+
+  const pageHeader = (action?: ReactNode) => (
+    <header className="flex flex-wrap items-end justify-between gap-3">
+      <div className="min-w-0 max-w-2xl">
+        <h1 className="text-title-page text-foreground">Automations</h1>
+        <p className="mt-1 text-sm text-muted-foreground">When something happens and your conditions match, StabiFlow takes the next step - through the same rules and permissions as doing it yourself.</p>
+        <GuideHelpLink chapter="automations" className="mt-1" />
+      </div>
+      {action}
+    </header>
+  );
+  const shell = (body: ReactNode) => <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">{pageHeader()}{body}</div>;
 
   if (!currentWorkspaceId || isLoading || entitlementQuery.isLoading) {
-    return <div className="h-[70vh] animate-pulse rounded-lg bg-muted" />;
+    return shell(<div className="h-64 animate-pulse rounded-xl bg-muted" role="status" aria-label="Loading automations" />);
   }
 
   if (!canView) {
-    return <EmptyState icon={Workflow} title="Automations" description="You don't have permission to view this workspace's automations. Ask a workspace owner or admin." />;
+    return shell(<EmptyState icon={Workflow} title="No access to automations" description="You don't have permission to view this workspace's automations. Ask a workspace owner or admin." className="rounded-xl border border-border bg-card" />);
+  }
+
+  // An unreadable entitlement is NOT "not on the plan" - telling a paying
+  // customer to upgrade because a request failed would be wrong.
+  if (entitlementQuery.isError) {
+    return shell(
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't check your plan"
+        description="We couldn't confirm whether Automations are included in your plan. Nothing has changed - try again."
+        action={<Button variant="outline" onClick={() => void entitlementQuery.refetch()}>Try again</Button>}
+        className="rounded-xl border border-border bg-card"
+      />,
+    );
   }
 
   if (!hasAutomationSubscription) {
-    return (
+    return shell(
       <EmptyState
         icon={Workflow}
         title="Unlock Automations"
         description="Automations are included with the Growth plan, with 2,000 runs per month. Upgrade to Growth to start automating."
-        action={<Button size="sm" asChild><a href="/app/billing">View plans</a></Button>}
-      />
+        action={<Button size="sm" asChild><Link to="/app/billing">View plans</Link></Button>}
+        className="rounded-xl border border-border bg-card"
+      />,
     );
   }
 
@@ -101,7 +133,7 @@ export default function Automations() {
   }
 
   async function handleDelete(automation: AutomationRow) {
-    if (!confirm(`Delete "${automation.name}"? This cannot be undone.`)) return;
+    setDeleteTarget(null);
     setBusyId(automation.id);
     try {
       await deleteAutomation(currentWorkspaceId as string, automation.id);
@@ -115,30 +147,28 @@ export default function Automations() {
   }
 
   return (
-    <div className="operational-page flex flex-col">
-      {fromWhatsApp && (
-        <div className="mb-4">
-          <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />
-        </div>
-      )}
-      <div className="operational-header">
-        <div>
-          <p className="operational-section-label">Workflow engine</p><h1 className="operational-title">Automations</h1>
-          <p className="text-sm text-muted-foreground">WHEN a trigger event happens, IF conditions match, THEN run one or more actions - through the same rules and permissions as doing it yourself.</p>
-          <GuideHelpLink chapter="automations" className="mt-1" />
-        </div>
-        {canCreate && (
-          <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> New automation
-          </Button>
-        )}
-      </div>
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+      {fromWhatsApp && <WhatsAppContextBanner label="Showing automations triggered by WhatsApp conversations." />}
+      {pageHeader(canCreate && !isError ? (
+        <Button onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
+          <Plus aria-hidden="true" /> New automation
+        </Button>
+      ) : undefined)}
 
-      {fromWhatsApp && (automations || []).length > 0 && visibleAutomations.length === 0 ? (
+      {isError ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title="Couldn't load automations"
+          description="Something went wrong fetching this workspace's automations. They are still running as configured - try again."
+          action={<Button variant="outline" onClick={() => void refetch()}>Try again</Button>}
+          className="rounded-xl border border-border bg-card"
+        />
+      ) : fromWhatsApp && (automations || []).length > 0 && visibleAutomations.length === 0 ? (
         <EmptyState
           icon={Workflow}
           title="No WhatsApp automations yet"
           description="None of this workspace's automations are triggered by a WhatsApp conversation or message. Create one, or clear the filter to see all automations."
+          className="rounded-xl border border-border bg-card"
         />
       ) : (automations || []).length === 0 ? (
         <EmptyState
@@ -149,7 +179,7 @@ export default function Automations() {
             canCreate ? (
               <div className="flex flex-col items-center gap-3">
                 <Button size="sm" onClick={() => { setEditingAutomation(null); setPendingTemplate(null); setBuilderOpen(true); }}>
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> New automation
+                  <Plus aria-hidden="true" /> New automation
                 </Button>
                 <div>
                   <p className="mb-1.5 text-xs text-muted-foreground">Or start from an example:</p>
@@ -169,30 +199,35 @@ export default function Automations() {
               </div>
             ) : undefined
           }
+          className="rounded-xl border border-border bg-card"
         />
       ) : (
-        <div className="operational-panel">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="border-b bg-muted/50 text-left text-xs uppercase text-muted-foreground">
+            <thead className="border-b border-border text-left text-overline uppercase text-muted-foreground">
               <tr>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Trigger</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium" />
+                <th scope="col" className="px-4 py-2 font-medium">Name</th>
+                <th scope="col" className="hidden px-4 py-2 font-medium sm:table-cell">Trigger</th>
+                <th scope="col" className="px-4 py-2 font-medium">Status</th>
+                <th scope="col" className="w-12 px-2 py-2"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
               {visibleAutomations.map((automation) => (
-                <tr key={automation.id} className="border-b last:border-b-0 hover:bg-muted/40">
-                  <td className="px-4 py-2.5 font-medium">{automation.name}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge variant={automation.status === "enabled" ? "default" : automation.status === "disabled" ? "secondary" : "outline"}>{STATUS_LABEL[automation.status]}</Badge>
+                <tr key={automation.id} className="border-b border-border transition-colors duration-fast last:border-b-0 hover:bg-accent/40">
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-foreground">{automation.name}</p>
+                    {/* Phones: the trigger column is hidden, so say it here. */}
+                    <p className="mt-0.5 text-xs text-muted-foreground sm:hidden">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</p>
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="hidden px-4 py-3 text-muted-foreground sm:table-cell">{EVENT_TYPE_LABELS[automation.trigger_event_type]}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill tone={STATUS_TONE[automation.status] ?? "neutral"}>{STATUS_LABEL[automation.status]}</StatusPill>
+                  </td>
+                  <td className="px-2 py-3 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" disabled={busyId === automation.id}><MoreVertical className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="icon" disabled={busyId === automation.id} aria-label={`Actions for ${automation.name}`}><MoreVertical className="h-4 w-4" aria-hidden="true" /></Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         {canViewRuns && <DropdownMenuItem onClick={() => setRunsAutomation(automation)}>View run history</DropdownMenuItem>}
@@ -202,7 +237,7 @@ export default function Automations() {
                             {automation.status === "enabled" ? "Disable" : "Enable"}
                           </DropdownMenuItem>
                         )}
-                        {canDelete && <DropdownMenuItem onClick={() => handleDelete(automation)} className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>}
+                        {canDelete && <DropdownMenuItem onClick={() => setDeleteTarget(automation)} className="text-destructive focus:text-destructive">Delete</DropdownMenuItem>}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -212,6 +247,19 @@ export default function Automations() {
           </table>
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>This automation stops running and its configuration is removed. This cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteTarget && void handleDelete(deleteTarget)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AutomationBuilderDialog
         workspaceId={currentWorkspaceId}
