@@ -42,13 +42,17 @@ describe("Plans, pricing and entitlements - canonical evaluator", () => {
     await cleanupTenant(B);
   });
 
+  // Catalogue re-synced to production in 9f32fcd: Free carries only usage
+  // allowances (team_seats 1, creative_generations 10, whatsapp_ai_turns 50);
+  // Business Studio full access and website scans are Business/Growth only.
   it("a new workspace gets only the free baseline", async () => {
     const e = await ents(A);
-    expect(e["business_studio.access"].enabled).toBe(true);
-    expect(e["business_studio.access"].source).toBe("free");
+    expect(e["team_seats"]).toMatchObject({ enabled: true, limit_value: 1, source: "free" });
+    expect(e["creative_generations"]).toMatchObject({ enabled: true, limit_value: 10, source: "free" });
+    expect(e["business_studio.access"].enabled).toBe(false);
+    expect(e["website_scans"].enabled).toBe(false);
     expect(e["business_profile.pdf_export"].enabled).toBe(false);
     expect(e["hosted_profile.publish"].enabled).toBe(false);
-    expect(e["business_profile.documents"].limit_value).toBe(1);
   });
 
   it("an incomplete (unpaid) subscription grants nothing", async () => {
@@ -122,23 +126,24 @@ describe("Plans, pricing and entitlements - canonical evaluator", () => {
     await admin.from("workspace_entitlement_overrides").insert({ workspace_id: A.workspaceId, entitlement_key: "hosted_profile.publish", bool_value: true, reason: "pilot customer" });
     expect((await ents(A))["hosted_profile.publish"]).toMatchObject({ enabled: true, source: "override" });
 
-    await admin.from("workspace_entitlement_overrides").insert({ workspace_id: A.workspaceId, entitlement_key: "business_studio.access", bool_value: false, reason: "abuse" });
-    expect((await ents(A))["business_studio.access"].enabled).toBe(false);
+    // Revoke something the Free plan itself grants.
+    await admin.from("workspace_entitlement_overrides").insert({ workspace_id: A.workspaceId, entitlement_key: "creative_generations", bool_value: false, reason: "abuse" });
+    expect((await ents(A))["creative_generations"].enabled).toBe(false);
 
     await admin.from("workspace_entitlement_overrides").update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq("workspace_id", A.workspaceId);
     const e = await ents(A);
-    expect(e["business_studio.access"].enabled).toBe(true);
+    expect(e["creative_generations"]).toMatchObject({ enabled: true, source: "free" });
     expect(e["hosted_profile.publish"].enabled).toBe(false);
   });
 
   it("allowances are consumed atomically and refuse overage", async () => {
-    // free: website_scans = 2 / month
-    const consume = () => admin.rpc("consume_entitlement", { p_workspace_id: B.workspaceId, p_key: "website_scans", p_amount: 1 });
-    expect((await consume()).data).toBe(true);
-    expect((await consume()).data).toBe(true);
-    expect((await consume()).data).toBe(false);
+    // free: creative_generations = 10 / month
+    const consume = (n: number) => admin.rpc("consume_entitlement", { p_workspace_id: B.workspaceId, p_key: "creative_generations", p_amount: n });
+    expect((await consume(9)).data).toBe(true);
+    expect((await consume(1)).data).toBe(true);
+    expect((await consume(1)).data).toBe(false);
     const e = await ents(B);
-    expect(e.website_scans.used).toBe(2);
+    expect(e.creative_generations.used).toBe(10);
   });
 
   it("growth paid usage allowances are finite and atomically enforced", async () => {
@@ -149,7 +154,7 @@ describe("Plans, pricing and entitlements - canonical evaluator", () => {
 
     const e = await ents(A);
     expect(e.creative_generations.limit_value).toBe(100);
-    expect(e.automation_runs.limit_value).toBe(1000);
+    expect(e.automation_runs.limit_value).toBe(2000); // 20261023060000_automation_runs_allowances
     expect(e.whatsapp_ai_turns.limit_value).toBe(500);
 
     const { data: consumed } = await admin.rpc("consume_entitlement", { p_workspace_id: A.workspaceId, p_key: "creative_generations", p_amount: 100 });

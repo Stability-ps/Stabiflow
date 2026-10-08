@@ -4,7 +4,7 @@
 // campaign.publish/campaign.pause/campaign.delete are what ad_campaigns
 // RLS actually checks, not has_workspace_role().
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, enableModules } from "./helpers";
 import { seedFacebookPage, seedMediaAsset, seedWorkspaceIntegration } from "./contentHelpers";
 import { seedAdCampaign, seedAdCreative, seedMetaAdAccount } from "./campaignHelpers";
 
@@ -22,6 +22,8 @@ describe("Campaigns module permission matrix (campaign.create / campaign.publish
 
   beforeAll(async () => {
     workspace = await createTestTenant("campaign-perm-matrix");
+    // Plan-gated since 20261025060000 - this suite tests permissions, not plans.
+    await enableModules(workspace.workspaceId, "module.campaigns");
     integrationId = await seedWorkspaceIntegration(workspace.workspaceId);
     adAccountId = await seedMetaAdAccount(workspace.workspaceId, integrationId);
     pageId = await seedFacebookPage(workspace.workspaceId, integrationId);

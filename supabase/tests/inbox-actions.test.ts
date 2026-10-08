@@ -6,7 +6,7 @@
 // in their OWN workspace must never act on a conversation_id borrowed from
 // another workspace).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 const ACTIONS_URL = `${SUPABASE_URL}/functions/v1/inbox-actions`;
@@ -27,7 +27,9 @@ describe("Inbox staff actions (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("inbox-actions");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     otherWorkspace = await createTestTenant("inbox-actions-other");
+    await enableModules(otherWorkspace.workspaceId, ...ALL_MODULES);
     const number = await seedWhatsAppSetup(workspace.workspaceId);
     numberId = number.id;
     await admin.rpc("set_workspace_integration_secret", {

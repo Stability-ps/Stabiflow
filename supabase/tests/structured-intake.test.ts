@@ -7,7 +7,7 @@
 // set_intake_answer action, and every ask_info send runs against a fake
 // token so it can only ever hit the provider FAILURE path.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 const INTAKE_URL = `${SUPABASE_URL}/functions/v1/intake-actions`;
@@ -67,7 +67,9 @@ describe("Phase 3 - structured intake + Ask Info", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("intake");
+    await enableModules(ws.workspaceId, ...ALL_MODULES);
     other = await createTestTenant("intake-other");
+    await enableModules(other.workspaceId, ...ALL_MODULES);
 
     const number = await seedWhatsAppSetup(ws.workspaceId);
     numberId = number.id;
@@ -134,6 +136,7 @@ describe("Phase 3 - structured intake + Ask Info", () => {
 
   it("create_schema makes the first schema the default; a field key cannot be changed once created", async () => {
     const fresh = await createTestTenant("intake-crud");
+    await enableModules(fresh.workspaceId, ...ALL_MODULES);
     const t = (await fresh.client.auth.getSession()).data.session!.access_token;
     const created = await callIntake(t, { workspace_id: fresh.workspaceId, action: "create_schema", name: "First" });
     expect(created.status).toBe(200);
@@ -257,6 +260,7 @@ describe("Phase 3 - structured intake + Ask Info", () => {
 
   it("a conversation in a workspace with no active schema keeps working (ask_info reports no schema)", async () => {
     const bare = await createTestTenant("intake-bare");
+    await enableModules(bare.workspaceId, ...ALL_MODULES);
     const bareNumber = await seedWhatsAppSetup(bare.workspaceId);
     const t = (await bare.client.auth.getSession()).data.session!.access_token;
     const conv = await seedInboxConversation(bare.workspaceId, bareNumber.id, { phone_number: "+27831240007", wa_id: "27831240007" });

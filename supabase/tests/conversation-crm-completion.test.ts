@@ -10,7 +10,7 @@
 // structurally.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 import { seedLead, seedPipeline } from "./leadsHelpers";
 
@@ -73,7 +73,9 @@ describe("Conversation -> CRM completion + remediation (Phase 2)", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("crm-completion");
+    await enableModules(ws.workspaceId, ...ALL_MODULES);
     other = await createTestTenant("crm-completion-other");
+    await enableModules(other.workspaceId, ...ALL_MODULES);
     numberId = (await seedWhatsAppSetup(ws.workspaceId)).id;
     ownerToken = await tokenFor(ws);
 

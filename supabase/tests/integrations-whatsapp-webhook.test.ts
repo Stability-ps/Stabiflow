@@ -10,7 +10,7 @@
 //   - workspace A cannot repair / read-check workspace B's integration
 //   - no outbound WhatsApp message is ever sent
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedWorkspaceIntegration, seedWhatsAppNumber } from "./integrationHelpers";
 
 const TEST_HARNESS_SECRET = getTestEnv("INTEGRATIONS_TEST_HARNESS_SECRET");
@@ -46,7 +46,9 @@ describe("WhatsApp webhook subscription (inbound reliability)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("wa-webhook");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     other = await createTestTenant("wa-webhook-other");
+    await enableModules(other.workspaceId, ...ALL_MODULES);
 
     integrationId = await seedWorkspaceIntegration(workspace.workspaceId, "whatsapp");
     await admin.rpc("set_workspace_integration_secret", { p_integration_id: integrationId, p_secret: "mock-token-for-subscription-tests" });
@@ -90,6 +92,7 @@ describe("WhatsApp webhook subscription (inbound reliability)", () => {
   it("connection-health reports 'unknown' when the integration has NO discovered WABA yet (never a vacuous 'subscribed')", async () => {
     // A fresh workspace: whatsapp integration connected, but zero numbers.
     const bare = await createTestTenant("wa-webhook-bare");
+    await enableModules(bare.workspaceId, ...ALL_MODULES);
     try {
       const bareIntegrationId = await seedWorkspaceIntegration(bare.workspaceId, "whatsapp");
       await admin.rpc("set_workspace_integration_secret", { p_integration_id: bareIntegrationId, p_secret: "mock-token" });

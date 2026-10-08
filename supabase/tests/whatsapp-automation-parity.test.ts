@@ -22,7 +22,7 @@
 // header) or the provider FAILURE path (without it) - never a real message.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, enableModules, type TestTenant, ALL_MODULES } from "./helpers";
 import { seedInboxConversation, seedInboxMessage, seedWhatsAppSetup } from "./inboxHelpers";
 
 const INBOX_URL = `${SUPABASE_URL}/functions/v1/inbox-actions`;
@@ -75,8 +75,10 @@ describe("Phase 8 - WhatsApp automation parity actions", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("autoparity");
+    await enableModules(ws.workspaceId, ...ALL_MODULES);
     await enableModules(ws.workspaceId, "module.whatsapp", "module.automations");
     other = await createTestTenant("autoparity-other");
+    await enableModules(other.workspaceId, ...ALL_MODULES);
     await enableModules(other.workspaceId, "module.whatsapp", "module.automations");
     const num = await seedWhatsAppSetup(ws.workspaceId);
     numberId = num.id;

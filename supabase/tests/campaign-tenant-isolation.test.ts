@@ -4,7 +4,7 @@
 // content-tenant-isolation.test.ts: genuinely independent authenticated
 // sessions against the actual deployed RLS policies and edge functions.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedFacebookPage, seedMediaAsset, seedWorkspaceIntegration } from "./contentHelpers";
 import { seedAdCampaign, seedAdCreative, seedMetaAdAccount } from "./campaignHelpers";
 
@@ -23,7 +23,9 @@ describe("Campaigns module tenant isolation (release blocker)", () => {
 
   beforeAll(async () => {
     workspaceA = await createTestTenant("campaign-a");
+    await enableModules(workspaceA.workspaceId, ...ALL_MODULES);
     workspaceB = await createTestTenant("campaign-b");
+    await enableModules(workspaceB.workspaceId, ...ALL_MODULES);
     integrationA = await seedWorkspaceIntegration(workspaceA.workspaceId);
     adAccountA = await seedMetaAdAccount(workspaceA.workspaceId, integrationA);
     integrationB = await seedWorkspaceIntegration(workspaceB.workspaceId);

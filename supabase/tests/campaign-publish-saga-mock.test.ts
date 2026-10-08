@@ -13,7 +13,7 @@
 // already exist - none of which the idempotency test above can exercise,
 // since it fails before any provider call is ever attempted.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedFacebookPage, seedMediaAsset, seedWorkspaceIntegration, uploadRealTestObject } from "./contentHelpers";
 import { seedAdCampaign, seedAdCreative, seedMetaAdAccount } from "./campaignHelpers";
 
@@ -36,6 +36,7 @@ describe("Campaign publish saga - mock provider (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("publish-saga-mock");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     integrationId = await seedWorkspaceIntegration(workspace.workspaceId);
     // The mock provider never inspects this value - any string proves
     // token RESOLUTION succeeds (the thing the idempotency test's seed

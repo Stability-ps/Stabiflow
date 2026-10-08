@@ -4,7 +4,7 @@
 // this proves the SAME rank does not imply the SAME integration access
 // (viewer can view; only owner/admin can write).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedWorkspaceIntegration } from "./integrationHelpers";
 
 describe("Integrations permission matrix (release blocker)", () => {
@@ -15,6 +15,7 @@ describe("Integrations permission matrix (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("integrations-perms");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     integrationId = await seedWorkspaceIntegration(workspace.workspaceId);
 
     const viewerUser = await createTestUser("integrations-perms-viewer");

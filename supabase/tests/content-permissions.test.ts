@@ -5,7 +5,7 @@
 // 'media.upload'), not has_workspace_role(), is what content_scheduled_posts
 // and content_media_assets RLS actually checks.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, enableModules } from "./helpers";
 import { seedFacebookPage, seedMediaAsset, seedWorkspaceIntegration } from "./contentHelpers";
 
 describe("Content module permission matrix (content.create / media.upload)", () => {
@@ -18,6 +18,8 @@ describe("Content module permission matrix (content.create / media.upload)", () 
 
   beforeAll(async () => {
     workspace = await createTestTenant("perm-matrix");
+    // Plan-gated since 20261025060000 - this suite tests permissions, not plans.
+    await enableModules(workspace.workspaceId, "module.content");
     const integrationId = await seedWorkspaceIntegration(workspace.workspaceId);
     pageId = await seedFacebookPage(workspace.workspaceId, integrationId);
     const asset = await seedMediaAsset(workspace.workspaceId, workspace.userId);
