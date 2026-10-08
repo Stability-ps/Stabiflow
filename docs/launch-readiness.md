@@ -6,6 +6,23 @@ and the Phase L investigation, kept updated as each item closes. Nothing
 in this document should be read as "already approved" or "already built"
 unless explicitly marked done - see each section's status.
 
+## Current status (2026-10-08, main 3f249b8)
+
+| Item | Priority | Status |
+|---|---|---|
+| Meta App Review / Advanced Access | P0 | **Open - not submitted** (no evidence of a submission in the repo; package ready in `launch-readiness/meta-app-review-package.md`). Owner action. |
+| Meta Business Verification | P0 | **Open** - owner action, precedes `ads_management` for real spend. |
+| Privacy Policy + Terms of Service | P0 | **Built** - `/privacy`, `/terms`, `/data-deletion`; versioned legal documents with durable acceptance and re-consent (3db8160, 396abf6). **Needs legal review** before external customers - AI-drafted text is not legal assurance. |
+| AI / OpenAI data-use disclosure | P0 | **Built** - Privacy names OpenAI as subprocessor and lists each AI feature's data flow (5424c49). Covered by the same legal review. |
+| Workspace deletion UI | P0/P1 | **Done** - Settings → Workspace, name/slug-confirmed delete (0164c7d). |
+| Data export before deletion | P0/P1 | **Done** - Settings → Workspace → Data export; export restored to include leads, opportunities, revenue, posts, automations (80ad5f8). |
+| Data retention policy | P1 | **Partly** - Privacy states data is kept while the workspace is active unless deleted; no retention window or purge job exists. Choose and document a number. |
+| Live Click-to-WhatsApp attribution | P1 | **Blocked** on Meta App Review (mock-tested only). |
+| UI redesign | P1 | In progress - PRs 0-5 merged/open; Marketing (#100-#102), follow-ups (#103), dark mode (#104) awaiting review. |
+
+Sections below keep the original detail; where they disagree with this
+table, the table is newer.
+
 ## Status legend
 
 - **P0** - launch blocker (nothing real can happen without it)
@@ -119,15 +136,16 @@ P2 polish - that was wrong. Flow AI and WhatsApp AI both send real
 workspace data (leads, conversations, revenue, campaign performance) to
 OpenAI as a sub-processor. A real company cannot be onboarded without
 disclosing this, alongside a Privacy Policy and Terms of Service - all
-P0, alongside the Meta/WhatsApp approval gate above. None of this is
-implemented yet; Phase L-1 corrects the classification and scope, and
+P0, alongside the Meta/WhatsApp approval gate above. (Update 2026-10-08:
+the Privacy Policy, Terms and AI disclosure now exist - see the status
+table at the top - but still need legal review.) Phase L-1 corrected the classification and scope, and
 does **not** draft the legal pages themselves (real legal text needs a
 lawyer or a reviewed generator, not an AI-authored placeholder presented
 as genuine legal assurance).
 
-Also P0/P1, unchanged from the Phase K audit: workspace-deletion UI
-(backend cascade already works - confirmed in Phase K - only the UI is
-missing), a data-export step offered before deletion, and a stated
+Also P0/P1 from the Phase K audit: workspace-deletion UI and a
+data-export step before deletion (both done since - see the status
+table), and a stated
 data-retention policy for WhatsApp messages/leads/revenue records
 (currently: forever, since nothing purges anything - a real number needs
 choosing and documenting, even if generous).
