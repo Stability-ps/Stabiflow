@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, RefreshCw, Unplug } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Separator } from "@/components/ui/separator";
 import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
@@ -12,22 +12,28 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAllFacebookPages, useAllInstagramAccounts, useAllMetaAdAccounts, type WorkspaceIntegrationRow } from "@/hooks/useIntegrations";
 import { checkIntegrationConnectionHealth, disconnectIntegration, refreshIntegrationResources, setResourceActive, type IntegrationResourceHealth } from "@/lib/integrations";
-import { presentIntegrationStatus, toneClassName } from "@/lib/integrationStatus";
+import { presentIntegrationStatus, statusPillTone } from "@/lib/integrationStatus";
 
 function ResourceRow({ label, sublabel, active, disabled, onToggle, health }: { label: string; sublabel?: string; active: boolean; disabled: boolean; onToggle: (next: boolean) => void; health?: IntegrationResourceHealth }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <Checkbox checked={active} disabled={disabled} onCheckedChange={(v) => onToggle(v === true)} />
+    <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+      <Checkbox checked={active} disabled={disabled} onCheckedChange={(v) => onToggle(v === true)} aria-label={`Use ${label}`} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{label}</p>
+        <p className="truncate text-sm font-medium text-foreground">{label}</p>
         {sublabel && <p className="truncate text-xs text-muted-foreground">{sublabel}</p>}
       </div>
       {health && !health.healthy && (
-        <Badge variant="secondary" className="gap-1 text-amber-800 dark:text-amber-300">
-          <AlertTriangle className="h-3 w-3" /> Issue
-        </Badge>
+        <StatusPill tone="warning" title={health.message}>Issue</StatusPill>
       )}
     </div>
+  );
+}
+
+function LoadError({ what }: { what: string }) {
+  return (
+    <p role="alert" className="flex items-center gap-2 text-sm text-destructive-strong">
+      <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Couldn't load {what}. Close and reopen this panel to try again.
+    </p>
   );
 }
 
@@ -39,9 +45,9 @@ export function MetaManagePanel({ workspaceId, integration, canManage, canDiscon
   onDisconnected: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { data: pages, isLoading: pagesLoading } = useAllFacebookPages(workspaceId);
-  const { data: igAccounts, isLoading: igLoading } = useAllInstagramAccounts(workspaceId);
-  const { data: adAccounts, isLoading: adLoading } = useAllMetaAdAccounts(workspaceId);
+  const { data: pages, isLoading: pagesLoading, isError: pagesError } = useAllFacebookPages(workspaceId);
+  const { data: igAccounts, isLoading: igLoading, isError: igError } = useAllInstagramAccounts(workspaceId);
+  const { data: adAccounts, isLoading: adLoading, isError: adError } = useAllMetaAdAccounts(workspaceId);
 
   const [refreshing, setRefreshing] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -125,23 +131,23 @@ export function MetaManagePanel({ workspaceId, integration, canManage, canDiscon
     <>
       <SheetHeader>
         <SheetTitle className="flex items-center gap-2">
-          Manage Meta <Badge className={toneClassName(status.tone)}>{status.label}</Badge>
+          Manage Meta <StatusPill tone={statusPillTone(status.tone)}>{status.label}</StatusPill>
         </SheetTitle>
         <SheetDescription>Choose which Facebook Pages, Instagram accounts, and Meta Ad Accounts StabiFlow uses for this workspace.</SheetDescription>
       </SheetHeader>
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={handleCheck} disabled={checking || !canManage}>
-          {checking ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {checking ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
           Check connection
         </Button>
         <Button variant="outline" size="sm" onClick={handleRefresh} disabled={refreshing || !canManage}>
-          {refreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          {refreshing ? <Loader2 className="animate-spin" aria-hidden="true" /> : <RefreshCw aria-hidden="true" />}
           Refresh resources
         </Button>
         {canDisconnect && (
           <Button variant="outline" size="sm" className="ml-auto text-destructive" onClick={() => setConfirmDisconnect(true)}>
-            <Unplug className="mr-2 h-4 w-4" /> Disconnect
+            <Unplug aria-hidden="true" /> Disconnect
           </Button>
         )}
       </div>
@@ -150,10 +156,10 @@ export function MetaManagePanel({ workspaceId, integration, canManage, canDiscon
 
       <div className="space-y-6 overflow-y-auto pr-1">
         <section>
-          <h4 className="mb-2 text-sm font-semibold">Facebook Pages</h4>
+          <h3 className="mb-2 text-title-card text-foreground">Facebook Pages</h3>
           {pagesLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : !pages?.length ? (
+          ) : pagesError ? <LoadError what="Facebook Pages" /> : !pages?.length ? (
             <p className="text-sm text-muted-foreground">No Pages found on this Meta connection.</p>
           ) : (
             <div className="space-y-2">
@@ -165,11 +171,11 @@ export function MetaManagePanel({ workspaceId, integration, canManage, canDiscon
         </section>
 
         <section>
-          <h4 className="mb-2 text-sm font-semibold">Instagram accounts</h4>
+          <h3 className="mb-2 text-title-card text-foreground">Instagram accounts</h3>
           <p className="mb-2 text-xs text-muted-foreground">Eligible accounts linked through Facebook.</p>
           {igLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : !igAccounts?.length ? (
+          ) : igError ? <LoadError what="Instagram accounts" /> : !igAccounts?.length ? (
             <p className="text-sm text-muted-foreground">No linked Instagram accounts found.</p>
           ) : (
             <div className="space-y-2">
@@ -181,11 +187,11 @@ export function MetaManagePanel({ workspaceId, integration, canManage, canDiscon
         </section>
 
         <section>
-          <h4 className="mb-2 text-sm font-semibold">Advertising</h4>
+          <h3 className="mb-2 text-title-card text-foreground">Advertising</h3>
           <p className="mb-2 text-xs text-muted-foreground">Meta Ad Accounts.</p>
           {adLoading ? (
             <p className="text-sm text-muted-foreground">Loading...</p>
-          ) : !adAccounts?.length ? (
+          ) : adError ? <LoadError what="ad accounts" /> : !adAccounts?.length ? (
             <p className="text-sm text-muted-foreground">No ad accounts found on this Meta connection.</p>
           ) : (
             <div className="space-y-2">
