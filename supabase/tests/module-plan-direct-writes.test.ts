@@ -44,6 +44,7 @@ const AUTOMATIONS = /Automations are part of the Growth plan/;
 const WHATSAPP = /WhatsApp is part of the Growth plan/;
 const INTEGRATIONS = /Integrations are part of the Growth plan/;
 const FLOW_AI = /Flow AI is part of the Growth plan/;
+const ANALYTICS = /Analytics is part of the Growth plan/;
 const SERVER_ONLY = /Accounts are connected from the Integrations page/;
 const TOGGLE_ONLY = /Only the on\/off setting of a connected account can be changed here/;
 
@@ -126,6 +127,11 @@ const SPECS: Spec[] = [
     build: (f) => ({ workspace_id: f.ws, integration_id: f.ids.metaIntegration, ad_account_id: `gate-${uniq()}` }) },
   { table: "ai_conversations", flag: "module.flow_ai", message: FLOW_AI, canInsert: true, canUpdate: true, canDelete: false,
     build: (f) => ({ workspace_id: f.ws, created_by: f.userId }) },
+  // 20261027060000: Creator Campaigns live under Analytics.
+  { table: "creator_campaigns", flag: "module.analytics", message: ANALYTICS, canInsert: true, canUpdate: true, canDelete: true,
+    build: (f) => ({ workspace_id: f.ws, name: `Gate ${uniq()}`, creator_name: "Gate", platform: "instagram", created_by: f.userId }) },
+  { table: "creator_campaign_posts", flag: "module.analytics", message: ANALYTICS, canInsert: true, canUpdate: true, canDelete: true,
+    build: (f) => ({ workspace_id: f.ws, campaign_id: f.ids.creatorCampaign, platform: "instagram", title: `Gate ${uniq()}` }) },
 ];
 
 let tenant: TestTenant;
@@ -173,6 +179,7 @@ beforeAll(async () => {
   ids.automation = (await seed("automations", { workspace_id: ws, name: "Gate", trigger_event_type: "message.received", created_by: userId })).id as string;
   ids.pipeline = (await seed("pipelines", { workspace_id: ws, name: "Gate" })).id as string;
   ids.lead = (await seed("leads", { workspace_id: ws, source: "manual", contact_name: "Gate" })).id as string;
+  ids.creatorCampaign = (await seed("creator_campaigns", { workspace_id: ws, name: "Gate", creator_name: "Gate", platform: "instagram", created_by: userId })).id as string;
   ids.conversation = (await seed("inbox_conversations", { workspace_id: ws, whatsapp_number_id: ids.number, wa_id: "27820000001", phone_number: "+27820000001" })).id as string;
   fixture = {
     ws,
