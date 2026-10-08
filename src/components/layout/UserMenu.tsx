@@ -1,6 +1,7 @@
-import { LogOut, Settings, User as UserIcon } from "lucide-react";
+import { CircleHelp, LogOut, Settings, Shield, User as UserIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,30 +19,44 @@ function initials(name: string | null | undefined, email: string | null | undefi
 export function UserMenu() {
   const { profile, user, signOut } = useAuth();
   const navigate = useNavigate();
+  const canOpenAdmin = useAdminAccess();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="rounded-full">
+        <Button variant="ghost" size="icon" className="rounded-full" aria-label="Account menu">
           <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials(profile?.full_name, user?.email)}</AvatarFallback>
+            <AvatarFallback className="bg-selected text-xs font-semibold text-selected-foreground">{initials(profile?.full_name, user?.email)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel className="font-normal">
-          <p className="truncate text-sm font-medium">{profile?.full_name || "Your account"}</p>
-          <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+          <p className="truncate text-sm font-medium" title={profile?.full_name || undefined}>{profile?.full_name || "Your account"}</p>
+          <p className="truncate text-xs text-muted-foreground" title={user?.email || undefined}>{user?.email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/settings")}>
+        <DropdownMenuItem onClick={() => navigate("/app/settings")}>
           <UserIcon className="mr-2 h-4 w-4" />
           Profile
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/settings")}>
+        <DropdownMenuItem onClick={() => navigate("/app/settings")}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/app/guide")}>
+          <CircleHelp className="mr-2 h-4 w-4" />
+          Help & guide
+        </DropdownMenuItem>
+        {canOpenAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate("/admin")}>
+              <Shield className="mr-2 h-4 w-4" />
+              Admin console
+            </DropdownMenuItem>
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => signOut()}>
           <LogOut className="mr-2 h-4 w-4" />

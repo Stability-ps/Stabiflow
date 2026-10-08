@@ -10,7 +10,7 @@ export default function CampaignDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Button variant="ghost" size="sm" onClick={() => navigate("/campaigns")}><ArrowLeft className="mr-2 h-4 w-4" /> Campaigns</Button>
+      <Button variant="ghost" size="sm" onClick={() => navigate("/app/campaigns")}><ArrowLeft className="mr-2 h-4 w-4" /> Campaigns</Button>
       <CampaignDetail campaignId={id} />
     </div>
   );

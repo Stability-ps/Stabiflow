@@ -1,17 +1,42 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// supabase-js leaves `data` null on a non-2xx response and hardcodes
+// error.message to "Edge Function returned a non-2xx status code"; the
+// function's JSON error body is only on error.context (the raw Response).
+// Same handling as creativeStudio.ts / adCampaigns.ts.
+async function readErrorPayloadFromContext(error: unknown): Promise<unknown> {
+  const context = (error as { context?: unknown } | null)?.context;
+  if (!context || typeof context !== "object") return null;
+  const maybeResponse = context as { json?: () => Promise<unknown>; clone?: () => unknown };
+  const source = typeof maybeResponse.clone === "function" ? (maybeResponse.clone() as typeof maybeResponse) : maybeResponse;
+  if (typeof source.json !== "function") return null;
+  try {
+    return await source.json();
+  } catch {
+    return null;
+  }
+}
+
 async function invoke<T>(name: string, body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke(name, { body });
+  const { data: rawData, error } = await supabase.functions.invoke(name, { body });
+  const data = error && rawData == null ? await readErrorPayloadFromContext(error) : rawData;
   if (error) {
     // supabase-js surfaces a non-2xx edge function response as `error`
     // without the JSON body attached in every SDK version - fall back to a
     // generic message if the structured `error` field on the parsed body
     // (data) isn't available.
-    const message = (data as { error?: string } | null)?.error || error.message || `${name} failed`;
+    // workspaceSuspendedBody (shared by every suspension-gated function)
+    // puts a machine code in `error` and the human text in `message` -
+    // prefer `message` when present so a suspended-workspace action never
+    // surfaces a raw code like "workspace_suspended" instead of a real
+    // sentence.
+    const body = data as { error?: string; message?: string } | null;
+    const message = body?.message || body?.error || error.message || `${name} failed`;
     throw new Error(message);
   }
   if (data && typeof data === "object" && "error" in data && (data as { error?: string }).error) {
-    throw new Error((data as { error: string }).error);
+    const typed = data as { error: string; message?: string };
+    throw new Error(typed.message || typed.error);
   }
   return data as T;
 }
@@ -56,4 +81,16 @@ export function setContentSchedulerSettings(workspaceId: string, enabled: boolea
     workspace_id: workspaceId,
     auto_publish_enabled: enabled,
   });
+}
+
+
+export type AiCaptionSuggestion = { caption: string; hashtags: string[]; cta: string };
+
+export function generateContentCaption(input: {
+  workspace_id: string;
+  media_asset_id: string;
+  target_platform?: "facebook" | "instagram";
+  tone?: string;
+}) {
+  return invoke<{ ok: true; suggestion: AiCaptionSuggestion }>("content-ai-caption", input);
 }

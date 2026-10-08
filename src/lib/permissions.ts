@@ -43,7 +43,83 @@ export type WorkspacePermission =
   | "campaign.publish"
   | "campaign.pause"
   | "campaign.delete"
-  | "campaign.metrics.view";
+  | "campaign.metrics.view"
+  // Integrations module (Phase C) - fine-grained, mirroring
+  // 20260829060000_integrations_foundation.sql. integration.view is broad
+  // (every role, like content.view/campaign.view - the row never carries a
+  // decrypted secret); connect/manage/disconnect stay owner/admin-only,
+  // same grant set as the pre-existing manage_integrations permission.
+  | "integration.view"
+  | "integration.connect"
+  | "integration.manage"
+  | "integration.disconnect"
+  // Inbox module (Phase D) - fine-grained, mirroring
+  // 20260830060000_whatsapp_inbox_foundation.sql. Granted to exactly the
+  // same role set the pre-existing manage_inbox permission uses
+  // (owner/admin/manager/support) - unlike content.view, inbox
+  // conversations carry customer PII, so this is NOT broadly granted to
+  // marketing/sales/viewer.
+  | "inbox.view"
+  | "inbox.manage"
+  // Leads/Pipelines/Opportunities module (Phase E) - fine-grained, mirroring
+  // 20260901060000_leads_pipelines_schema.sql. Sales owns leads/opportunities
+  // day to day; pipeline.manage (workspace sales-process configuration) is
+  // manager-and-up only, same rank cutoff as manage_content/manage_campaigns.
+  // Support gets lead.view/lead.create (a conversation they're handling may
+  // already need one) but not edit/assign/close - marketing/viewer get
+  // view-only, like content.view/campaign.view.
+  | "lead.view"
+  | "lead.create"
+  | "lead.edit"
+  | "lead.assign"
+  | "lead.delete"
+  // Phase 2 remediation (H1): opening a raw customer WhatsApp document
+  // attached to a lead is a dedicated authority, never implied by lead.view.
+  // Granted to owner/admin/manager/sales/support (support already handles
+  // these media in the Inbox); withheld from marketing/viewer.
+  | "lead.attachment.view"
+  | "pipeline.view"
+  | "pipeline.manage"
+  | "opportunity.view"
+  | "opportunity.create"
+  | "opportunity.edit"
+  | "opportunity.close"
+  // Attribution/Revenue module (Phase G) - mirroring
+  // 20260904060000_attribution_and_revenue.sql. attribution.view is broad
+  // (every role, like content.view) - attribution events carry marketing
+  // metadata, not customer content. attribution.manage (manual overrides)
+  // is manager-and-up, same cutoff as pipeline.manage. revenue.* mirrors
+  // opportunity.*'s grant set - revenue is opportunity-adjacent, owned by
+  // the same roles that close deals.
+  | "attribution.view"
+  | "attribution.manage"
+  | "revenue.view"
+  | "revenue.create"
+  | "revenue.edit"
+  // Flow AI (Phase I) - mirroring 20260910060000_flow_ai_foundation.sql.
+  // Gates chat ACCESS only, granted broadly like content.view/campaign.view;
+  // it does NOT grant visibility into any workspace data - every Flow AI
+  // tool independently re-checks the permission the source module already
+  // requires (view_analytics, revenue.view, lead.view, etc.).
+  | "flow_ai.use"
+  // Automation Engine (Phase J) - mirroring
+  // 20260912060000_automation_engine_foundation.sql. view/view_runs are
+  // broad like content.view/campaign.metrics.view (configuration
+  // visibility, not sensitive data); create/edit/enable/delete are
+  // manager-and-up, the same cutoff as pipeline.manage.
+  | "automation.view"
+  | "automation.view_runs"
+  | "automation.create"
+  | "automation.edit"
+  | "automation.enable"
+  | "automation.delete"
+  // Structured Intake (Phase 3) - mirroring
+  // 20260920060000_structured_intake_schema.sql. intake.view is broad
+  // (every role - schema definitions are configuration, not customer
+  // data); intake.manage is manager-and-up, the same cutoff as
+  // pipeline.manage / automation.create.
+  | "intake.view"
+  | "intake.manage";
 
 const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
   owner: [
@@ -52,6 +128,15 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
+    "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete", "lead.attachment.view",
+    "pipeline.view", "pipeline.manage",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
+    "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
+    "flow_ai.use",
+    "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
+    "intake.view", "intake.manage",
   ],
   admin: [
     "manage_members", "manage_integrations", "manage_content", "manage_campaigns",
@@ -59,22 +144,64 @@ const PERMISSION_MATRIX: Record<WorkspaceRole, WorkspacePermission[]> = {
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view", "integration.connect", "integration.manage", "integration.disconnect",
+    "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete", "lead.attachment.view",
+    "pipeline.view", "pipeline.manage",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
+    "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
+    "flow_ai.use",
+    "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
+    "intake.view", "intake.manage",
   ],
   manager: [
     "manage_content", "manage_campaigns", "manage_inbox", "manage_leads", "manage_pipelines", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view",
+    "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.delete", "lead.attachment.view",
+    "pipeline.view", "pipeline.manage",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
+    "attribution.view", "attribution.manage", "revenue.view", "revenue.create", "revenue.edit",
+    "flow_ai.use",
+    "automation.view", "automation.view_runs", "automation.create", "automation.edit", "automation.enable", "automation.delete",
+    "intake.view", "intake.manage",
   ],
   marketing: [
     "manage_content", "manage_campaigns", "view_analytics",
     "content.view", "content.create", "content.edit", "content.publish", "content.delete",
     "media.view", "media.upload", "media.delete",
     "campaign.view", "campaign.create", "campaign.edit", "campaign.publish", "campaign.pause", "campaign.delete", "campaign.metrics.view",
+    "integration.view",
+    "lead.view", "pipeline.view", "opportunity.view",
+    "attribution.view", "revenue.view",
+    "flow_ai.use",
+    "automation.view", "automation.view_runs",
+    "intake.view",
   ],
-  sales: ["manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
-  support: ["manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
-  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view"],
+  sales: [
+    "manage_leads", "view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view",
+    "lead.view", "lead.create", "lead.edit", "lead.assign", "lead.attachment.view",
+    "pipeline.view",
+    "opportunity.view", "opportunity.create", "opportunity.edit", "opportunity.close",
+    "attribution.view", "revenue.view", "revenue.create", "revenue.edit",
+    "flow_ai.use",
+    "automation.view", "automation.view_runs",
+    "intake.view",
+  ],
+  support: [
+    "manage_inbox", "manage_leads", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "inbox.view", "inbox.manage",
+    "lead.view", "lead.create", "lead.attachment.view",
+    "pipeline.view",
+    "opportunity.view",
+    "attribution.view", "revenue.view",
+    "flow_ai.use",
+    "automation.view", "automation.view_runs",
+    "intake.view",
+  ],
+  viewer: ["view_analytics", "content.view", "media.view", "campaign.view", "campaign.metrics.view", "integration.view", "lead.view", "pipeline.view", "opportunity.view", "attribution.view", "revenue.view", "flow_ai.use", "automation.view", "automation.view_runs", "intake.view"],
 };
 
 export function roleHasPermission(role: WorkspaceRole | null | undefined, permission: WorkspacePermission): boolean {

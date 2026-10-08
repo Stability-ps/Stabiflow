@@ -8,7 +8,12 @@ import { useAuth } from "@/hooks/useAuth";
 export function RequireWorkspace({ children }: { children: ReactNode }) {
   const { membershipsLoading, memberships, currentWorkspaceId } = useAuth();
 
-  if (membershipsLoading) {
+  // Only the very first bootstrap (no memberships known yet) should blank
+  // the screen. A background refresh (e.g. useAuth silently re-verifying
+  // memberships after a focus-triggered token refresh) already has data to
+  // show, so keep the current page - and its scroll/form/selection state -
+  // mounted instead of tearing down the whole app shell underneath it.
+  if (membershipsLoading && memberships.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Loading your workspaces...</p>

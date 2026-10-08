@@ -1,8 +1,9 @@
 import type { Config } from "tailwindcss";
 
-// Color tokens are wired up as CSS variables (src/index.css) but not yet
-// branded - that's Phase 4 (App shell + branding). This config is the
-// same shadcn/ui structural pattern Acapolite uses, ported clean.
+// Design tokens live as CSS variables in src/index.css (mirrors the Figma
+// "StabiFlow Design System"); this config only exposes them to Tailwind.
+// Breakpoints are Tailwind's defaults: sm 640, md 768 (sidebar appears),
+// lg 1024, xl 1280, 2xl 1536.
 export default {
   darkMode: ["class"],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
@@ -24,7 +25,36 @@ export default {
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
+          hover: "hsl(var(--primary-hover))",
           foreground: "hsl(var(--primary-foreground))",
+        },
+        selected: {
+          DEFAULT: "hsl(var(--selected))",
+          foreground: "hsl(var(--selected-foreground))",
+        },
+        subtle: {
+          foreground: "hsl(var(--subtle-foreground))",
+        },
+        link: "hsl(var(--link))",
+        locked: "hsl(var(--locked))",
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          soft: "hsl(var(--success-soft))",
+          solid: "hsl(var(--success-solid))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          soft: "hsl(var(--warning-soft))",
+          solid: "hsl(var(--warning-solid))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          soft: "hsl(var(--info-soft))",
+          solid: "hsl(var(--info-solid))",
+        },
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          soft: "hsl(var(--brand-soft))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -33,6 +63,8 @@ export default {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+          strong: "hsl(var(--destructive-strong))",
+          soft: "hsl(var(--destructive-soft))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",
@@ -61,10 +93,40 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
         },
       },
+      fontFamily: {
+        sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
+      },
+      // Type scale (Figma text styles). Body copy stays on Tailwind's
+      // text-sm (14/20) and text-xs (12/16).
+      fontSize: {
+        metric: ["1.75rem", { lineHeight: "2.125rem", letterSpacing: "-0.02em", fontWeight: "600" }],
+        "title-page": ["1.375rem", { lineHeight: "1.75rem", letterSpacing: "-0.018em", fontWeight: "600" }],
+        "title-section": ["1rem", { lineHeight: "1.5rem", letterSpacing: "-0.012em", fontWeight: "600" }],
+        "title-card": ["0.875rem", { lineHeight: "1.25rem", letterSpacing: "-0.006em", fontWeight: "600" }],
+        label: ["0.8125rem", { lineHeight: "1.125rem", fontWeight: "500" }],
+        overline: ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.055em", fontWeight: "600" }],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      boxShadow: {
+        xs: "0 1px 2px hsl(220 26% 9% / 0.05)",
+        sm: "0 1px 3px hsl(220 26% 9% / 0.08), 0 1px 2px hsl(220 26% 9% / 0.04)",
+        md: "0 8px 24px -4px hsl(220 26% 9% / 0.12), 0 2px 6px hsl(220 26% 9% / 0.05)",
+        lg: "0 20px 48px -8px hsl(220 26% 9% / 0.18), 0 4px 12px hsl(220 26% 9% / 0.06)",
+      },
+      spacing: {
+        header: "var(--header-height)",
+      },
+      transitionDuration: {
+        fast: "var(--duration-fast)",
+        DEFAULT: "var(--duration)",
+      },
+      transitionTimingFunction: {
+        standard: "var(--ease-standard)",
+        DEFAULT: "var(--ease-standard)",
       },
       keyframes: {
         "accordion-down": {

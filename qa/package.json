@@ -1,0 +1,14 @@
+{
+  "name": "stabiflow-production-qa",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:public": "playwright test tests/public.spec.ts",
+    "test:auth": "playwright test tests/authenticated.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

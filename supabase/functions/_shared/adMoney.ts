@@ -24,13 +24,31 @@ export const MIN_DAILY_BUDGET_MINOR_UNITS = 100; // smallest-unit-agnostic floor
 export const MIN_LIFETIME_BUDGET_MINOR_UNITS = 100;
 export const MAX_BUDGET_MINOR_UNITS = 100_000_000_00; // R100,000,000.00 equivalent - a sanity ceiling against fat-finger input, not a Meta limit
 
+// A SCHEDULED start must be at least this far in the future to be
+// publishable. Meta's ad set start_time must be strictly after the current
+// time, and StabiFlow's publish pipeline (readiness gate -> create
+// campaign -> create ad set) adds real latency between validation and the
+// createAdSet call - a start_time that is only seconds ahead at the gate
+// would be in the past by the time it reaches Meta and be rejected. This
+// lead does NOT apply to "Start now" (startAt === null), which is the
+// correct choice for an immediate launch. Mirrored on the client in
+// src/lib/campaignSchedule.ts (MIN_SCHEDULED_START_LEAD_MS) - keep in sync.
+export const MIN_SCHEDULED_START_LEAD_MS = 2 * 60 * 1000;
+
 export type MoneyInput = {
   budgetType: BudgetType;
   dailyBudgetMinorUnits: number | null;
   lifetimeBudgetMinorUnits: number | null;
   currency: string;
-  startAt: Date;
+  // The scheduled start INSTANT (UTC), or null for "Start now" (immediate
+  // publish - the Meta ad set is created with no start_time). The client is
+  // responsible for converting the user's workspace-local date + time into
+  // this instant; the server only compares instants.
+  startAt: Date | null;
   endAt: Date | null;
+  // Injected clock, for deterministic tests (repo convention: no hidden
+  // Date.now() in pure modules). Defaults to the real now.
+  now?: Date;
 };
 
 export type MoneyValidationResult = { valid: true } | { valid: false; issues: string[] };
@@ -88,13 +106,27 @@ export function validateCampaignBudget(input: MoneyInput): MoneyValidationResult
     issues.push(`budget_type must be 'daily' or 'lifetime', got "${input.budgetType}"`);
   }
 
-  if (input.endAt && input.endAt.getTime() <= input.startAt.getTime()) {
-    issues.push("end date must be after the start date");
+  const now = input.now ?? new Date();
+
+  // Schedule is a timezone-aware DATE + TIME, resolved by the caller to a
+  // UTC instant (or null for "Start now"). We compare instants here.
+  //
+  // End must be strictly after the effective start:
+  //  - scheduled start -> after that instant
+  //  - "start now" (startAt null) -> after "now"
+  const effectiveStartMs = input.startAt ? input.startAt.getTime() : now.getTime();
+  if (input.endAt && input.endAt.getTime() <= effectiveStartMs) {
+    issues.push("end time must be after the start time");
   }
 
-  if (input.startAt.getTime() < Date.now() - 5 * 60 * 1000) {
-    // 5 minute grace window for clock skew / the moment between form-fill and submit.
-    issues.push("start date must not be in the past");
+  // A SCHEDULED start must be far enough in the future to survive the
+  // publish pipeline and be accepted by Meta (see MIN_SCHEDULED_START_LEAD_MS).
+  // If it has passed - or is now too close for safe submission - this is a
+  // BLOCKING readiness issue: the schedule is never silently changed; the
+  // user re-chooses "Start now" or a later time. "Start now" (startAt null)
+  // is always valid.
+  if (input.startAt && input.startAt.getTime() <= now.getTime() + MIN_SCHEDULED_START_LEAD_MS) {
+    issues.push("scheduled start time is too close or has passed - choose Start now or a later time");
   }
 
   return issues.length ? { valid: false, issues } : { valid: true };

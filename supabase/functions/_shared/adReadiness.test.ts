@@ -11,7 +11,7 @@ function baseInput(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
       dailyBudgetMinorUnits: 5000,
       lifetimeBudgetMinorUnits: null,
       currency: "ZAR",
-      startAt: new Date(Date.now() + 86400_000).toISOString(),
+      startAt: "2026-09-05T00:00:00Z", // comfortably after the pinned `now` below
       endAt: null,
       draftCreativeId: "11111111-1111-1111-1111-111111111111",
       facebookPageId: "22222222-2222-2222-2222-222222222222",
@@ -28,8 +28,11 @@ function baseInput(overrides: Partial<ReadinessInput> = {}): ReadinessInput {
       mediaWidthPx: 1200,
       mediaHeightPx: 1200,
       mediaMimeType: "image/jpeg",
+      whatsappNumberId: null,
     },
+    whatsappNumber: null,
     tokenHealthy: true,
+    now: new Date("2026-08-29T10:00:00Z"),
     ...overrides,
   };
 }
@@ -120,6 +123,39 @@ Deno.test("an unhealthy token surfaces as its own issue", () => {
 Deno.test("tokenHealthy=null (not checked) produces no token issue - readiness never claims to have checked what it didn't", () => {
   const issues = checkCampaignReadiness(baseInput({ tokenHealthy: null }));
   assertEquals(issues.some((i) => i.code === "token_unhealthy"), false);
+});
+
+Deno.test("START NOW: startAt null produces no schedule issue and readiness passes", () => {
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: null } }));
+  assertEquals(issues.some((i) => i.code === "invalid_budget"), false);
+  assertEquals(isReady(issues), true);
+});
+
+Deno.test("SCHEDULED later today: a future start instant on the same calendar day is fine (no calendar-date-only rule)", () => {
+  // now 2026-08-29 10:00Z; start 2026-08-29 18:00Z - same day, still future.
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T18:00:00Z" } }));
+  assertEquals(issues.some((i) => i.code === "invalid_budget"), false);
+});
+
+Deno.test("SCHEDULED start time that has passed blocks readiness with an actionable 'too close or has passed' issue (no silent conversion)", () => {
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T09:00:00Z" } })); // 1h before now
+  const issue = issues.find((i) => i.code === "invalid_budget" && i.message.includes("too close or has passed"));
+  assertEquals(!!issue, true);
+  assertEquals(issue!.message.includes("Start now"), true); // tells the user their options
+  assertEquals(isReady(issues), false);
+});
+
+Deno.test("SCHEDULED start only a minute ahead is blocked (too close for the publish pipeline)", () => {
+  const issues = checkCampaignReadiness(baseInput({ campaign: { ...baseInput().campaign, startAt: "2026-08-29T10:01:00Z" } })); // now is 10:00
+  assertEquals(issues.some((i) => i.code === "invalid_budget" && i.message.includes("too close or has passed")), true);
+  assertEquals(isReady(issues), false);
+});
+
+Deno.test("publish-time recheck: the same campaign flips from ready to not-ready as `now` approaches its scheduled start", () => {
+  const campaign = { ...baseInput().campaign, startAt: "2026-08-29T14:10:00Z" };
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:00:00Z") }))), true); // 10m ahead
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:09:30Z") }))), false); // 30s ahead - too close
+  assertEquals(isReady(checkCampaignReadiness(baseInput({ campaign, now: new Date("2026-08-29T14:20:00Z") }))), false); // past
 });
 
 Deno.test("isReady is false if ANY error-severity issue exists, regardless of warnings", () => {

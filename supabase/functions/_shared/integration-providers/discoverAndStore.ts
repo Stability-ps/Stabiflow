@@ -1,0 +1,264 @@
+// Shared discovery-and-store logic used by BOTH the OAuth callback
+// (initial discovery right after connecting) and the manual
+// "Refresh resources" action (re-discovery using the already-stored
+// token, instruction #17 reconnect-adjacent behavior) - one place that
+// calls Meta/WhatsApp Graph endpoints and normalizes the result into
+// StabiFlow's existing resource tables, per instruction #37 ("the UI
+// should call StabiFlow service/edge-function boundaries", not duplicate
+// discovery logic per caller).
+import { fetchAdAccounts, fetchFacebookPages, fetchInstagramForPage } from "./metaDiscovery.ts";
+import { fetchBusinesses, fetchOwnedWabas, fetchWabaPhoneNumbers, fetchWabaTemplates } from "./whatsappDiscovery.ts";
+import { subscribeWhatsAppWebhooks, type WebhookSubscriptionState } from "./whatsappWebhookSubscription.ts";
+import { upsertDiscoveredResource } from "./resourceUpsert.ts";
+import { upsertDiscoveredTemplate } from "./templateUpsert.ts";
+import type { DiscoveredWabaPhoneNumber, DiscoveredWabaTemplate, MetaCredential } from "./types.ts";
+
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = any;
+
+export type DiscoverySummary = {
+  facebookPages: { discovered: number; new: number; collisions: number };
+  instagramAccounts: { discovered: number; new: number; collisions: number };
+  adAccounts: { discovered: number; new: number; collisions: number };
+  whatsappNumbers: { discovered: number; new: number; collisions: number };
+  whatsappTemplates: { discovered: number; new: number; collisions: number };
+  // WhatsApp only: the outcome of subscribing the discovered WABA(s) to
+  // this app's webhook (see whatsappWebhookSubscription.ts). `notApplicable`
+  // for a Meta discovery run.
+  whatsappWebhook: { status: WebhookSubscriptionState | "not_applicable"; detail: string; wabaCount: number };
+  collisionDetails: Array<{ table: string; providerId: string }>;
+};
+
+const NOT_APPLICABLE_WEBHOOK = { status: "not_applicable" as const, detail: "Not applicable for a Meta connection.", wabaCount: 0 };
+
+// Dev-only fixtures (instruction #28: mock provider responses when real
+// OAuth cannot safely be completed - no Meta App is configured for this
+// dev environment). Names match the illustrative example resources given
+// in the Phase C brief itself.
+export const MOCK_META_PAGES = [
+  { pageId: "mock-page-acapolite", pageName: "Acapolite Consulting" },
+  { pageId: "mock-page-taxcoach", pageName: "Tax Coach SA" },
+  { pageId: "mock-page-stability", pageName: "Stability Group" },
+];
+export const MOCK_META_INSTAGRAM: Record<string, { igBusinessAccountId: string; username: string }> = {
+  "mock-page-acapolite": { igBusinessAccountId: "mock-ig-acapolite", username: "acapoliteconsulting" },
+  "mock-page-taxcoach": { igBusinessAccountId: "mock-ig-taxcoach", username: "taxcoachsa" },
+};
+export const MOCK_META_AD_ACCOUNTS = [
+  { adAccountId: "mock-adacct-acapolite", name: "Acapolite Ads", currency: "ZAR", timezone: "Africa/Johannesburg", accountStatus: 1 },
+  { adAccountId: "mock-adacct-stability", name: "Stability Group Ads", currency: "ZAR", timezone: "Africa/Johannesburg", accountStatus: 1 },
+];
+export const MOCK_WHATSAPP_NUMBERS = [
+  { wabaId: "mock-waba-1", phoneNumberId: "mock-phone-1", displayPhoneNumber: "+27 82 000 0001", verifiedName: "Acapolite Consulting", qualityRating: "GREEN", platformStatus: "VERIFIED" },
+];
+// One APPROVED template with a single BODY variable (the common "order
+// update" shape) and one PENDING template - enough for Phase L-1's
+// browser walkthrough/tests to exercise both "usable" and "not yet
+// approved" without a real Meta App.
+export const MOCK_WHATSAPP_TEMPLATES: DiscoveredWabaTemplate[] = [
+  {
+    wabaId: "mock-waba-1",
+    providerTemplateId: "mock-template-order-update",
+    name: "order_update",
+    language: "en_US",
+    category: "UTILITY",
+    status: "APPROVED",
+    components: [{ type: "BODY", text: "Hi {{1}}, your order {{2}} is on its way." }],
+  },
+  {
+    wabaId: "mock-waba-1",
+    providerTemplateId: "mock-template-pending-promo",
+    name: "seasonal_promo",
+    language: "en_US",
+    category: "MARKETING",
+    status: "PENDING",
+    components: [{ type: "BODY", text: "Check out our latest offers!" }],
+  },
+];
+
+export async function discoverAndStoreMetaResources(
+  serviceSb: AnySupabaseClient,
+  workspaceId: string,
+  integrationId: string,
+  cred: MetaCredential,
+  mockMode: boolean,
+): Promise<DiscoverySummary> {
+  const pages = mockMode ? MOCK_META_PAGES : await fetchFacebookPages(cred);
+  const summary: DiscoverySummary = {
+    facebookPages: { discovered: pages.length, new: 0, collisions: 0 },
+    instagramAccounts: { discovered: 0, new: 0, collisions: 0 },
+    adAccounts: { discovered: 0, new: 0, collisions: 0 },
+    whatsappNumbers: { discovered: 0, new: 0, collisions: 0 },
+    whatsappTemplates: { discovered: 0, new: 0, collisions: 0 },
+    whatsappWebhook: NOT_APPLICABLE_WEBHOOK,
+    collisionDetails: [],
+  };
+
+  for (const page of pages) {
+    const result = await upsertDiscoveredResource(
+      serviceSb,
+      "workspace_facebook_pages",
+      "page_id",
+      page.pageId,
+      workspaceId,
+      { workspace_id: workspaceId, integration_id: integrationId, page_id: page.pageId, page_name: page.pageName },
+      { page_name: page.pageName },
+    );
+    if (result.collision) {
+      summary.facebookPages.collisions++;
+      summary.collisionDetails.push({ table: "workspace_facebook_pages", providerId: page.pageId });
+      continue;
+    }
+    if (result.wasNew) summary.facebookPages.new++;
+
+    const igLink = mockMode ? MOCK_META_INSTAGRAM[page.pageId] ?? null : await fetchInstagramForPage(cred, page.pageId);
+    if (igLink) {
+      summary.instagramAccounts.discovered++;
+      const igResult = await upsertDiscoveredResource(
+        serviceSb,
+        "workspace_instagram_accounts",
+        "ig_business_account_id",
+        igLink.igBusinessAccountId,
+        workspaceId,
+        {
+          workspace_id: workspaceId,
+          integration_id: integrationId,
+          ig_business_account_id: igLink.igBusinessAccountId,
+          username: igLink.username,
+          linked_facebook_page_id: result.id,
+        },
+        { username: igLink.username, linked_facebook_page_id: result.id },
+      );
+      if (igResult.collision) {
+        summary.instagramAccounts.collisions++;
+        summary.collisionDetails.push({ table: "workspace_instagram_accounts", providerId: igLink.igBusinessAccountId });
+      } else if (igResult.wasNew) {
+        summary.instagramAccounts.new++;
+      }
+    }
+  }
+
+  const adAccounts = mockMode ? MOCK_META_AD_ACCOUNTS : await fetchAdAccounts(cred);
+  summary.adAccounts.discovered = adAccounts.length;
+  for (const acct of adAccounts) {
+    const result = await upsertDiscoveredResource(
+      serviceSb,
+      "workspace_meta_ad_accounts",
+      "ad_account_id",
+      acct.adAccountId,
+      workspaceId,
+      { workspace_id: workspaceId, integration_id: integrationId, ad_account_id: acct.adAccountId, name: acct.name, currency: acct.currency },
+      { name: acct.name, currency: acct.currency },
+    );
+    if (result.collision) {
+      summary.adAccounts.collisions++;
+      summary.collisionDetails.push({ table: "workspace_meta_ad_accounts", providerId: acct.adAccountId });
+    } else if (result.wasNew) {
+      summary.adAccounts.new++;
+    }
+  }
+
+  return summary;
+}
+
+export async function discoverAndStoreWhatsAppResources(
+  serviceSb: AnySupabaseClient,
+  workspaceId: string,
+  integrationId: string,
+  cred: MetaCredential,
+  mockMode: boolean,
+  // INTEGRATIONS_META_APP_ID - used only to verify the post-subscribe GET
+  // lists this app. Null is tolerated (the POST result drives the state).
+  metaAppId: string | null = null,
+): Promise<DiscoverySummary> {
+  const summary: DiscoverySummary = {
+    facebookPages: { discovered: 0, new: 0, collisions: 0 },
+    instagramAccounts: { discovered: 0, new: 0, collisions: 0 },
+    adAccounts: { discovered: 0, new: 0, collisions: 0 },
+    whatsappNumbers: { discovered: 0, new: 0, collisions: 0 },
+    whatsappTemplates: { discovered: 0, new: 0, collisions: 0 },
+    whatsappWebhook: { status: "unknown", detail: "Not checked.", wabaCount: 0 },
+    collisionDetails: [],
+  };
+
+  // Pre-existing type gap (unrelated to Phase L-1, fixed here only because
+  // this exact line now blocks `deno check` on a file this phase already
+  // edits): MOCK_WHATSAPP_NUMBERS's inferred literal type has non-null
+  // string fields, but fetchWabaPhoneNumbers() returns the real
+  // DiscoveredWabaPhoneNumber[] shape (nullable fields) - concat needs both
+  // sides to agree, so the mutable variable is explicitly typed as the
+  // real (nullable) shape.
+  let numbers: DiscoveredWabaPhoneNumber[] = mockMode ? MOCK_WHATSAPP_NUMBERS : [];
+  const wabaIds = new Set<string>(mockMode ? numbers.map((n) => n.wabaId) : []);
+  if (!mockMode) {
+    const businesses = await fetchBusinesses(cred);
+    for (const business of businesses) {
+      const wabas = await fetchOwnedWabas(cred, business.id);
+      for (const waba of wabas) {
+        wabaIds.add(waba.id);
+        numbers = numbers.concat(await fetchWabaPhoneNumbers(cred, waba.id));
+      }
+    }
+  }
+
+  summary.whatsappNumbers.discovered = numbers.length;
+  for (const num of numbers) {
+    const result = await upsertDiscoveredResource(
+      serviceSb,
+      "workspace_whatsapp_numbers",
+      "phone_number_id",
+      num.phoneNumberId,
+      workspaceId,
+      {
+        workspace_id: workspaceId,
+        integration_id: integrationId,
+        phone_number_id: num.phoneNumberId,
+        display_phone_number: num.displayPhoneNumber,
+        waba_id: num.wabaId,
+        verified_name: num.verifiedName,
+        quality_rating: num.qualityRating,
+        platform_status: num.platformStatus,
+      },
+      { display_phone_number: num.displayPhoneNumber, waba_id: num.wabaId, verified_name: num.verifiedName, quality_rating: num.qualityRating, platform_status: num.platformStatus },
+    );
+    if (result.collision) {
+      summary.whatsappNumbers.collisions++;
+      summary.collisionDetails.push({ table: "workspace_whatsapp_numbers", providerId: num.phoneNumberId });
+    } else if (result.wasNew) {
+      summary.whatsappNumbers.new++;
+    }
+  }
+
+  // Templates are WABA-scoped, not per-number - sync once per distinct
+  // WABA this workspace owns, reusing the SAME "Refresh resources" trigger
+  // and mock-mode flag as phone-number discovery (Phase L-1: no separate
+  // sync endpoint/UI action).
+  let templates: DiscoveredWabaTemplate[] = mockMode ? MOCK_WHATSAPP_TEMPLATES : [];
+  if (!mockMode) {
+    templates = [];
+    for (const wabaId of wabaIds) {
+      templates = templates.concat(await fetchWabaTemplates(cred, wabaId));
+    }
+  }
+
+  summary.whatsappTemplates.discovered = templates.length;
+  for (const tpl of templates) {
+    const result = await upsertDiscoveredTemplate(serviceSb, workspaceId, integrationId, tpl.wabaId, tpl);
+    if (result.collision) {
+      summary.whatsappTemplates.collisions++;
+      summary.collisionDetails.push({ table: "whatsapp_message_templates", providerId: tpl.providerTemplateId });
+    } else if (result.wasNew) {
+      summary.whatsappTemplates.new++;
+    }
+  }
+
+  // Subscribe every distinct discovered WABA to this app's webhook - the
+  // step that makes inbound messages actually arrive. Idempotent, never
+  // throws (a failure is recorded on the integration row as
+  // webhook_subscription_status='error'/'not_subscribed', and connect
+  // still succeeds - the integration is just flagged as needing repair).
+  const webhook = await subscribeWhatsAppWebhooks(serviceSb, integrationId, cred, [...wabaIds], mockMode, metaAppId);
+  summary.whatsappWebhook = { status: webhook.status, detail: webhook.detail, wabaCount: webhook.perWaba.length };
+
+  return summary;
+}

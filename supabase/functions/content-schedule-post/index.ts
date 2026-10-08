@@ -13,6 +13,7 @@
 import { platformKeyForContentPlatform, validateAssetForPlatform } from "../_shared/contentPlatformRules.ts";
 import { buildIdempotencyKey } from "../_shared/contentIdempotency.ts";
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 type RequestBody = {
   workspace_id?: string;
@@ -53,6 +54,10 @@ Deno.serve(async (req: Request) => {
   if (!(await hasWorkspacePermission(sb, workspaceId, "content.create"))) {
     return json(req, { error: "Forbidden" }, 403);
   }
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(sb, workspaceId, "module.content");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const facebookPageId = targetPlatform === "facebook" ? body.facebook_page_id : undefined;
   const instagramAccountId = targetPlatform === "instagram" ? body.instagram_account_id : undefined;

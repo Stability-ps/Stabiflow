@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, Link } from "react-router-dom";
+import { Navigate, Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,13 +9,24 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthLayout } from "@/components/layout/AuthLayout";
 
+// Only ever a same-origin, single-leading-slash app path (e.g.
+// /accept-invitation?token=...) - never an absolute URL or "//host" -
+// so this can't be turned into an open redirect off a query param.
+function safeRedirectTarget(searchParams: URLSearchParams): string {
+  const redirect = searchParams.get("redirect");
+  if (redirect && redirect.startsWith("/") && !redirect.startsWith("//")) return redirect;
+  return "/app";
+}
+
 export default function Login() {
   const { user, loading } = useAuth();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const confirmed = searchParams.get("confirmed") === "1";
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to={safeRedirectTarget(searchParams)} replace />;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -25,6 +36,10 @@ export default function Login() {
     if (error) toast.error(error.message);
   };
 
+  const signupHref = searchParams.get("redirect")
+    ? `/signup?redirect=${encodeURIComponent(searchParams.get("redirect")!)}`
+    : "/signup";
+
   return (
     <AuthLayout>
       <Card className="w-full max-w-sm">
@@ -32,6 +47,11 @@ export default function Login() {
           <CardTitle className="text-xl">Sign in</CardTitle>
         </CardHeader>
         <CardContent>
+          {confirmed && (
+            <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              Email confirmed successfully. You can now sign in.
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
@@ -49,7 +69,16 @@ export default function Login() {
             </Button>
           </form>
           <p className="mt-4 text-center text-sm text-muted-foreground">
-            Don't have an account? <Link to="/signup" className="text-foreground underline">Create one</Link>
+            Don't have an account?{" "}
+            <Link
+              to={signupHref}
+              onClick={() => {
+                if (email.trim()) sessionStorage.setItem("stabiflow.authEmail", email.trim());
+              }}
+              className="text-foreground underline"
+            >
+              Create one
+            </Link>
           </p>
         </CardContent>
       </Card>

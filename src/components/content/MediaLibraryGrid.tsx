@@ -6,13 +6,21 @@ import { Archive, Megaphone, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EmptyState } from "@/components/EmptyState";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import { useAuth } from "@/hooks/useAuth";
 import { useContentMediaAssets } from "@/hooks/useContentMediaAssets";
-import { archiveContentMediaAsset } from "@/lib/contentMediaAssets";
+import {
+  archiveContentMediaAsset,
+  CONTENT_ASSET_ROLE_LABELS,
+  updateContentMediaAssetRole,
+  type ContentAssetRole,
+} from "@/lib/contentMediaAssets";
 import { generateContentPlatformVariants } from "@/lib/contentFunctions";
 import { ImageIcon } from "lucide-react";
+
+const ROLE_UNCLASSIFIED = "__unclassified__";
 
 type MediaAssetRow = {
   id: string;
@@ -21,6 +29,7 @@ type MediaAssetRow = {
   width_px: number;
   height_px: number;
   default_caption: string | null;
+  asset_role: ContentAssetRole | null;
   content_platform_variants: { id: string; platform: string }[];
 };
 
@@ -40,6 +49,15 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
       toast.success("Media archived");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to archive");
+    }
+  };
+
+  const handleRoleChange = async (assetId: string, value: string) => {
+    try {
+      await updateContentMediaAssetRole(assetId, value === ROLE_UNCLASSIFIED ? null : (value as ContentAssetRole));
+      await invalidate();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update role");
     }
   };
 
@@ -63,7 +81,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="aspect-square animate-pulse rounded-lg bg-muted" />
         ))}
@@ -80,7 +98,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {assets.map((asset) => {
         const variants = asset.content_platform_variants || [];
         return (
@@ -91,11 +109,24 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
               disabled={!selectable}
               onClick={() => onSelect?.(asset as MediaAssetRow)}
             >
-              <MediaPreview storagePath={asset.storage_path} alt={asset.title} className="aspect-square w-full" />
+              <MediaPreview storagePath={asset.storage_path} alt={asset.title} className="aspect-[4/3] w-full object-cover" />
             </button>
             <div className="space-y-2 p-3">
               <p className="truncate text-sm font-medium" title={asset.title}>{asset.title}</p>
               <p className="text-xs text-muted-foreground">{asset.width_px}×{asset.height_px}px</p>
+              {!selectable && hasPermission("media.upload") ? (
+                <Select value={asset.asset_role ?? ROLE_UNCLASSIFIED} onValueChange={(v) => handleRoleChange(asset.id, v)}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ROLE_UNCLASSIFIED}>Unclassified</SelectItem>
+                    {(Object.entries(CONTENT_ASSET_ROLE_LABELS) as [ContentAssetRole, string][]).map(([role, label]) => (
+                      <SelectItem key={role} value={role}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : asset.asset_role ? (
+                <Badge variant="outline" className="text-xs font-normal">{CONTENT_ASSET_ROLE_LABELS[asset.asset_role]}</Badge>
+              ) : null}
               <div className="flex flex-wrap gap-1">
                 {variants.length === 0 ? (
                   <Badge variant="outline" className="text-xs font-normal text-muted-foreground">No platform variants yet</Badge>
@@ -124,7 +155,7 @@ export function MediaLibraryGrid({ onSelect, selectable }: { onSelect?: (asset: 
                   variant="ghost"
                   className="h-7 w-full text-xs"
                   onClick={() =>
-                    navigate("/campaigns/new", {
+                    navigate("/app/campaigns/new", {
                       state: { prefill: { sourceContentMediaAssetId: asset.id, primaryText: asset.default_caption || "" } },
                     })
                   }

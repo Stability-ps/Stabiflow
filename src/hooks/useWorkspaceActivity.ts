@@ -16,7 +16,7 @@ export function useWorkspaceActivity(workspaceId: string | null) {
         .select("*")
         .eq("workspace_id", workspaceId as string)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(25);
       if (error) throw new Error(error.message);
       return data;
     },

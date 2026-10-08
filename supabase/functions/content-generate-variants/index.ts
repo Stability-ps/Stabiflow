@@ -11,6 +11,7 @@
 import { generateVariantsForAsset, parseGenerateVariantsRequest, type GenerateVariantsDeps, type MediaAssetRecord } from "../_shared/contentVariantGeneration.ts";
 import { CONTENT_MEDIA_BUCKET } from "../_shared/contentPublishExecution.ts";
 import { bearerToken, createCallerClient, getCallerUserId, hasWorkspacePermission, json, type AnySupabaseClient } from "../_shared/contentAuth.ts";
+import { requireModule } from "../_shared/modulePlan.ts";
 
 function makeDeps(sb: AnySupabaseClient, workspaceId: string, actorId: string): GenerateVariantsDeps {
   return {
@@ -88,6 +89,10 @@ Deno.serve(async (req: Request) => {
   const workspaceId = body.workspace_id;
   if (typeof workspaceId !== "string" || !workspaceId) return json(req, { error: "workspace_id is required" }, 400);
   if (!(await hasWorkspacePermission(sb, workspaceId, "media.upload"))) return json(req, { error: "Forbidden" }, 403);
+  // Plan/module access is enforced here, not only by the route FeatureGate
+  // (_shared/modulePlan.ts): before any write, provider call or charge.
+  const moduleRefusal = await requireModule(sb, workspaceId, "module.content");
+  if (moduleRefusal) return json(req, moduleRefusal.body, moduleRefusal.status);
 
   const parsed = parseGenerateVariantsRequest(body);
   if ("error" in parsed) return json(req, { error: parsed.error }, 400);

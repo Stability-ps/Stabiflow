@@ -204,7 +204,7 @@ export function PostsList({ statusFilter, workspaceTimezone, emptyTitle, emptyDe
                   {hasPermission("campaign.create") && (
                     <DropdownMenuItem
                       onClick={() =>
-                        navigate("/campaigns/new", {
+                        navigate("/app/campaigns/new", {
                           state: { prefill: { sourceContentMediaAssetId: post.media_asset_id, primaryText: post.caption } },
                         })
                       }

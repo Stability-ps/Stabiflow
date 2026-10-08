@@ -2,87 +2,164 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Neutral shadcn/ui default palette. StabiFlow brand colors (from the
-   approved logo pack) land in Phase 4 - App shell + branding - not here. */
+/* Inter (variable, Latin subset) self-hosted from public/fonts. SIL Open Font
+   License 1.1 - https://github.com/rsms/inter. Self-hosting keeps the PWA
+   working offline and avoids a third-party font request. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/inter-latin-var.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --control-h: 2.25rem;
+    --control-h-sm: 2rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   StabiFlow design tokens - the code side of the Figma "StabiFlow Design
+   System" (Color collection, Light/Dark). One token system: shadcn names are
+   kept (--background, --card, --primary ...) and the extra semantic roles are
+   added alongside. Values are HSL channels for hsl(var(--x) / alpha).
+   --------------------------------------------------------------------------- */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    color-scheme: light;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    /* Surfaces */
+    --background: 220 20% 97%;          /* bg/canvas      gray/50  */
+    --card: 0 0% 100%;                  /* bg/surface     white    */
+    --card-foreground: 220 26% 9%;
+    --popover: 0 0% 100%;               /* bg/surface-raised       */
+    --popover-foreground: 220 26% 9%;
+    --muted: 216 17% 94%;               /* bg/subtle      gray/100 */
+    --accent: 216 17% 94%;              /* bg/hover - neutral hover for menus, ghost buttons */
+    --accent-foreground: 220 26% 9%;
+    --selected: 222 100% 97%;           /* bg/selected    blue/50  */
+    --selected-foreground: 227 73% 42%;
+    --secondary: 216 17% 94%;
+    --secondary-foreground: 220 26% 9%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    /* Text */
+    --foreground: 220 26% 9%;           /* text/primary   gray/900 */
+    --muted-foreground: 220 12% 44%;    /* text/secondary gray/500 - 5.0:1 on canvas */
+    --subtle-foreground: 218 13% 65%;   /* text/tertiary  gray/400 - placeholders/decoration only */
 
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
+    /* Action */
+    --primary: 226 75% 51%;             /* blue/600 - white text 6.4:1 */
+    --primary-hover: 227 73% 42%;       /* blue/700 */
+    --primary-foreground: 0 0% 100%;
+    --link: 226 75% 51%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    /* Lines & focus */
+    --border: 217 17% 91%;              /* border/default gray/200 */
+    --input: 217 15% 83%;               /* border/strong  gray/300 */
+    --ring: 225 88% 58%;                /* border/focus   blue/500 */
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
+    /* Semantic: text (AA on their soft surface), soft surface, solid fill */
+    --success: 142 72% 29%;
+    --success-soft: 145 81% 96%;
+    --success-solid: 142 76% 36%;
+    --warning: 26 90% 37%;
+    --warning-soft: 39 100% 96%;
+    --warning-solid: 38 92% 50%;
+    --destructive: 0 72% 51%;           /* solid fill + text on white */
+    --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 74% 42%;    /* text on destructive-soft */
+    --destructive-soft: 0 86% 97%;
+    --info: 227 73% 42%;
+    --info-soft: 222 100% 97%;
+    --info-solid: 226 75% 51%;
+    --brand: 172 82% 26%;               /* teal - reserved for StabiFlow/AI moments */
+    --brand-soft: 163 69% 95%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
+    /* Locked (plan-gated) and disabled */
+    --locked: 218 13% 65%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 210 40% 98%;
+    /* Shape */
+    --radius: 0.5rem;                   /* controls 8px; panels use rounded-xl (12px) */
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 11%;
+    /* Motion */
+    --duration-fast: 120ms;
+    --duration: 180ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 
-    --radius: 0.6rem;
+    /* Shell */
+    --sidebar-background: 240 14% 99%;  /* gray/25 */
+    --sidebar-foreground: 220 12% 44%;
+    --sidebar-primary: 226 75% 51%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 100%;        /* raised active row */
+    --sidebar-accent-foreground: 220 26% 9%;
+    --sidebar-border: 217 17% 91%;
+    --sidebar-ring: 225 88% 58%;
+    --header-height: 3.5rem;
 
-    --sidebar-background: 210 40% 98%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 222 47% 11%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 210 40% 94%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 88%;
-    --sidebar-ring: 222 47% 11%;
+    /* Control heights: 44px touch targets on phones, 36/32px from md up. */
+    --control-h: 2.75rem;
+    --control-h-sm: 2.25rem;
+
+    /* Admin chart accent: #2a7de1, validated against the light card surface. */
+    --admin-chart: 213 75% 52%;
   }
 
+  /* Dark values mirror the Figma Dark mode. No in-app theme switch exists
+     yet, so nothing applies .dark today; kept in sync for when one does. */
   .dark {
-    --background: 222 47% 8%;
-    --foreground: 210 40% 98%;
-
-    --card: 222 40% 10%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222 40% 10%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 11%;
-
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 63% 45%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217 33% 20%;
-    --input: 217 33% 20%;
-    --ring: 213 27% 84%;
-
-    --sidebar-background: 222 47% 9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 210 40% 98%;
-    --sidebar-primary-foreground: 222 47% 11%;
-    --sidebar-accent: 217 33% 15%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 18%;
-    --sidebar-ring: 213 27% 84%;
+    color-scheme: dark;
+    --background: 220 29% 6%;
+    --card: 220 26% 9%;
+    --card-foreground: 220 20% 97%;
+    --popover: 220 25% 12%;
+    --popover-foreground: 220 20% 97%;
+    --muted: 220 23% 15%;
+    --accent: 220 23% 15%;
+    --accent-foreground: 220 20% 97%;
+    --selected: 226 60% 17%;
+    --selected-foreground: 225 100% 77%;
+    --secondary: 220 23% 15%;
+    --secondary-foreground: 220 20% 97%;
+    --foreground: 220 20% 97%;
+    --muted-foreground: 218 13% 65%;
+    --subtle-foreground: 220 12% 44%;
+    --primary: 225 94% 67%;
+    --primary-hover: 225 100% 77%;
+    --primary-foreground: 220 29% 6%;
+    --link: 225 100% 77%;
+    --border: 220 23% 15%;
+    --input: 220 17% 25%;
+    --ring: 225 94% 67%;
+    --success: 142 69% 58%;
+    --success-soft: 147 59% 15%;
+    --success-solid: 142 71% 45%;
+    --warning: 43 96% 56%;
+    --warning-soft: 30 75% 16%;
+    --warning-solid: 43 96% 56%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-strong: 0 91% 71%;
+    --destructive-soft: 0 57% 18%;
+    --info: 225 100% 77%;
+    --info-soft: 226 60% 17%;
+    --info-solid: 225 94% 67%;
+    --brand: 169 64% 50%;
+    --brand-soft: 173 71% 14%;
+    --locked: 220 12% 44%;
+    --sidebar-background: 220 29% 6%;
+    --sidebar-foreground: 218 13% 65%;
+    --sidebar-primary: 225 94% 67%;
+    --sidebar-primary-foreground: 220 29% 6%;
+    --sidebar-accent: 220 25% 12%;
+    --sidebar-accent-foreground: 220 20% 97%;
+    --sidebar-border: 220 23% 15%;
+    --sidebar-ring: 225 94% 67%;
+    /* #3b8ae6, validated against the dark card surface. */
+    --admin-chart: 213 77% 57%;
   }
 }
 
@@ -90,7 +167,251 @@
   * {
     @apply border-border;
   }
+  html {
+    font-family: theme(fontFamily.sans);
+    font-feature-settings: "cv11", "ss03";
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+  }
+
+  ::selection {
+    background: hsl(var(--selected));
+    color: hsl(var(--foreground));
+  }
+
+  input,
+  textarea,
+  select {
+    color: hsl(var(--foreground));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--muted-foreground) / 0.8);
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus {
+    -webkit-text-fill-color: hsl(var(--foreground));
+    box-shadow: 0 0 0 1000px hsl(var(--background)) inset;
+    caret-color: hsl(var(--foreground));
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Mobile / PWA shell
+   --------------------------------------------------------------------------- */
+:root {
+  /* Height of the phone bottom navigation bar (without the safe-area inset). */
+  --bottom-nav-bar: 3.75rem;
+  /* Space page content must leave for the bottom nav - 0 on md+ where the
+     desktop sidebar is used instead. */
+  --bottom-nav-height: 0px;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --bottom-nav-height: calc(var(--bottom-nav-bar) + env(safe-area-inset-bottom));
+  }
+
+  /* Keep focused fields / anchored targets clear of the sticky header and
+     bottom navigation when the browser scrolls them into view. */
+  html {
+    scroll-padding-top: calc(4rem + env(safe-area-inset-top));
+    scroll-padding-bottom: calc(var(--bottom-nav-height) + 1rem);
+  }
+
+  /* iOS zooms into any focused control under 16px - keep form text at 16px
+     on phones (desktop sizes unchanged). */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Dense creation/document tools opt in with .mobile-touch. Keep their
+     desktop density, but give phone controls a reliable 44px touch target. */
+  .mobile-touch :is(button:not([role="checkbox"]):not([role="radio"]), [role="combobox"], select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"])) {
+    min-height: 44px;
+  }
+
+  .mobile-touch :is([role="checkbox"], [role="radio"]) {
+    position: relative;
+  }
+
+  .mobile-touch :is([role="checkbox"], [role="radio"])::after {
+    content: "";
+    position: absolute;
+    inset: -14px;
+  }
+
+  /* Toasts sit above the bottom navigation instead of covering it. */
+  [data-sonner-toaster][data-y-position="bottom"] {
+    bottom: calc(var(--bottom-nav-height) + 0.75rem) !important;
+  }
+
+  /* While the on-screen keyboard is open the bottom bar would float above
+     it and hide the field being edited - tuck it away (set by AppLayout). */
+  html[data-keyboard-open] .mobile-bottom-nav {
+    display: none;
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Installed PWA: no pull-to-refresh bounce revealing the browser chrome. */
+@media (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Card padding: 1rem on phones, the original 1.5rem from sm up. A component
+   class (not a utility) so any p-* a caller passes still overrides it. */
+@layer components {
+  .card-pad {
+    padding: 1rem;
+  }
+  @media (min-width: 640px) {
+    .card-pad {
+      padding: 1.5rem;
+    }
+  }
+}
+
+
+/* Shared overlays: one restrained elevation for menus and dialogs. */
+@layer components {
+  [data-radix-popper-content-wrapper] [role="menu"],
+  [role="dialog"] {
+    box-shadow: 0 8px 24px -4px hsl(220 26% 9% / 0.12), 0 2px 6px hsl(220 26% 9% / 0.05);
+  }
+
+  /* Legacy alias kept for older screens; now the plain Panel surface. */
+  .premium-surface {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+  }
+}
+
+/* StabiFlow Guide: <main> only needs overflow:auto for other pages; on the
+   guide it would stop the chapter column and chapter selector sticking. */
+@media (min-width: 768px) {
+  main:has(.guide-root) {
+    overflow: visible;
+  }
+}
+
+/* StabiFlow Guide - print / "book" mode. Only pages that render the guide
+   use these classes, so printing any other page is unaffected. */
+@media print {
+  body:has(.guide-root),
+  body:has(.guide-book) {
+    background: #fff !important;
+  }
+  body:has(.guide-root) .peer[data-side],
+  body:has(.guide-book) .peer[data-side],
+  body:has(.guide-root) header.sticky,
+  body:has(.guide-book) header.sticky,
+  body:has(.guide-root) .mobile-bottom-nav,
+  body:has(.guide-book) .mobile-bottom-nav,
+  .guide-no-print {
+    display: none !important;
+  }
+  body:has(.guide-root) main,
+  body:has(.guide-book) main {
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+  .guide-book-chapter {
+    break-before: page;
+  }
+  .guide-figure,
+  .guide-avoid-break,
+  .guide-faq,
+  .guide-book h2,
+  .guide-book h3 {
+    break-inside: avoid;
+  }
+  .guide-book h2,
+  .guide-book h3,
+  .guide-section h2 {
+    break-after: avoid;
+  }
+  .guide-figure img {
+    max-height: 18cm;
+    width: auto;
+    max-width: 100%;
+  }
+}
+
+
+/* ---------------------------------------------------------------------------
+   Page-level layout helpers used by existing screens. Re-based on the design
+   tokens so those screens inherit the new system without page rewrites.
+   --------------------------------------------------------------------------- */
+@layer components {
+  .operational-page {
+    @apply mx-auto w-full max-w-[1280px];
+  }
+
+  .operational-header {
+    @apply mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
+  }
+
+  .operational-title {
+    @apply text-title-page text-foreground;
+  }
+
+  .operational-subtitle {
+    @apply mt-1 text-sm text-muted-foreground;
+  }
+
+  .operational-toolbar {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .operational-panel {
+    @apply overflow-hidden rounded-xl border border-border bg-card;
+  }
+
+  .operational-panel-header {
+    @apply flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 py-3;
+  }
+
+  .operational-section-label {
+    @apply text-overline uppercase text-muted-foreground;
+  }
+
+  .operational-metric {
+    @apply rounded-xl border border-border bg-card px-4 py-3;
+  }
+
+  .operational-chip {
+    @apply inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground;
+  }
+
+  .operational-split {
+    @apply grid min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card;
   }
 }

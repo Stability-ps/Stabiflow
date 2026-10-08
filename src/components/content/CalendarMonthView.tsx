@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { addMonths, eachDayOfInterval, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ComposePostDialog } from "@/components/content/ComposePostDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +31,8 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
   const { currentWorkspaceId } = useAuth();
   const [month, setMonth] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [composeDay, setComposeDay] = useState<Date | null>(null);
 
   const rangeStart = startOfWeek(startOfMonth(month));
   const rangeEnd = endOfWeek(endOfMonth(month));
@@ -79,8 +82,8 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
             <button
               key={key}
               type="button"
-              onClick={() => dayPosts.length > 0 && setSelectedDay(day)}
-              className={`flex min-h-[84px] flex-col gap-1 bg-background p-1.5 text-left transition-colors ${inMonth ? "" : "opacity-40"} ${dayPosts.length ? "hover:bg-muted/60" : "cursor-default"}`}
+              onClick={() => setSelectedDay(day)}
+              className={`flex min-h-[84px] flex-col gap-1 bg-background p-1.5 text-left transition-colors ${inMonth ? "" : "opacity-40"} hover:bg-muted/60`}
             >
               <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${isToday ? "bg-primary text-primary-foreground" : ""}`}>
                 {format(day, "d")}
@@ -99,9 +102,10 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
       <Dialog open={!!selectedDay} onOpenChange={(open) => !open && setSelectedDay(null)}>
         <DialogContent className="max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedDay ? format(selectedDay, "EEEE, MMMM d") : ""}</DialogTitle>
+            <DialogTitle className="flex items-center justify-between gap-3 pr-6"><span>{selectedDay ? format(selectedDay, "EEEE, MMMM d") : ""}</span><Button size="sm" onClick={() => { setComposeDay(selectedDay); setSelectedDay(null); setComposeOpen(true); }}><Plus className="mr-1 h-4 w-4" /> Add post</Button></DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
+            {selectedDayPosts.length === 0 && <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">Nothing scheduled for this day yet. Add as many posts as you need.</p>}
             {selectedDayPosts.map((post) => (
               <div key={post.id} className="flex items-center gap-3 rounded-md border p-2">
                 {post.content_media_assets && (
@@ -120,6 +124,7 @@ export function CalendarMonthView({ workspaceTimezone }: { workspaceTimezone: st
           </div>
         </DialogContent>
       </Dialog>
+      <ComposePostDialog open={composeOpen} onOpenChange={setComposeOpen} workspaceTimezone={workspaceTimezone} initialDate={composeDay ?? undefined} />
     </div>
   );
 }

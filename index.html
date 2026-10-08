@@ -6,12 +6,61 @@
     <link rel="icon" type="image/png" sizes="64x64" href="/brand/StabiFlow_Favicon_64x64.png" />
     <link rel="icon" type="image/png" sizes="128x128" href="/brand/StabiFlow_Favicon_128x128.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/brand/StabiFlow_Favicon_512x512.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="StabiFlow - Create. Advertise. Connect. Convert. From content to customers." />
-    <title>StabiFlow</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="preload" href="/fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="StabiFlow" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="StabiFlow helps businesses manage Meta advertising, Facebook and Instagram business assets, WhatsApp conversations, leads, analytics and automation from one workspace." />
+    <meta name="theme-color" content="#07162d" />
+    <meta property="og:title" content="StabiFlow | Meta Ads, WhatsApp, CRM & Business Automation" />
+    <meta property="og:description" content="StabiFlow helps businesses manage Meta advertising, Facebook and Instagram business assets, WhatsApp conversations, leads, analytics and automation from one workspace." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="StabiFlow" />
+    <meta property="og:image" content="https://app.stabiflow.com/brand/StabiFlow_Full_Logo_Light.png" />
+    <meta property="og:image:width" content="770" />
+    <meta property="og:image:height" content="540" />
+    <meta property="og:image:alt" content="StabiFlow" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="StabiFlow | Meta Ads, WhatsApp, CRM & Business Automation" />
+    <meta name="twitter:description" content="StabiFlow helps businesses manage Meta advertising, Facebook and Instagram business assets, WhatsApp conversations, leads, analytics and automation from one workspace." />
+    <meta name="twitter:image" content="https://app.stabiflow.com/brand/StabiFlow_Full_Logo_Light.png" />
+    <title>StabiFlow | Meta Ads, WhatsApp, CRM & Business Automation</title>
   </head>
-  <body>
+  <body style="background-color:#07162d">
+    <div id="pwa-launch-screen" aria-hidden="true">
+      <img src="/brand/StabiFlow_Splash.svg" alt="" />
+    </div>
+    <style>
+      #pwa-launch-screen { display: none; }
+      @media (display-mode: standalone) {
+        #pwa-launch-screen {
+          position: fixed;
+          inset: 0;
+          z-index: 2147483647;
+          display: grid;
+          place-items: center;
+          background: #07162d;
+          opacity: 1;
+          transition: opacity 180ms ease;
+        }
+        #pwa-launch-screen img {
+          width: 112px;
+          height: 112px;
+          object-fit: contain;
+        }
+        #pwa-launch-screen[data-hide="true"] {
+          opacity: 0;
+          pointer-events: none;
+        }
+      }
+    </style>
     <div id="root"></div>
+    <script>
+      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
