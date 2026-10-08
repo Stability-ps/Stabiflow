@@ -1,5 +1,5 @@
 import { ImageIcon } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { EmptyState } from "@/components/EmptyState";
 import { MediaPreview } from "@/components/content/MediaPreview";
 import type { CreativePerformanceRow } from "@/hooks/useAnalytics";
@@ -7,25 +7,25 @@ import { formatMoneyByCurrency } from "@/lib/analytics";
 
 export function CreativePerformanceTable({ rows, canSeeRevenue, workspaceCurrency }: { rows: CreativePerformanceRow[]; canSeeRevenue: boolean; workspaceCurrency: string }) {
   return (
-    <Card>
-      <CardHeader><CardTitle className="text-base">Creative performance</CardTitle></CardHeader>
-      <CardContent className="overflow-x-auto p-0">
+    <Panel aria-labelledby="analytics-creatives">
+      <PanelHeader titleId="analytics-creatives" title="Creative performance" />
+      <div className="relative overflow-x-auto">
         {rows.length === 0 ? (
-          <div className="p-6"><EmptyState icon={ImageIcon} title="No published creatives yet" description="Creative-level conversions appear once a campaign with a creative has been published." /></div>
+          <div className="p-2"><EmptyState icon={ImageIcon} title="No published creatives yet" description="Creative-level conversions appear once a campaign with a creative has been published." /></div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="border-b text-left text-xs text-muted-foreground">
+            <thead className="border-b border-border text-left text-overline uppercase text-muted-foreground">
               <tr>
-                <th className="p-3">Creative</th><th className="p-3">Campaign</th><th className="p-3">Spend</th>
-                <th className="p-3">Conversations</th><th className="p-3">Leads</th><th className="p-3">Customers</th>
-                {canSeeRevenue && <th className="p-3">Revenue</th>}
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Creative</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Campaign</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Spend</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Conversations</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Leads</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Customers</th>
+                {canSeeRevenue && <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Revenue</th>}
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.creative_id} className="border-b last:border-0">
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
+                <tr key={r.creative_id} className="border-b border-border last:border-0">
+                  <td className="px-3 py-2.5">
+                    <div className="flex min-w-[14rem] items-center gap-2">
                       {r.media_storage_path ? (
                         <MediaPreview storagePath={r.media_storage_path} alt={r.primary_text || "Creative"} className="h-10 w-10 rounded object-cover" />
                       ) : (
@@ -34,18 +34,18 @@ export function CreativePerformanceTable({ rows, canSeeRevenue, workspaceCurrenc
                       <span className="max-w-[220px] truncate">{r.primary_text || "—"}</span>
                     </div>
                   </td>
-                  <td className="p-3">{r.campaign_name}</td>
-                  <td className="p-3 text-muted-foreground">Unavailable at creative level</td>
-                  <td className="p-3">{r.conversations}</td>
-                  <td className="p-3">{r.leads}</td>
-                  <td className="p-3">{r.customers}</td>
-                  {canSeeRevenue && <td className="p-3">{formatMoneyByCurrency(r.revenue, workspaceCurrency)}</td>}
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.campaign_name}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">Unavailable at creative level</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.conversations}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.leads}</td>
+                  <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.customers}</td>
+                  {canSeeRevenue && <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{formatMoneyByCurrency(r.revenue, workspaceCurrency)}</td>}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

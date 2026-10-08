@@ -1,74 +1,65 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Metric, type MetricState } from "@/components/ui/metric";
 import type { AnalyticsKpis } from "@/hooks/useAnalytics";
 import { costPerOutcome, formatMoneyByCurrency, periodOverPeriodChange, summarizeCurrency, type MoneyByCurrency } from "@/lib/analytics";
 import { formatMoney } from "@/lib/adMoney";
 
-function Delta({ value }: { value: number | null }) {
-  if (value === null) return null;
+function deltaNote(value: number | null) {
+  if (value === null) return undefined;
   const positive = value >= 0;
-  return <span className={`ml-1.5 text-xs font-medium ${positive ? "text-emerald-600 dark:text-emerald-300" : "text-red-600 dark:text-red-300"}`}>{positive ? "+" : ""}{value.toFixed(0)}%</span>;
-}
-
-function Kpi({ label, value, previousValue, isMoney, workspaceCurrency }: { label: string; value: number | MoneyByCurrency | null; previousValue?: number | null; isMoney?: boolean; workspaceCurrency?: string }) {
-  let display: string;
-  if (isMoney) {
-    display = formatMoneyByCurrency(value as MoneyByCurrency, workspaceCurrency as string);
-  } else if (value === null) {
-    display = "—";
-  } else {
-    display = String(value as number);
-  }
-  const delta = !isMoney && typeof value === "number" && previousValue !== undefined ? periodOverPeriodChange(previousValue, value) : null;
   return (
-    <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle></CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold">{display}<Delta value={delta} /></p>
-      </CardContent>
-    </Card>
+    <span className={positive ? "font-medium text-success" : "font-medium text-destructive-strong"}>
+      {positive ? "+" : ""}{value.toFixed(0)}% vs previous period
+    </span>
   );
 }
 
-/** A cost-per-outcome card: null (not zero) unless BOTH spend and the outcome count are valid for a single currency - see costPerOutcome/summarizeCurrency. */
-function CostKpi({ label, spend, count }: { label: string; spend: MoneyByCurrency; count: number }) {
+function countState(value: number | null, previous?: number | null): MetricState {
+  if (value === null) return { kind: "no_data" };
+  const note = previous !== undefined ? deltaNote(periodOverPeriodChange(previous, value)) : undefined;
+  return value === 0 ? { kind: "zero", note } : { kind: "value", value: value.toLocaleString(), note };
+}
+
+// No money rows for the range is a measured zero in the workspace currency
+// (formatMoneyByCurrency already renders it that way), not missing data.
+function moneyState(value: MoneyByCurrency, workspaceCurrency: string): MetricState {
+  const total = summarizeCurrency(value);
+  const display = formatMoneyByCurrency(value, workspaceCurrency);
+  if (total.kind === "empty" || (total.kind === "single" && total.amountMinor === 0)) return { kind: "zero", value: display };
+  return { kind: "value", value: display, note: total.kind === "mixed" ? "Several currencies - not converted" : undefined };
+}
+
+/** Cost per outcome: no_data (never 0) unless BOTH spend and the outcome count are valid for a single currency - see costPerOutcome/summarizeCurrency. */
+function costState(spend: MoneyByCurrency, count: number): MetricState {
   const total = summarizeCurrency(spend);
-  let display = "—";
   if (total.kind === "single") {
     const cost = costPerOutcome(total.amountMinor, count);
-    display = cost === null ? "—" : formatMoney(cost, total.currency);
-  } else if (total.kind === "mixed") {
-    display = "Mixed currency";
-  } else if (count > 0) {
-    display = "0"; // no spend rows at all, but real outcomes exist - a genuine zero cost (no currency to format with, since nothing was ever spent)
+    return cost === null ? { kind: "no_data", note: count === 0 ? "No outcomes this period" : undefined } : { kind: "value", value: formatMoney(cost, total.currency) };
   }
-  return (
-    <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle></CardHeader>
-      <CardContent><p className="text-2xl font-semibold">{display}</p></CardContent>
-    </Card>
-  );
+  if (total.kind === "mixed") return { kind: "value", value: "Mixed currency", note: "Spend is in several currencies" };
+  // No spend rows at all, but real outcomes exist - a genuine zero cost.
+  return count > 0 ? { kind: "zero", note: "No ad spend this period" } : { kind: "no_data", note: "No spend or outcomes" };
 }
 
 export function KpiCards({ kpis, previous, canSeeRevenue, workspaceCurrency }: { kpis: AnalyticsKpis; previous?: AnalyticsKpis; canSeeRevenue: boolean; workspaceCurrency: string }) {
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Kpi label="Ad Spend" value={kpis.spend} isMoney workspaceCurrency={workspaceCurrency} />
-        <Kpi label="Conversations" value={kpis.conversations} previousValue={previous?.conversations} />
-        <Kpi label="Leads" value={kpis.leads} previousValue={previous?.leads} />
-        <Kpi label="Qualified Leads" value={kpis.qualified_leads} previousValue={previous?.qualified_leads} />
-        <Kpi label="Opportunities" value={kpis.opportunities} previousValue={previous?.opportunities} />
-        <Kpi label="Customers" value={kpis.customers} previousValue={previous?.customers} />
-        {canSeeRevenue && <Kpi label="Recorded Revenue" value={kpis.revenue_total} isMoney workspaceCurrency={workspaceCurrency} />}
+    <section aria-label="Key metrics" className="space-y-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric label="Ad spend" state={moneyState(kpis.spend, workspaceCurrency)} />
+        <Metric label="Conversations" state={countState(kpis.conversations, previous?.conversations)} />
+        <Metric label="Leads" state={countState(kpis.leads, previous?.leads)} />
+        <Metric label="Qualified leads" state={countState(kpis.qualified_leads, previous?.qualified_leads)} />
+        <Metric label="Opportunities" state={countState(kpis.opportunities, previous?.opportunities)} />
+        <Metric label="Customers" state={countState(kpis.customers, previous?.customers)} />
+        {canSeeRevenue && <Metric label="Recorded revenue" state={moneyState(kpis.revenue_total, workspaceCurrency)} />}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <CostKpi label="Cost / Conversation" spend={kpis.spend} count={kpis.conversations} />
-        <CostKpi label="Cost / Lead" spend={kpis.spend} count={kpis.leads} />
-        <CostKpi label="Cost / Qualified Lead" spend={kpis.spend} count={kpis.qualified_leads} />
-        <CostKpi label="Cost / Opportunity" spend={kpis.spend} count={kpis.opportunities} />
-        <CostKpi label="Cost / Customer" spend={kpis.spend} count={kpis.customers} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Metric label="Cost / conversation" state={costState(kpis.spend, kpis.conversations)} />
+        <Metric label="Cost / lead" state={costState(kpis.spend, kpis.leads)} />
+        <Metric label="Cost / qualified lead" state={costState(kpis.spend, kpis.qualified_leads)} />
+        <Metric label="Cost / opportunity" state={costState(kpis.spend, kpis.opportunities)} />
+        <Metric label="Cost / customer" state={costState(kpis.spend, kpis.customers)} />
       </div>
-    </div>
+    </section>
   );
 }

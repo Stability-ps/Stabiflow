@@ -1,6 +1,6 @@
 import { BarChart3, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Panel, PanelHeader } from "@/components/ui/panel";
 import { CampaignStatusBadge } from "@/components/campaigns/CampaignStatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import type { CampaignPerformanceRow } from "@/hooks/useAnalytics";
@@ -51,28 +51,29 @@ export function CampaignPerformanceTable({ rows, canSeeRevenue, attributionModel
   workspaceCurrency: string;
 }) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base">Campaign performance</CardTitle>
-        {rows.length > 0 && (
+    <Panel aria-labelledby="analytics-campaigns">
+      <PanelHeader
+        titleId="analytics-campaigns"
+        title="Campaign performance"
+        action={rows.length > 0 ? (
           <Button size="sm" variant="outline" onClick={() => downloadCsv(rows, canSeeRevenue, attributionModel, preset)}>
-            <Download className="mr-1.5 h-3.5 w-3.5" /> Export CSV
+            <Download aria-hidden="true" /> Export CSV
           </Button>
-        )}
-      </CardHeader>
-      <CardContent className="overflow-x-auto p-0">
+        ) : null}
+      />
+      <div className="relative overflow-x-auto">
         {rows.length === 0 ? (
-          <div className="p-6"><EmptyState icon={BarChart3} title="No campaigns yet" description="Launch a campaign to see performance here." /></div>
+          <div className="p-2"><EmptyState icon={BarChart3} title="No campaigns yet" description="Launch a campaign to see performance here." /></div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="border-b text-left text-xs text-muted-foreground">
+            <thead className="border-b border-border text-left text-overline uppercase text-muted-foreground">
               <tr>
-                <th className="p-3">Campaign</th><th className="p-3">Status</th><th className="p-3">Spend</th>
-                <th className="p-3">Impr.</th><th className="p-3">Clicks</th><th className="p-3">CTR</th><th className="p-3">CPC</th>
-                <th className="p-3">Conv.</th><th className="p-3">Leads</th><th className="p-3">Qual.</th><th className="p-3">Opps</th><th className="p-3">Cust.</th>
-                <th className="p-3">Cost/Lead</th>
-                {canSeeRevenue && <th className="p-3">Revenue</th>}
-                {canSeeRevenue && <th className="p-3">ROAS</th>}
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Campaign</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Status</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Spend</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Impr.</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Clicks</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">CTR</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">CPC</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Conv.</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Leads</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Qual.</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Opps</th><th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Cust.</th>
+                <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Cost/Lead</th>
+                {canSeeRevenue && <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">Revenue</th>}
+                {canSeeRevenue && <th scope="col" className="whitespace-nowrap px-3 py-2 font-medium">ROAS</th>}
               </tr>
             </thead>
             <tbody>
@@ -82,29 +83,29 @@ export function CampaignPerformanceTable({ rows, canSeeRevenue, attributionModel
                 const costPerLead = costPerOutcome(r.spend_minor, r.leads);
                 const roas = computeRoas(r.spend_minor, r.currency, r.revenue);
                 return (
-                  <tr key={r.campaign_id} className="border-b last:border-0">
-                    <td className="p-3 font-medium">{r.name}</td>
-                    <td className="p-3"><CampaignStatusBadge status={r.status} /></td>
-                    <td className="p-3">{formatMoney(r.spend_minor, r.currency)}</td>
-                    <td className="p-3">{r.impressions.toLocaleString()}</td>
-                    <td className="p-3">{r.clicks.toLocaleString()}</td>
-                    <td className="p-3">{ctr}</td>
-                    <td className="p-3">{cpc === null ? "—" : formatMoney(cpc, r.currency)}</td>
-                    <td className="p-3">{r.conversations}</td>
-                    <td className="p-3">{r.leads}</td>
-                    <td className="p-3">{r.qualified_leads}</td>
-                    <td className="p-3">{r.opportunities}</td>
-                    <td className="p-3">{r.customers}</td>
-                    <td className="p-3">{costPerLead === null ? "—" : formatMoney(costPerLead, r.currency)}</td>
-                    {canSeeRevenue && <td className="p-3">{formatMoneyByCurrency(r.revenue, workspaceCurrency)}</td>}
-                    {canSeeRevenue && <td className="p-3">{formatRoas(roas)}</td>}
+                  <tr key={r.campaign_id} className="border-b border-border last:border-0">
+                    <td className="min-w-[12rem] px-3 py-2.5 font-medium text-foreground">{r.name}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums"><CampaignStatusBadge status={r.status} /></td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{formatMoney(r.spend_minor, r.currency)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.impressions.toLocaleString()}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.clicks.toLocaleString()}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{ctr}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{cpc === null ? "—" : formatMoney(cpc, r.currency)}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.conversations}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.leads}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.qualified_leads}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.opportunities}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{r.customers}</td>
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{costPerLead === null ? "—" : formatMoney(costPerLead, r.currency)}</td>
+                    {canSeeRevenue && <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{formatMoneyByCurrency(r.revenue, workspaceCurrency)}</td>}
+                    {canSeeRevenue && <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{formatRoas(roas)}</td>}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

@@ -19,9 +19,9 @@ export function AnalyticsControls({
   onAttributionModelChange: (model: AttributionModel) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <Select value={preset} onValueChange={(v) => onPresetChange(v as DateRangePreset)}>
-        <SelectTrigger className="h-9 w-44"><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-full min-[400px]:w-44" aria-label="Date range"><SelectValue /></SelectTrigger>
         <SelectContent>
           {PRESETS.map((p) => <SelectItem key={p} value={p}>{DATE_RANGE_PRESET_LABELS[p]}</SelectItem>)}
         </SelectContent>
@@ -29,14 +29,14 @@ export function AnalyticsControls({
 
       {preset === "custom" && (
         <div className="flex items-center gap-2">
-          <Input type="date" value={customFrom} onChange={(e) => onCustomFromChange(e.target.value)} className="h-9 w-36" />
+          <Input type="date" aria-label="From date" value={customFrom} onChange={(e) => onCustomFromChange(e.target.value)} className="w-36" />
           <span className="text-sm text-muted-foreground">to</span>
-          <Input type="date" value={customTo} onChange={(e) => onCustomToChange(e.target.value)} className="h-9 w-36" />
+          <Input type="date" aria-label="To date" value={customTo} onChange={(e) => onCustomToChange(e.target.value)} className="w-36" />
         </div>
       )}
 
       <Select value={attributionModel} onValueChange={(v) => onAttributionModelChange(v as AttributionModel)}>
-        <SelectTrigger className="h-9 w-48" title={ATTRIBUTION_MODEL_DESCRIPTION}>
+        <SelectTrigger className="w-full min-[400px]:w-48" title={ATTRIBUTION_MODEL_DESCRIPTION} aria-label="Attribution model">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
