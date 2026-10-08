@@ -95,7 +95,10 @@ export default function Overview() {
   const integrations = integrationsQuery.data || [];
   const metaConnected = hasCurrentIntegration(integrations, "meta");
   const whatsappConnected = hasCurrentIntegration(integrations, "whatsapp");
-  const campaignsQuery = useCampaignPerformance(canView ? currentWorkspaceId : null, range, DEFAULT_ATTRIBUTION_MODEL);
+  // Same rule the server enforces (20261027080000): campaign read models
+  // need Campaigns or Analytics - don't request what the plan can't read.
+  const campaignReadsAllowed = isEnabled("module.campaigns") || isEnabled("module.analytics");
+  const campaignsQuery = useCampaignPerformance(canView && campaignReadsAllowed ? currentWorkspaceId : null, range, DEFAULT_ATTRIBUTION_MODEL);
   const conversationsQuery = useInboxConversations(whatsappConnected ? currentWorkspaceId : null);
   const attention = useNeedsAttention(currentWorkspaceId);
 
