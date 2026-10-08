@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { BarChart3 } from "lucide-react";
+import { AlertTriangle, BarChart3 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SectionError } from "@/components/analytics/SectionError";
 import { WhatsAppContextBanner } from "@/components/whatsapp/WhatsAppContextBanner";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkspaceTimezone } from "@/hooks/useWorkspaceTimezone";
@@ -95,47 +97,58 @@ export default function Analytics() {
   if (!currentWorkspaceId) return <div className="h-[70vh] animate-pulse rounded-lg bg-muted" />;
 
   if (!canView) {
-    return <EmptyState icon={BarChart3} title="Analytics" description="You don't have permission to view this workspace's analytics. Ask a workspace owner or admin." />;
+    return <EmptyState icon={BarChart3} title="Analytics" description="You don't have permission to view this workspace's analytics. Ask a workspace owner or admin." className="rounded-xl border border-border bg-card" />;
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6">
+    <div className="mx-auto w-full max-w-[1440px] space-y-5">
       {fromWhatsApp && <WhatsAppContextBanner label="Viewing WhatsApp conversion analytics." />}
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-cyan-100/80 bg-gradient-to-br from-white via-white to-cyan-50/65 p-5 shadow-[0_18px_60px_-44px_hsl(190_70%_40%/0.3)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-cyan-950/20">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Performance intelligence</p><h1 className="mt-1 text-3xl font-semibold tracking-tight">Analytics</h1>
-          <p className="text-sm text-muted-foreground">Spend, conversations, leads, customers, revenue, and cost-per-outcome, all the way through the funnel.</p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-title-page text-foreground">Analytics</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Spend, conversations, leads, customers and revenue - all the way through the funnel.</p>
         </div>
         <AnalyticsControls
           preset={preset} onPresetChange={setPreset}
           customFrom={customFrom} customTo={customTo} onCustomFromChange={setCustomFrom} onCustomToChange={setCustomTo}
           attributionModel={attributionModel} onAttributionModelChange={setAttributionModel}
         />
-      </div>
+      </header>
 
-      <nav className="flex w-fit gap-1 rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm" aria-label="Analytics views">
-        {(canSeeRevenue ? ([["overview", "Overview"], ["creators", "Creator campaigns"], ["revenue", "Revenue"]] as const) : ([["overview", "Overview"], ["creators", "Creator campaigns"]] as const)).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setView(key)}
-            aria-current={view === key ? "page" : undefined}
-            className={cn(
-              "rounded-lg px-3 py-2 text-sm font-medium transition-all",
-              view === key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
+      <nav className="-mx-1 flex max-w-full overflow-x-auto px-1" aria-label="Analytics views">
+        <div className="inline-flex shrink-0 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
+          {(canSeeRevenue ? ([["overview", "Overview"], ["creators", "Creator campaigns"], ["revenue", "Revenue"]] as const) : ([["overview", "Overview"], ["creators", "Creator campaigns"]] as const)).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setView(key)}
+              aria-current={view === key ? "page" : undefined}
+              className={cn(
+                "whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                view === key ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       {!range ? (
-        <EmptyState icon={BarChart3} title="Choose a date range" description="Pick both a start and end date to see analytics for a custom range." />
+        <EmptyState icon={BarChart3} title="Choose a date range" description="Pick both a start and end date to see analytics for a custom range." className="rounded-xl border border-border bg-card" />
       ) : kpisQuery.isLoading ? (
-        <div className="h-40 animate-pulse rounded-lg bg-muted" />
+        <div className="space-y-3" aria-busy="true" aria-label="Loading analytics">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{Array.from({ length: 4 }, (_, i) => <div key={i} className="h-[6.5rem] animate-pulse rounded-xl bg-muted" />)}</div>
+          <div className="h-40 animate-pulse rounded-xl bg-muted" />
+        </div>
       ) : kpisQuery.isError ? (
-        <EmptyState icon={BarChart3} title="Unable to load analytics" description="Something went wrong loading analytics for this workspace. Try again shortly." />
+        <EmptyState
+          icon={AlertTriangle}
+          title="Couldn't load analytics"
+          description="Something went wrong loading analytics for this workspace. Your data is safe - try again."
+          action={<Button variant="outline" onClick={() => void kpisQuery.refetch()}>Try again</Button>}
+          className="rounded-xl border border-border bg-card"
+        />
       ) : kpisQuery.data && view === "creators" ? (
         <CreatorCampaignsSection workspaceId={currentWorkspaceId} canSeeRevenue={canSeeRevenue} />
       ) : kpisQuery.data && view === "revenue" ? (
@@ -154,19 +167,19 @@ export default function Analytics() {
         <>
           <KpiCards kpis={kpisQuery.data} previous={previousKpisQuery.data} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
           <FunnelSection kpis={kpisQuery.data} />
-          {crmQuery.data && <CrmPerformanceSection data={crmQuery.data} />}
+          {crmQuery.isError ? <SectionError title="CRM performance" onRetry={() => void crmQuery.refetch()} /> : crmQuery.data && <CrmPerformanceSection data={crmQuery.data} />}
           {canSeeRevenue && <RevenueAnalyticsSection kpis={kpisQuery.data} workspaceCurrency={workspaceCurrency} />}
-          <CampaignPerformanceTable
+          {campaignsQuery.isError ? <SectionError title="Campaign performance" onRetry={() => void campaignsQuery.refetch()} /> : <CampaignPerformanceTable
             rows={campaignsQuery.data || []}
             canSeeRevenue={canSeeRevenue}
             attributionModel={attributionModel}
             preset={preset}
             workspaceCurrency={workspaceCurrency}
-          />
-          <CreativePerformanceTable rows={creativesQuery.data || []} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />
+          />}
+          {creativesQuery.isError ? <SectionError title="Creative performance" onRetry={() => void creativesQuery.refetch()} /> : <CreativePerformanceTable rows={creativesQuery.data || []} canSeeRevenue={canSeeRevenue} workspaceCurrency={workspaceCurrency} />}
           <div ref={whatsappSectionRef} id="whatsapp-analytics" className="grid scroll-mt-20 gap-4 lg:grid-cols-2">
-            <SourceBreakdownSection rows={sourcesQuery.data || []} />
-            {whatsappQuery.data && <WhatsAppAnalyticsSection data={whatsappQuery.data} />}
+            {sourcesQuery.isError ? <SectionError title="Where leads come from" onRetry={() => void sourcesQuery.refetch()} /> : <SourceBreakdownSection rows={sourcesQuery.data || []} />}
+            {whatsappQuery.isError ? <SectionError title="WhatsApp conversion" onRetry={() => void whatsappQuery.refetch()} /> : whatsappQuery.data && <WhatsAppAnalyticsSection data={whatsappQuery.data} />}
           </div>
         </>
       ) : null}
