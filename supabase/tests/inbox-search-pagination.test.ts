@@ -4,7 +4,7 @@
 // REAL RLS + the real permission gate. No provider calls anywhere.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, enableModules } from "./helpers";
 import { seedWhatsAppSetup } from "./inboxHelpers";
 
 const PAGE = 50;
@@ -67,6 +67,8 @@ describe("Phase 14 - get_inbox_conversations", () => {
 
   beforeAll(async () => {
     ws = await createTestTenant("inbox-search");
+    // Plan-gated since 20261025060000 - this suite tests permissions, not plans.
+    await enableModules(ws.workspaceId, "module.whatsapp");
     other = await createTestTenant("inbox-search-other");
     numberId = (await seedWhatsAppSetup(ws.workspaceId)).id;
     await seedWhatsAppSetup(other.workspaceId);

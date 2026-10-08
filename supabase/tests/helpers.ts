@@ -147,6 +147,12 @@ export async function createTestTenant(label: string): Promise<TestTenant> {
   return { userId: identity.userId, email: identity.email, client: identity.client, workspaceId: workspaceId as string };
 }
 
+/** Every plan-gated module. Feature suites that test behaviour (not plans) turn these on; plan enforcement itself is covered by module-plan-direct-writes / edge-function-module-gates. */
+export const ALL_MODULES = [
+  "module.leads", "module.customers", "module.campaigns", "module.content", "module.creative_studio",
+  "module.automations", "module.whatsapp", "module.integrations", "module.flow_ai", "module.analytics",
+] as const;
+
 /** Turns plan-gated modules (e.g. "module.leads") on for a test workspace through a workspace target, the same mechanism Admin uses. Test workspaces start on Free, where advanced modules are off and their edge functions refuse requests. */
 export async function enableModules(workspaceId: string, ...flagKeys: string[]) {
   const { error } = await admin.from("feature_flag_workspace_targets").upsert(
@@ -165,6 +171,11 @@ export async function createTestUser(label: string): Promise<{ userId: string; e
 
 /** Seeds a workspace_members row directly via the service role (bypasses RLS) - used to place a test user at a specific role without going through the invitation flow, so escalation tests start from a known role. */
 export async function seedMembership(workspaceId: string, userId: string, role: string) {
+  // Test workspaces start on Free, whose team_seats limit (enforced even for
+  // service-role inserts, 20261002003000) leaves no room for a second member.
+  // Grant seats the way Admin does - an entitlement override - rather than
+  // weakening the trigger.
+  await grantTeamSeats(workspaceId);
   const { error } = await admin.from("workspace_members").insert({ workspace_id: workspaceId, user_id: userId, role });
   if (error) throw new Error(`Failed to seed membership: ${error.message}`);
 }
@@ -195,4 +206,17 @@ export async function resetAdminRolesWithFixtureOwner(): Promise<string> {
   const del = await admin.from("platform_admin_roles").delete().in("user_id", pool.map((p) => p.userId));
   if (del.error) throw new Error(`Failed to reset pooled staff roles: ${del.error.message}`);
   return ownerId;
+}
+
+/** Grants a usage allowance via an entitlement override (how Admin grants one) - e.g. automation_runs, which Free sets to 0. */
+export async function grantAllowance(workspaceId: string, key: string, limit: number) {
+  const { error } = await admin.from("workspace_entitlement_overrides").insert({ workspace_id: workspaceId, entitlement_key: key, limit_value: limit, reason: "integration test" });
+  if (error) throw new Error(`Failed to grant ${key}: ${error.message}`);
+}
+
+async function grantTeamSeats(workspaceId: string) {
+  const { data } = await admin.from("workspace_entitlement_overrides").select("id").eq("workspace_id", workspaceId).eq("entitlement_key", "team_seats").limit(1);
+  if (data?.length) return;
+  const { error } = await admin.from("workspace_entitlement_overrides").insert({ workspace_id: workspaceId, entitlement_key: "team_seats", limit_value: 50, reason: "integration test" });
+  if (error) throw new Error(`Failed to grant team seats: ${error.message}`);
 }

@@ -10,7 +10,7 @@
 // start time) that the initiating user still belongs to the workspace
 // with the required permission.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedOauthState } from "./integrationHelpers";
 
 const TEST_HARNESS_SECRET = getTestEnv("INTEGRATIONS_TEST_HARNESS_SECRET");
@@ -48,6 +48,7 @@ describe("Integrations OAuth start (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("oauth-start");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     const viewerUser = await createTestUser("oauth-start-viewer");
     await seedMembership(workspace.workspaceId, viewerUser.userId, "viewer");
     viewer = viewerUser;
@@ -105,6 +106,7 @@ describe("Integrations OAuth callback security (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("oauth-callback");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     const viewerUser = await createTestUser("oauth-callback-viewer");
     await seedMembership(workspace.workspaceId, viewerUser.userId, "viewer");
     viewer = viewerUser;

@@ -3,7 +3,7 @@
 // rank-peers of support, and this proves the SAME rank does not imply the
 // SAME inbox access (support can view+manage; marketing/sales cannot).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, enableModules } from "./helpers";
 import { seedInboxConversation, seedWhatsAppSetup } from "./inboxHelpers";
 
 describe("Inbox permission matrix (release blocker)", () => {
@@ -14,6 +14,8 @@ describe("Inbox permission matrix (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("inbox-perms");
+    // Plan-gated since 20261025060000 - this suite tests permissions, not plans.
+    await enableModules(workspace.workspaceId, "module.whatsapp");
     const number = await seedWhatsAppSetup(workspace.workspaceId);
     const conversation = await seedInboxConversation(workspace.workspaceId, number.id);
     conversationId = conversation.id;

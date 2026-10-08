@@ -17,7 +17,7 @@
 //   - revenue_events creation, isolation, and survival across an
 //     opportunity's later lifecycle changes.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedWorkspaceIntegration, seedFacebookPage, seedMediaAsset } from "./contentHelpers";
 import { seedMetaAdAccount, seedAdCreative, seedAdCampaign, seedAdSet, seedAd } from "./campaignHelpers";
 import { seedWhatsAppSetup } from "./inboxHelpers";
@@ -69,7 +69,9 @@ describe("Attribution & Revenue (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("attribution");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     otherWorkspace = await createTestTenant("attribution-other");
+    await enableModules(otherWorkspace.workspaceId, ...ALL_MODULES);
     const { data: session } = await workspace.client.auth.getSession();
     ownerToken = session.session!.access_token;
 

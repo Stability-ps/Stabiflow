@@ -8,7 +8,7 @@
 // machinery per instruction #31 ("stop and request approval before any
 // spend-capable external object is created").
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedFacebookPage, seedMediaAsset, seedWorkspaceIntegration } from "./contentHelpers";
 import { seedAdCampaign, seedAdCreative, seedMetaAdAccount } from "./campaignHelpers";
 
@@ -27,6 +27,7 @@ describe("Campaign publish idempotency (release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("publish-idempotency");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     const integrationId = await seedWorkspaceIntegration(workspace.workspaceId); // no vault secret - publish will fail at token resolution, never reaching Meta
     const adAccountId = await seedMetaAdAccount(workspace.workspaceId, integrationId);
     const pageId = await seedFacebookPage(workspace.workspaceId, integrationId);

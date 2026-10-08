@@ -3,7 +3,7 @@
 // and sales are rank-peers, and this proves the SAME rank does not imply
 // the SAME lead-editing access (sales can edit; marketing cannot).
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant } from "./helpers";
+import { cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
 import { seedLead, seedPipeline } from "./leadsHelpers";
 
 describe("Leads/Pipelines/Opportunities permission matrix (release blocker)", () => {
@@ -16,6 +16,7 @@ describe("Leads/Pipelines/Opportunities permission matrix (release blocker)", ()
 
   beforeAll(async () => {
     workspace = await createTestTenant("leads-perms");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
     const lead = await seedLead(workspace.workspaceId);
     leadId = lead.id;
     const pipeline = await seedPipeline(workspace.workspaceId);

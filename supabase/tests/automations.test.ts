@@ -31,7 +31,7 @@
 //    proven via the quota-exceeded path only, so this suite never consumes
 //    real OpenAI usage
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, getTestEnv, seedMembership, SUPABASE_URL, type TestTenant, ALL_MODULES, enableModules, grantAllowance } from "./helpers";
 import { seedLead, seedPipeline } from "./leadsHelpers";
 import { seedWhatsAppSetup, seedInboxConversation, seedInboxMessage } from "./inboxHelpers";
 
@@ -98,7 +98,11 @@ describe("Automation Engine (Phase J, release blocker)", () => {
 
   beforeAll(async () => {
     workspace = await createTestTenant("automations");
+    await enableModules(workspace.workspaceId, ...ALL_MODULES);
+    await grantAllowance(workspace.workspaceId, "automation_runs", 2000);
     otherWorkspace = await createTestTenant("automations-other");
+    await enableModules(otherWorkspace.workspaceId, ...ALL_MODULES);
+    await grantAllowance(otherWorkspace.workspaceId, "automation_runs", 2000);
     ownerToken = await tokenFor(workspace.client);
 
     const managerUser = await createTestUser("automations-manager");
@@ -671,6 +675,8 @@ describe("Automation Engine (Phase J, release blocker)", () => {
   describe("Flow AI's action_type respects the SAME workspace quota gate as a human chat request", () => {
     it("REGRESSION: a request_flow_ai_analysis action fails cleanly against an exhausted workspace quota - never consumes real OpenAI usage to prove this", async () => {
       const quotaWorkspace = await createTestTenant("automations-flow-ai-quota");
+      await enableModules(quotaWorkspace.workspaceId, ...ALL_MODULES);
+      await grantAllowance(quotaWorkspace.workspaceId, "automation_runs", 2000);
       try {
         const quotaOwnerToken = await tokenFor(quotaWorkspace.client);
         await admin.from("workspace_billing").update({ limits: { flow_ai_monthly_token_limit: 100 } }).eq("workspace_id", quotaWorkspace.workspaceId);
