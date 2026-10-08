@@ -11,28 +11,26 @@ const CONTENT_TABS = [
 
 export default function Content() {
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6">
-      <div className="rounded-3xl border border-fuchsia-100/80 bg-gradient-to-br from-white via-white to-fuchsia-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(300_50%_40%/0.25)] sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Content workspace</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">Content</h1>
-        <p className="text-muted-foreground">Calendar, scheduled posts, drafts, and your Media Library.</p>
+    <div className="mx-auto w-full max-w-[1440px] space-y-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h1 className="text-title-page text-foreground">Content</h1>
+        <nav aria-label="Content sections" className="flex w-full max-w-full gap-0.5 overflow-x-auto rounded-lg bg-muted p-0.5 sm:w-fit">
+          {CONTENT_TABS.map((tab) => (
+            <NavLink
+              key={tab.path}
+              to={tab.path}
+              className={({ isActive }) =>
+                cn(
+                  "inline-flex min-h-9 shrink-0 items-center rounded-md px-3 text-sm font-medium transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isActive ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
+                )
+              }
+            >
+              {tab.label}
+            </NavLink>
+          ))}
+        </nav>
       </div>
-      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border/70 bg-card/80 p-1 shadow-sm">
-        {CONTENT_TABS.map((tab) => (
-          <NavLink
-            key={tab.path}
-            to={tab.path}
-            className={({ isActive }) =>
-              cn(
-                "shrink-0 rounded-lg px-3 py-2 text-sm font-medium transition-all",
-                isActive ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-accent/70 hover:text-foreground",
-              )
-            }
-          >
-            {tab.label}
-          </NavLink>
-        ))}
-      </nav>
       <Outlet />
     </div>
   );

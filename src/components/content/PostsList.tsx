@@ -2,9 +2,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, CalendarX2, Copy, ExternalLink, Megaphone, MoreHorizontal, Send, XCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { AlertTriangle, CalendarClock, CalendarX2, Copy, ExternalLink, Megaphone, MoreHorizontal, Send, XCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -16,16 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { publishContentPostNow, scheduleContentPost } from "@/lib/contentFunctions";
 import { formatInTimezone, parseLocalDateTimeInZone, toLocalDateTimeInputValue } from "@/lib/contentTimezone";
 import { buildIdempotencyKey } from "@/lib/contentIdempotency";
-
-const STATUS_STYLE: Record<string, string> = {
-  scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  publishing: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300",
-  published: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
-  draft: "bg-muted text-muted-foreground",
-  cancelled: "bg-muted text-muted-foreground",
-  skipped: "bg-muted text-muted-foreground",
-};
+import { postStatus } from "@/lib/contentPostStatus";
 
 type PostRow = {
   id: string;
@@ -52,7 +43,8 @@ export function PostsList({ statusFilter, workspaceTimezone, emptyTitle, emptyDe
   const { currentWorkspaceId, hasPermission } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { data: posts, isLoading } = useContentScheduledPosts(currentWorkspaceId, statusFilter);
+  const postsQuery = useContentScheduledPosts(currentWorkspaceId, statusFilter);
+  const { data: posts, isLoading } = postsQuery;
   const [reschedulingId, setReschedulingId] = useState<string | null>(null);
   const [rescheduleValue, setRescheduleValue] = useState("");
 
@@ -150,87 +142,111 @@ export function PostsList({ statusFilter, workspaceTimezone, emptyTitle, emptyDe
   };
 
   if (isLoading) {
-    return <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />)}</div>;
+    return <div className="space-y-2" role="status" aria-label="Loading posts">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-muted" />)}</div>;
+  }
+
+  // A failed load is not "nothing here".
+  if (postsQuery.isError) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load posts"
+        description="Something went wrong fetching your posts. Nothing has been published or changed - try again."
+        action={<Button variant="outline" onClick={() => void postsQuery.refetch()}>Try again</Button>}
+        className="rounded-xl border border-border bg-card"
+      />
+    );
   }
 
   if (!posts?.length) {
-    return <EmptyState icon={CalendarX2} title={emptyTitle} description={emptyDescription} />;
+    return <EmptyState icon={CalendarX2} title={emptyTitle} description={emptyDescription} className="rounded-xl border border-border bg-card" />;
   }
 
   const reschedulingPost = (posts as PostRow[]).find((p) => p.id === reschedulingId) ?? null;
 
   return (
-    <div className="space-y-2">
-      {(posts as PostRow[]).map((post) => {
-        const destination = post.workspace_facebook_pages?.page_name || (post.workspace_instagram_accounts?.username ? `@${post.workspace_instagram_accounts.username}` : "Unknown destination");
-        const canAct = hasPermission("content.edit") || hasPermission("content.publish");
-        return (
-          <Card key={post.id} className="flex items-center gap-3 p-3">
-            {post.content_media_assets && (
-              <MediaPreview storagePath={post.content_media_assets.storage_path} alt={post.content_media_assets.title} className="h-14 w-14 shrink-0 rounded" />
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <Badge className={STATUS_STYLE[post.status] || ""} variant="secondary">{post.status}</Badge>
-                <span className="text-xs capitalize text-muted-foreground">{post.target_platform} · {destination}</span>
+    <div>
+      <ul aria-label="Posts" className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
+        {(posts as PostRow[]).map((post) => {
+          const destination = post.workspace_facebook_pages?.page_name || (post.workspace_instagram_accounts?.username ? `@${post.workspace_instagram_accounts.username}` : "Unknown destination");
+          const canAct = hasPermission("content.edit") || hasPermission("content.publish");
+          const status = postStatus(post.status);
+          const platform = post.target_platform.charAt(0).toUpperCase() + post.target_platform.slice(1);
+          return (
+            <li key={post.id} className="flex items-start gap-3 px-3 py-3 sm:px-4">
+              {post.content_media_assets ? (
+                <MediaPreview storagePath={post.content_media_assets.storage_path} alt={post.content_media_assets.title} className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+              ) : (
+                <span aria-hidden="true" className="h-14 w-14 shrink-0 rounded-lg bg-muted" />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">{platform} · {destination}</span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm text-foreground sm:truncate" title={post.caption}>{post.caption}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  <time dateTime={post.scheduled_at}>{formatInTimezone(post.scheduled_at, workspaceTimezone)}</time>
+                </p>
+                {post.status === "failed" && post.failure_message && (
+                  <p className="mt-1 text-xs text-destructive-strong">{post.failure_message}</p>
+                )}
               </div>
-              <p className="mt-1 truncate text-sm" title={post.caption}>{post.caption}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatInTimezone(post.scheduled_at, workspaceTimezone)}
-                {post.status === "failed" && post.failure_message ? ` · ${post.failure_message}` : ""}
-              </p>
-            </div>
-            {post.provider_permalink && (
-              <a href={post.provider_permalink} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-foreground">
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            )}
-            {canAct && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><MoreHorizontal className="h-4 w-4" /></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {post.status === "scheduled" && hasPermission("content.publish") && (
-                    <DropdownMenuItem onClick={() => handlePublishNow(post.id)}><Send className="mr-2 h-4 w-4" /> Publish now</DropdownMenuItem>
-                  )}
-                  {post.status === "failed" && hasPermission("content.edit") && (
-                    <DropdownMenuItem onClick={() => handleRetry(post.id)}><Send className="mr-2 h-4 w-4" /> Retry</DropdownMenuItem>
-                  )}
-                  {(post.status === "scheduled" || post.status === "draft" || post.status === "failed") && (
-                    <DropdownMenuItem onClick={() => openReschedule(post)}><CalendarClock className="mr-2 h-4 w-4" /> Reschedule</DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => handleDuplicate(post)}><Copy className="mr-2 h-4 w-4" /> Duplicate</DropdownMenuItem>
-                  {hasPermission("campaign.create") && (
-                    <DropdownMenuItem
-                      onClick={() =>
-                        navigate("/app/campaigns/new", {
-                          state: { prefill: { sourceContentMediaAssetId: post.media_asset_id, primaryText: post.caption } },
-                        })
-                      }
-                    >
-                      <Megaphone className="mr-2 h-4 w-4" /> Promote as Campaign
-                    </DropdownMenuItem>
-                  )}
-                  {(post.status === "scheduled" || post.status === "draft" || post.status === "failed") && (
-                    <DropdownMenuItem onClick={() => handleCancel(post.id)} className="text-destructive"><XCircle className="mr-2 h-4 w-4" /> Cancel</DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </Card>
-        );
-      })}
+              <div className="flex shrink-0 items-center gap-1">
+                {post.provider_permalink && (
+                  <Button asChild variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground">
+                    <a href={post.provider_permalink} target="_blank" rel="noreferrer" aria-label={`View on ${platform} (opens in a new tab)`}>
+                      <ExternalLink aria-hidden="true" />
+                    </a>
+                  </Button>
+                )}
+                {canAct && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Post actions"><MoreHorizontal aria-hidden="true" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {post.status === "scheduled" && hasPermission("content.publish") && (
+                        <DropdownMenuItem onClick={() => handlePublishNow(post.id)}><Send className="mr-2 h-4 w-4" /> Publish now</DropdownMenuItem>
+                      )}
+                      {post.status === "failed" && hasPermission("content.edit") && (
+                        <DropdownMenuItem onClick={() => handleRetry(post.id)}><Send className="mr-2 h-4 w-4" /> Retry</DropdownMenuItem>
+                      )}
+                      {(post.status === "scheduled" || post.status === "draft" || post.status === "failed") && (
+                        <DropdownMenuItem onClick={() => openReschedule(post)}><CalendarClock className="mr-2 h-4 w-4" /> Reschedule</DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => handleDuplicate(post)}><Copy className="mr-2 h-4 w-4" /> Duplicate</DropdownMenuItem>
+                      {hasPermission("campaign.create") && (
+                        <DropdownMenuItem
+                          onClick={() =>
+                            navigate("/app/campaigns/new", {
+                              state: { prefill: { sourceContentMediaAssetId: post.media_asset_id, primaryText: post.caption } },
+                            })
+                          }
+                        >
+                          <Megaphone className="mr-2 h-4 w-4" /> Promote as Campaign
+                        </DropdownMenuItem>
+                      )}
+                      {(post.status === "scheduled" || post.status === "draft" || post.status === "failed") && (
+                        <DropdownMenuItem onClick={() => handleCancel(post.id)} className="text-destructive"><XCircle className="mr-2 h-4 w-4" /> Cancel</DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       <Dialog open={!!reschedulingId} onOpenChange={(open) => !open && setReschedulingId(null)}>
         <DialogContent className="max-w-xs">
           <DialogHeader><DialogTitle>Reschedule post</DialogTitle></DialogHeader>
-          <input
-            type="datetime-local"
-            value={rescheduleValue}
-            onChange={(e) => setRescheduleValue(e.target.value)}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-          />
+          <label className="grid gap-1.5 text-sm font-medium text-foreground">
+            New date and time
+            <Input type="datetime-local" value={rescheduleValue} onChange={(e) => setRescheduleValue(e.target.value)} />
+            <span className="text-xs font-normal text-muted-foreground">{workspaceTimezone}</span>
+          </label>
           <DialogFooter>
             <Button className="w-full" onClick={() => reschedulingPost && submitReschedule(reschedulingPost)}>Save</Button>
           </DialogFooter>
