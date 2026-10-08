@@ -3,7 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import CreativeStudio from "./CreativeStudio";
 
-const mocks = vi.hoisted(() => ({ assets: [] as Array<Record<string, unknown>> }));
+const mocks = vi.hoisted(() => ({
+  assets: [] as Array<Record<string, unknown>>,
+  mediaError: false,
+  batches: [] as Array<Record<string, unknown>>,
+  refetchMedia: vi.fn(),
+}));
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
@@ -13,7 +18,9 @@ vi.mock("@/hooks/useAuth", () => ({
     hasPermission: () => true,
   }),
 }));
-vi.mock("@/hooks/useContentMediaAssets", () => ({ useContentMediaAssets: () => ({ data: mocks.assets }) }));
+vi.mock("@/hooks/useContentMediaAssets", () => ({
+  useContentMediaAssets: () => ({ data: mocks.mediaError ? undefined : mocks.assets, isError: mocks.mediaError, refetch: mocks.refetchMedia }),
+}));
 vi.mock("@/components/content/MediaPreview", () => ({ MediaPreview: ({ alt }: { alt: string }) => <img alt={alt} /> }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
@@ -31,7 +38,7 @@ function supabaseChain() {
   chain.select = () => chain;
   chain.eq = () => chain;
   chain.order = () => chain;
-  chain.limit = () => Promise.resolve({ data: [], error: null });
+  chain.limit = () => Promise.resolve({ data: mocks.batches, error: null });
   chain.update = () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }) });
   chain.then = (onFulfilled: (v: { data: unknown[]; error: null }) => unknown) => Promise.resolve({ data: [], error: null }).then(onFulfilled);
   return chain;
@@ -197,5 +204,49 @@ describe("Creative Studio - reference-ads asset purpose + controls (approved pla
         referencePreferences: expect.objectContaining({ keep_colours: true, fresh_layout: false }),
       }),
     );
+  });
+});
+
+describe("Creative Studio - redesign fixes", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    mocks.mediaError = false;
+    mocks.batches = [];
+  });
+
+  it("placeholders carry no Acapolite / SARS copy", () => {
+    mocks.assets = [];
+    renderStudio();
+    fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
+    const placeholders = screen.getAllByRole("textbox").map((el) => el.getAttribute("placeholder") ?? "").join(" ");
+    expect(placeholders).not.toMatch(/SARS|debt compromise|tax/i);
+  });
+
+  it("a Media Library load error says so with a retry, instead of silently hiding reference images", () => {
+    mocks.mediaError = true;
+    renderStudio();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load your Media Library");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refetchMedia).toHaveBeenCalled();
+  });
+
+  it("more than three recent batches expand in place (nothing else lists them)", async () => {
+    mocks.assets = [];
+    mocks.batches = Array.from({ length: 5 }, (_, i) => ({ id: `b${i}`, business_context: `Batch ${i}`, status: "done", created_at: "2026-10-01" }));
+    renderStudio();
+    const more = await screen.findByRole("button", { name: "Show 2 more" });
+    expect(screen.queryByRole("button", { name: "Batch 4" })).not.toBeInTheDocument();
+    fireEvent.click(more);
+    expect(screen.getByRole("button", { name: "Batch 4" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /View history/ })).not.toBeInTheDocument();
+  });
+
+  it("the concept-count picker has a programmatic label", () => {
+    mocks.assets = [];
+    renderStudio();
+    expect(screen.getByRole("combobox", { name: "Number of concepts" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Formats" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Contact details to show" })).toBeInTheDocument();
   });
 });
