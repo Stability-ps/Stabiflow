@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Building2, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,7 +81,15 @@ export default function MyBusiness() {
     );
   }
   if (query.error || !query.data) {
-    return <EmptyState icon={Building2} title="Could not load your business" description="Please refresh the page to try again." />;
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load your business"
+        description="Something went wrong fetching your business profile. Nothing has changed - try again."
+        action={<Button variant="outline" onClick={() => void query.refetch()}>Try again</Button>}
+        className="mx-auto max-w-5xl rounded-xl border border-border bg-card"
+      />
+    );
   }
   // Keyed by identity id: the form initialises from the loaded record once
   // and is never overwritten by a background refetch mid-edit.
@@ -215,59 +224,59 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
   const sectionButton = (id: string, title: string, description: string, complete: boolean, content: ReactNode) => {
     const open = openSection === id;
     return (
-      <Card className="overflow-hidden border-border/70 shadow-sm">
-        <button type="button" className="flex w-full items-center gap-3 p-5 text-left" onClick={() => setOpenSection(open ? null : id)} aria-expanded={open}>
-          {complete ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-300" /> : <div className="h-5 w-5 shrink-0 rounded-full border-2 border-muted-foreground/30" />}
+      <Card className="overflow-hidden">
+        <button type="button" className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors duration-fast hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-5" onClick={() => setOpenSection(open ? null : id)} aria-expanded={open} aria-controls={`mb-section-${id}`}>
+          {complete ? <CheckCircle2 className="h-5 w-5 shrink-0 text-success" aria-hidden="true" /> : <div className="h-5 w-5 shrink-0 rounded-full border-2 border-input" aria-hidden="true" />}
           <div className="min-w-0 flex-1">
-            <div className="font-medium">{title}</div>
+            <div className="text-title-card text-foreground">{title}</div>
             <div className="text-sm text-muted-foreground">{description}</div>
           </div>
-          <span className="hidden text-xs font-medium text-muted-foreground sm:inline">{complete ? "Complete" : "Needs attention"}</span>
-          {open ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <StatusPill tone={complete ? "success" : "neutral"} className="hidden sm:inline-flex">{complete ? "Complete" : "Needs attention"}</StatusPill>
+          <span className="sr-only sm:hidden">{complete ? "Complete" : "Needs attention"}</span>
+          {open ? <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
         </button>
-        {open && <CardContent className="border-t bg-muted/5 pt-5">{content}</CardContent>}
+        {open && <CardContent id={`mb-section-${id}`} className="border-t border-border bg-background px-4 pt-5 sm:px-5">{content}</CardContent>}
       </Card>
     );
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="rounded-3xl border border-sky-100/80 bg-gradient-to-br from-white via-white to-sky-50/55 p-5 shadow-[0_18px_60px_-44px_hsl(213_70%_40%/0.25)] sm:p-6 dark:border-border dark:from-card dark:via-card dark:to-sky-950/20">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Business identity</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">My Business</h1>
-        <p className="text-sm text-muted-foreground">Keep your business facts in one place. StabiFlow uses these details for your profile, documents and marketing.</p>
-      </div>
+    <div className="mx-auto w-full max-w-5xl space-y-5">
+      <header className="min-w-0">
+        <h1 className="text-title-page text-foreground">My Business</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Keep your business facts in one place. StabiFlow uses these details for your profile, documents and marketing.</p>
+      </header>
 
       <Card>
         <CardContent className="space-y-4 pt-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-medium">Profile setup</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-title-card text-foreground">Profile setup</div>
               <div className="text-sm text-muted-foreground">{completeness.items.length - missing.length} of {completeness.items.length} essentials complete</div>
             </div>
-            <span className="text-lg font-semibold">{completeness.score}%</span>
+            <span className="text-lg font-semibold tabular-nums text-foreground">{completeness.score}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={completeness.score} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completeness">
             <div className="h-full bg-primary transition-all" style={{ width: `${completeness.score}%` }} />
           </div>
           {missing.length > 0 && <Button size="sm" onClick={() => { const next = missing[0]?.section; setOpenSection(next === "company" ? "company" : next === "about" ? "about" : next === "branding" ? "brand" : next === "contacts" || next === "locations" ? "contact" : next === "offerings" ? "services" : next === "social" ? "social" : next === "team" ? "team" : "work"); }}>Continue setup</Button>}
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden border-border/70 shadow-sm">
-        <CardHeader className="border-b bg-muted/15 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4" /> Complete with AI</CardTitle>
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b border-border sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:space-y-0">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-brand" aria-hidden="true" /> Complete with AI</CardTitle>
             <CardDescription className="mt-1">StabiFlow scans your website for industry, contact details, locations, services, social links and other supported facts, then drafts the About wording. Review everything before it is added.</CardDescription>
           </div>
           {canEdit && <Button variant="outline" className="mt-3 shrink-0 gap-2 sm:mt-0" onClick={createAiDraft} disabled={drafting || aiLocked}>
-            {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Complete with AI
+            {drafting ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />} Complete with AI
           </Button>}
         </CardHeader>
         {aiLocked && (
-          <p className="border-b bg-amber-50/70 px-6 py-3 text-sm text-amber-950 dark:bg-amber-950/40" role="note">
+          <p className="border-b border-border bg-warning-soft px-5 py-3 text-sm text-warning" role="note">
             Complete with AI is included with the Business and Growth plans. You can still fill in every section yourself.{" "}
-            <Link to="/app/billing" className="font-medium underline underline-offset-4">See plans</Link>
+            <Link to="/app/billing" className="font-medium text-foreground underline underline-offset-4">See plans</Link>
           </p>
         )}
         <CardContent className="pt-5">
@@ -285,7 +294,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
             {text("Year founded", "founded_year", { type: "number" })}
             <div className="space-y-1"><Label htmlFor="bi-employees">Team size</Label><Select value={form.employee_count_range} onValueChange={(v) => setForm((f) => ({ ...f, employee_count_range: v }))} disabled={!canEdit}><SelectTrigger id="bi-employees"><SelectValue placeholder="Choose..." /></SelectTrigger><SelectContent>{EMPLOYEE_RANGES.map((r) => <SelectItem key={r} value={r}>{r} {r === "1" ? "person" : "people"}</SelectItem>)}</SelectContent></Select></div>
             {text("Country (2-letter code)", "country_code")}
-            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={saveIdentity} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save company</Button></div>}
+            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={saveIdentity} disabled={saving}>{saving && <Loader2 className="animate-spin" aria-hidden="true" />}Save company</Button></div>}
           </div>
         ))}
 
@@ -297,7 +306,7 @@ function MyBusinessEditor({ workspaceId: currentWorkspaceId, bundle }: { workspa
             {area("Mission", "mission")}
             {area("Vision", "vision")}
             <div className="sm:col-span-2">{text("Core values (comma separated)", "core_values")}</div>
-            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={saveIdentity} disabled={saving}>{saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save about</Button></div>}
+            {canEdit && <div className="sm:col-span-2 flex justify-end"><Button onClick={saveIdentity} disabled={saving}>{saving && <Loader2 className="animate-spin" aria-hidden="true" />}Save about</Button></div>}
           </div>
         ))}
 

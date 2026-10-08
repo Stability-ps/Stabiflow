@@ -8,9 +8,12 @@ const auth = { currentWorkspaceId: "ws-1", currentMembership: { role: "owner" },
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => auth }));
 
 const scanWebsite = vi.fn();
+const fetchPreview = vi.fn();
 vi.mock("@/lib/businessStudio", async (orig) => ({
   ...(await orig<typeof import("@/lib/businessStudio")>()),
   scanWebsite: (...a: unknown[]) => scanWebsite(...a),
+  fetchPreview: (...a: unknown[]) => fetchPreview(...a),
+  fetchStudioAccess: vi.fn().mockResolvedValue("full"),
   fetchPendingProposals: vi.fn().mockResolvedValue([
     { id: "p1", workspace_id: "ws-1", origin: "website_scan", target: "identity_field", field: "legal_name", proposed: { value: "Acme (Pty) Ltd" }, current_value: null, evidence: "Acme (Pty) Ltd", evidence_url: "https://acme.co.za/", extraction_method: "structured_data", status: "pending" },
   ]),
@@ -60,5 +63,26 @@ describe("Business Studio flow", () => {
     fireEvent.click(screen.getByRole("button", { name: /Scan my website/ }));
     await waitFor(() => expect(scanWebsite).toHaveBeenCalled());
     expect(screen.queryByText("We found this business")).not.toBeInTheDocument();
+  });
+});
+
+describe("Business Studio - preview honesty", () => {
+  afterEach(() => { cleanup(); fetchPreview.mockReset(); });
+
+  it("a failed preview read never offers 'Buy professional profile'", async () => {
+    fetchPreview.mockRejectedValue(new Error("boom"));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /6\. Preview & download/ }));
+    expect(await screen.findByText(/Couldn't load your preview/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Buy professional profile/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "See subscriptions" })).not.toBeInTheDocument();
+  });
+
+  it("while the preview loads, no purchase option is shown", () => {
+    fetchPreview.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /6\. Preview & download/ }));
+    expect(screen.getByRole("status", { name: "Loading preview" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "See subscriptions" })).not.toBeInTheDocument();
   });
 });
