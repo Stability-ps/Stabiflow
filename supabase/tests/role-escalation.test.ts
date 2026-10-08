@@ -8,7 +8,7 @@
 // prove the fix against the real, live project, and would fail against
 // the pre-migration policies.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules } from "./helpers";
+import { admin, cleanupTenant, createTestTenant, createTestUser, seedMembership, type TestTenant, ALL_MODULES, enableModules, grantAllowance } from "./helpers";
 
 let owner: TestTenant; // owner of workspace A
 let adminUser: { userId: string; email: string; client: import("@supabase/supabase-js").SupabaseClient };
@@ -20,8 +20,10 @@ let otherOwner: TestTenant; // owner of an unrelated workspace B, for cross-work
 beforeAll(async () => {
   owner = await createTestTenant("owner");
   await enableModules(owner.workspaceId, ...ALL_MODULES);
+  await grantAllowance(owner.workspaceId, "team_seats", 20);
   otherOwner = await createTestTenant("other-owner");
   await enableModules(otherOwner.workspaceId, ...ALL_MODULES);
+  await grantAllowance(otherOwner.workspaceId, "team_seats", 20);
 
   adminUser = await createTestUser("admin");
   admin2 = await createTestUser("admin2");
