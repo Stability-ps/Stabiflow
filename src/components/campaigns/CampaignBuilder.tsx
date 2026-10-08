@@ -371,6 +371,9 @@ export function CampaignBuilder({ campaignId, prefill }: { campaignId?: string; 
     setPublishResult(null);
     try {
       const result = await publishCampaign(savedCampaignId, idempotencyKeyRef.current);
+      // Definite failed/partial outcome: this key is spent (reusing it only
+      // replays). A thrown network error keeps the key so a retry replays.
+      if (!result.ok) idempotencyKeyRef.current = newPublishIdempotencyKey();
       setPublishResult({ ok: result.ok, outcome: result.outcome, steps: result.operation?.steps, message: result.error });
       if (result.ok) toast.success("Campaign published to Meta");
       else if (result.outcome === "partial") toast.warning("Campaign partially published - see details below");
